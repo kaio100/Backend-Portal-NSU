@@ -1,0 +1,16 @@
+.env
+empresas.json
+*.pfx
+*.p12
+*.log
+storage/
+saida_adn_nfse/
+data/*.db
+data/*.sqlite
+data/tmp_worker/
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
+venv/
+node_modules/

@@ -1,0 +1,12 @@
+requests-pkcs12>=1.25
+python-dotenv>=1.0.0
+cryptography>=42.0.0
+fastapi
+uvicorn[standard]
+pydantic-settings
+sqlalchemy
+psycopg[binary]
+alembic
+python-multipart
+reportlab
+openpyxl

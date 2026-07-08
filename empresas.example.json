@@ -1,0 +1,21 @@
+{
+  "empresas": [
+    {
+      "nome": "EMPRESA X LTDA",
+      "cnpj": "00000000000000",
+      "pfx_path": "C:\\certificados\\empresa_x.pfx",
+      "pfx_password_env": "PFX_EMPRESA_X_SENHA",
+      "ambiente": "producao",
+      "verify_ssl": true,
+      "inicio": 0
+    },
+    {
+      "nome": "EMPRESA Y LTDA",
+      "cnpj": "11111111111111",
+      "pfx_path": "C:\\certificados\\empresa_y.pfx",
+      "pfx_password_env": "PFX_EMPRESA_Y_SENHA",
+      "ambiente": "producao",
+      "verify_ssl": true
+    }
+  ]
+}

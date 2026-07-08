@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "enqueued_certificado_ids": [
+    4
+  ],
+  "options": {
+    "baixar_pdf_oficial": true,
+    "certificado_ids": [
+      4
+    ],
+    "empresa_ids": [
+      2
+    ],
+    "gerar_pdf_espelho": true,
+    "limite": 100,
+    "nsu_inicio": 200,
+    "pausa": 8.0,
+    "resetar_fila": true
+  }
+}
