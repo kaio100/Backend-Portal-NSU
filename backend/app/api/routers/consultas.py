@@ -37,10 +37,9 @@ def desativar_consultas(
     payload: ConsultaDesativarRequest | None = Body(default=None),
     db: Session = Depends(get_db),
 ):
-    options = payload or ConsultaDesativarRequest()
     consultas_service.desativar_consultas_automaticas(
         db,
-        cancelar_pendentes=options.cancelar_pendentes,
-        cancelar_rodando=options.cancelar_rodando,
+        cancelar_pendentes=True,
+        cancelar_rodando=True,
     )
     return consultas_service.montar_status(db)

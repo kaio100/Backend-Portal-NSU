@@ -129,3 +129,16 @@ def mark_job_erro(db: Session, job: Job, erro: str) -> Job:
             "erro_resumo": erro,
         },
     )
+
+
+def mark_job_cancelado(db: Session, job: Job, mensagem: str | None = None) -> Job:
+    return update_job(
+        db,
+        job,
+        {
+            "status": "cancelado",
+            "locked_by": None,
+            "locked_at": None,
+            "erro_resumo": mensagem,
+        },
+    )

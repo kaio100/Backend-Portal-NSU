@@ -7,7 +7,8 @@ import uuid
 
 from backend.app.core.config import settings
 from backend.app.db.session import SessionLocal, init_db
-from backend.app.repositories import jobs_repo
+from backend.app.repositories import jobs_repo, processos_repo
+from backend.app.services import consultas_service
 from backend.app.worker.jobs import processar_job
 
 
@@ -24,6 +25,13 @@ def processar_proximo_job(worker_id: str) -> dict:
         job = jobs_repo.claim_next_pending_job(db, worker_id)
         if job is None:
             return {"ok": False, "motivo": "sem_job"}
+        if job.tipo == "consulta_nfse" and not consultas_service.is_enabled(db):
+            jobs_repo.mark_job_cancelado(db, job, "Consultas desativadas.")
+            processo = processos_repo.get_processo(db, int(job.processo_id))
+            if processo is not None:
+                processos_repo.cancelar_processo(db, processo)
+            db.commit()
+            return {"ok": False, "job_id": job.id, "motivo": "consultas_desativadas"}
         print(
             "Job reservado",
             {

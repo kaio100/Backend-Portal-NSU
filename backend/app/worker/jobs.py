@@ -16,6 +16,12 @@ def _job_processavel(job: Job, worker_id: str) -> bool:
     return job.status == "pendente" or (job.status == "rodando" and job.locked_by == worker_id)
 
 
+def _foi_cancelado(db: Session, processo, job: Job) -> bool:
+    db.refresh(processo)
+    db.refresh(job)
+    return processo.status == "cancelado" or job.status == "cancelado"
+
+
 def _devolver_job_para_fila(db: Session, job: Job) -> None:
     jobs_repo.mark_job_pending(db, job)
 
@@ -79,6 +85,13 @@ def processar_job_simulado(db: Session, job: Job, worker_id: str) -> dict:
         db.commit()
         time.sleep(max(0, float(settings.worker_dry_run_sleep)))
 
+        if _foi_cancelado(db, processo, job):
+            jobs_repo.mark_job_cancelado(db, job, "Processo cancelado durante a execucao.")
+            processos_repo.cancelar_processo(db, processo)
+            logs_service.registrar_log(db, processo.id, processo.empresa_id, "info", "Processo cancelado durante execucao simulada")
+            db.commit()
+            return {"ok": False, "job_id": job.id, "motivo": "cancelado"}
+
         logs_service.registrar_log(db, processo.id, processo.empresa_id, "info", "Execucao simulada finalizada")
         jobs_repo.mark_job_finalizado(db, job)
         processos_repo.mark_processo_finalizado(db, processo)
@@ -92,6 +105,11 @@ def processar_job_simulado(db: Session, job: Job, worker_id: str) -> dict:
         }
     except Exception as exc:
         db.rollback()
+        if _foi_cancelado(db, processo, job):
+            jobs_repo.mark_job_cancelado(db, job, "Processo cancelado durante a execucao.")
+            processos_repo.cancelar_processo(db, processo)
+            db.commit()
+            return {"ok": False, "job_id": job.id, "motivo": "cancelado"}
         erro_detalhado = traceback.format_exc()
         jobs_repo.mark_job_erro(db, job, str(exc))
         processos_repo.mark_processo_erro(db, processo, str(exc))
@@ -165,6 +183,12 @@ def processar_job_consulta_nfse_real(db: Session, job: Job, worker_id: str) -> d
             job=job,
             worker_id=worker_id,
         )
+        if _foi_cancelado(db, processo, job):
+            jobs_repo.mark_job_cancelado(db, job, "Processo cancelado durante a execucao.")
+            processos_repo.cancelar_processo(db, processo)
+            logs_service.registrar_log(db, processo.id, processo.empresa_id, "info", "Processo cancelado durante execucao real")
+            db.commit()
+            return {"ok": False, "job_id": job.id, "processo_id": processo.id, "motivo": "cancelado"}
         jobs_repo.mark_job_finalizado(db, job)
         processos_repo.mark_processo_finalizado(db, processo)
         logs_service.registrar_log(db, processo.id, processo.empresa_id, "info", "Processo finalizado")
@@ -172,6 +196,11 @@ def processar_job_consulta_nfse_real(db: Session, job: Job, worker_id: str) -> d
         return result
     except Exception as exc:
         db.rollback()
+        if _foi_cancelado(db, processo, job):
+            jobs_repo.mark_job_cancelado(db, job, "Processo cancelado durante a execucao.")
+            processos_repo.cancelar_processo(db, processo)
+            db.commit()
+            return {"ok": False, "job_id": job.id, "processo_id": processo.id, "motivo": "cancelado"}
         erro = str(exc)
         erro_detalhado = traceback.format_exc()
         jobs_repo.mark_job_erro(db, job, erro)

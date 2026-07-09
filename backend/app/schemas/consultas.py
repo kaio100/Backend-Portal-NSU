@@ -53,4 +53,4 @@ class ConsultaStatusResponse(BaseModel):
 
 class ConsultaDesativarRequest(BaseModel):
     cancelar_pendentes: bool = True
-    cancelar_rodando: bool = False
+    cancelar_rodando: bool = True

@@ -241,6 +241,65 @@ def test_consultas_nao_duplicam_sem_forcar_e_permitem_com_forcar():
         assert forced.json()["totais"]["pendentes"] == 1
 
 
+def test_desativar_consultas_cancela_pendentes_e_rodando_mesmo_com_payload_false():
+    with TestClient(app) as client:
+        empresa = criar_empresa(client, cnpj="11222333000194", payload_nome="nome")
+        certificado_id = criar_certificado_elegivel(int(empresa["id"]))
+        payload = {
+            "automatico": True,
+            "intervalo_minutos": 15,
+            "empresa_ids": [empresa["id"]],
+            "certificado_ids": [certificado_id],
+            "limite": 100,
+            "forcar": True,
+        }
+
+        first = client.post("/consultas/iniciar", json=payload)
+        assert first.status_code == 200
+        second = client.post("/consultas/iniciar", json=payload)
+        assert second.status_code == 200
+
+        with SessionLocal() as db:
+            processos = (
+                db.query(Processo)
+                .filter(Processo.certificado_id == certificado_id)
+                .order_by(Processo.id.asc())
+                .all()
+            )
+            assert len(processos) == 2
+            processo_rodando, processo_pendente = processos
+            processo_rodando.status = "rodando"
+            processo_pendente.status = "pendente"
+            job_rodando = db.query(Job).filter(Job.processo_id == processo_rodando.id).one()
+            job_pendente = db.query(Job).filter(Job.processo_id == processo_pendente.id).one()
+            job_rodando.status = "rodando"
+            job_pendente.status = "pendente"
+            db.commit()
+
+        response = client.post(
+            "/consultas/desativar",
+            json={"cancelar_pendentes": False, "cancelar_rodando": False},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["automatico_ativo"] is False
+        assert payload["totais"]["rodando"] == 0
+        assert payload["totais"]["pendentes"] == 0
+
+        with SessionLocal() as db:
+            statuses = {
+                processo.status
+                for processo in db.query(Processo).filter(Processo.certificado_id == certificado_id).all()
+            }
+            job_statuses = {
+                job.status
+                for job in db.query(Job).filter(Job.certificado_id == certificado_id).all()
+            }
+        assert statuses == {"cancelado"}
+        assert job_statuses == {"cancelado"}
+
+
 def test_worker_standalone_e_cors_localhost_5173():
     assert settings.api_worker_enabled is False
     with TestClient(app) as client:

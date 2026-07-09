@@ -275,8 +275,10 @@ def iniciar_consultas_automaticas(
 def desativar_consultas_automaticas(
     db: Session,
     cancelar_pendentes: bool = True,
-    cancelar_rodando: bool = False,
+    cancelar_rodando: bool = True,
 ) -> dict[str, Any]:
+    cancelar_pendentes = True
+    cancelar_rodando = True
     config = get_monitoramento_config(db)
     config.automatico_ativo = False
     config.proximo_ciclo_em = None
@@ -290,8 +292,8 @@ def desativar_consultas_automaticas(
         ).all()
         for processo in processos:
             processos_repo.cancelar_processo(db, processo)
-            for job in jobs_repo.list_jobs(db, processo_id=processo.id, status="pendente"):
-                jobs_repo.update_job(db, job, {"status": "cancelado"})
+            for job in jobs_repo.list_jobs(db, processo_id=processo.id, status="pendente", limit=100000):
+                jobs_repo.mark_job_cancelado(db, job, "Consultas desativadas pelo usuario.")
             cancelados += 1
 
     if cancelar_rodando:
@@ -301,6 +303,8 @@ def desativar_consultas_automaticas(
         ).all()
         for processo in processos:
             processos_repo.cancelar_processo(db, processo)
+            for job in jobs_repo.list_jobs(db, processo_id=processo.id, status="rodando", limit=100000):
+                jobs_repo.mark_job_cancelado(db, job, "Consultas desativadas pelo usuario.")
             cancelados += 1
 
     db.commit()

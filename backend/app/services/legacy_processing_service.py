@@ -51,6 +51,12 @@ def _ultimo_nsu_central_por_cnpj(cnpj: str, certificado_id: int | None = None) -
         return nsu_control_service.obter_ultimo_nsu(db, int(empresa.id), certificado_id=certificado_id)
 
 
+def _processo_cancelado(processo_id: int) -> bool:
+    with SessionLocal() as db:
+        processo = db.get(Processo, int(processo_id))
+        return processo is None or processo.status == "cancelado"
+
+
 def _load_legacy_module(processo_id: int) -> Any:
     root_dir = Path(__file__).resolve().parents[3]
     legacy_path = root_dir / "adn_nfse_downloader.py"
@@ -244,6 +250,7 @@ def _executar_baixa_empresa_compat(
     consulta_lote_tamanho: int,
     empresa_id: int | None = None,
     certificado_id: int | None = None,
+    processo_id: int | None = None,
 ) -> dict[str, Any]:
     for field in ("pdf_path", "pdf_tipo"):
         if field not in legacy.INDEX_FIELDS:
@@ -280,9 +287,15 @@ def _executar_baixa_empresa_compat(
     parar = False
 
     while consultas_realizadas < limite and not parar:
+        if processo_id is not None and _processo_cancelado(processo_id):
+            parar = True
+            break
         consultas_no_bloco = min(consulta_lote_tamanho, limite - consultas_realizadas)
 
         for _ in range(consultas_no_bloco):
+            if processo_id is not None and _processo_cancelado(processo_id):
+                parar = True
+                break
             resultado = legacy.consultar_dfe(config, nsu_atual, lote=False)
             consultas_realizadas += 1
             raw_path = legacy.DIR_RAW / (
@@ -342,6 +355,7 @@ def _executar_baixa_empresa_compat(
         "pdfs_gerados": pdfs_gerados,
         "consultas_realizadas": consultas_realizadas,
         "consulta_lote_tamanho": consulta_lote_tamanho,
+        "cancelado": parar and processo_id is not None and _processo_cancelado(processo_id),
     }
 
 
@@ -562,12 +576,32 @@ def executar_consulta_nfse_legado(
                     consulta_lote_tamanho=consulta_lote_tamanho,
                     empresa_id=int(empresa.id),
                     certificado_id=int(certificado.id),
+                    processo_id=int(processo.id),
                 )
         finally:
             if ingestao_stop_event is not None:
                 ingestao_stop_event.set()
             if ingestao_thread is not None:
                 ingestao_thread.join(timeout=10)
+        if _processo_cancelado(int(processo.id)):
+            logs_service.registrar_log(
+                db,
+                processo.id,
+                empresa.id,
+                "info",
+                "Processamento interrompido por desativacao das consultas",
+                {"job_id": job.id},
+            )
+            db.commit()
+            return {
+                "ok": False,
+                "modo": "legado_real",
+                "empresa_id": empresa.id,
+                "certificado_id": certificado.id,
+                "processo_id": processo.id,
+                "job_id": job.id,
+                "motivo": "cancelado",
+            }
         safe_result = _safe_legacy_result(result)
         pasta_saida = safe_result.get("pasta_saida") if isinstance(safe_result, dict) else None
         saida_contagem = _contar_saida_legada(pasta_saida)
