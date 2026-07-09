@@ -351,6 +351,26 @@ class LockProcessamento(TimestampMixin, Base):
     certificado: Mapped[Certificado] = relationship(back_populates="locks")
 
 
+class CnpjCache(Base):
+    __tablename__ = "cnpj_cache"
+
+    cnpj: Mapped[str] = mapped_column(String(14), primary_key=True)
+    fonte: Mapped[str] = mapped_column(String(80), primary_key=True, default="Invertexto")
+    consulta_simples_api: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    codigo_cnae: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    descricao_cnae: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status_consulta: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    json_resposta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    erro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_consulta: Mapped[Date | None] = mapped_column(Date, nullable=True)
+    data_expiracao: Mapped[Date | None] = mapped_column(Date, nullable=True, index=True)
+    created_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    simples_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    json_completo: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
 class Secret(TimestampMixin, Base):
     __tablename__ = "secrets"
 

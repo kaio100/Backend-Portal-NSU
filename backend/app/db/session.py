@@ -141,6 +141,23 @@ def _ensure_runtime_columns() -> None:
             statements.append("ALTER TABLE arquivos ADD COLUMN filename VARCHAR(255)")
         statements.append("UPDATE arquivos SET updated_at = created_at WHERE updated_at IS NULL")
 
+    if "cnpj_cache" in table_names:
+        cache_columns = {column["name"] for column in inspector.get_columns("cnpj_cache")}
+        cache_runtime_columns = {
+            "consulta_simples_api": "VARCHAR(80)",
+            "status_consulta": "VARCHAR(80)",
+            "json_resposta": "JSON" if is_sqlite else "JSONB",
+            "erro": "TEXT",
+            "created_at": "DATETIME" if is_sqlite else "TIMESTAMP WITH TIME ZONE",
+        }
+        for name, column_type in cache_runtime_columns.items():
+            if name not in cache_columns:
+                statements.append(f"ALTER TABLE cnpj_cache ADD COLUMN {name} {column_type}")
+        statements.append("UPDATE cnpj_cache SET consulta_simples_api = COALESCE(consulta_simples_api, simples_status)")
+        statements.append("UPDATE cnpj_cache SET status_consulta = COALESCE(status_consulta, status)")
+        statements.append("UPDATE cnpj_cache SET json_resposta = COALESCE(json_resposta, json_completo)")
+        statements.append("UPDATE cnpj_cache SET created_at = COALESCE(created_at, updated_at)")
+
     if not statements:
         return
 

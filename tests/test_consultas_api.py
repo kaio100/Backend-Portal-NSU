@@ -472,6 +472,55 @@ def test_autocadastro_reutiliza_empresa_existente(monkeypatch):
         assert payload["processo"] is None
 
 
+def test_autocadastro_empresa_existente_usa_nsu_recomendado(monkeypatch):
+    monkeypatch.setattr(
+        certificado_metadata_service,
+        "extrair_metadata_pfx",
+        lambda pfx_bytes, senha: fake_metadata(cnpj="22333444000161", nome="Empresa NSU LTDA"),
+    )
+    with TestClient(app) as client:
+        empresa = criar_empresa(client, cnpj="22333444000161", payload_nome="nome")
+        response = post_autocadastro(client, auto_iniciar=True, nsu_recomendado=345, forcar=True)
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["empresa"]["id"] == empresa["id"]
+        assert payload["processo"]["nsu_inicio"] == 345
+
+        with SessionLocal() as db:
+            job = (
+                db.query(Job)
+                .filter(Job.certificado_id == payload["certificado"]["id"])
+                .order_by(Job.id.desc())
+                .first()
+            )
+            assert job is not None
+            assert job.payload_json["nsu_inicio"] == 345
+
+
+def test_autocadastro_empresa_nova_ignora_nsu_recomendado(monkeypatch):
+    monkeypatch.setattr(
+        certificado_metadata_service,
+        "extrair_metadata_pfx",
+        lambda pfx_bytes, senha: fake_metadata(cnpj="22333444000162", nome="Empresa Nova NSU LTDA"),
+    )
+    with TestClient(app) as client:
+        response = post_autocadastro(client, auto_iniciar=True, nsu_recomendado=987, forcar=True)
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["empresa"]["cnpj"] == "22333444000162"
+        assert payload["processo"]["nsu_inicio"] is None
+
+        with SessionLocal() as db:
+            job = (
+                db.query(Job)
+                .filter(Job.certificado_id == payload["certificado"]["id"])
+                .order_by(Job.id.desc())
+                .first()
+            )
+            assert job is not None
+            assert job.payload_json["nsu_inicio"] is None
+
+
 def test_autocadastro_auto_iniciar_false_nao_cria_job(monkeypatch):
     monkeypatch.setattr(
         certificado_metadata_service,

@@ -1,283 +1,380 @@
-"""
-Parser de XML da NFS-e (padrão nacional) -> dicionário de dados para o
-NfsePdfService (nfse_pdf_service_reportlab.py).
-
-Uso:
-    from nfse_xml_parser import extrair_dados_nfse
-    dados = extrair_dados_nfse("caminho/para/nota.xml")
-    NfsePdfService().gerar_danfse_espelho(dados, "saida.pdf")
-
-Cobre os XMLs no padrão nacional da NFS-e (xmlns
-"http://www.sped.fazenda.gov.br/nfse"), com <infNFSe> e <DPS>/<infDPS>
-aninhados, que é o modelo usado pela maioria dos municípios que já
-migraram para o padrão nacional (ex: Fortaleza, Hidrolândia etc.).
-"""
-
-import re
-import xml.etree.ElementTree as ET
-
-NS = {"nfse": "http://www.sped.fazenda.gov.br/nfse"}
-
-# --------------------------------------------------------------------
-# Tabelas de domínio (padrão nacional NFS-e)
-# --------------------------------------------------------------------
-
-OP_SIMP_NAC = {
-    "1": "Não Optante",
-    "2": "Optante - Microempreendedor Individual (MEI)",
-    "3": "Optante - Microempresa ou Empresa de Pequeno Porte (ME/EPP)",
-}
-
-REG_ESP_TRIB = {
-    "0": "Nenhum",
-    "1": "Ato Cooperado",
-    "2": "Estimativa",
-    "3": "Sociedade de Profissionais",
-    "4": "Cooperativa",
-    "5": "Microempresário Individual (MEI)",
-    "6": "Microempresário e Empresa de Pequeno Porte (ME/EPP)",
-}
-
-TRIB_ISSQN = {
-    "1": "Operação Tributável",
-    "2": "Imunidade",
-    "3": "Exportação de Serviço",
-    "4": "Não Incidência",
-    "5": "Isenção",
-    "6": "Exigibilidade Suspensa",
-}
-
-TP_RET_ISSQN = {
-    "1": "Não Retido",
-    "2": "Retido pelo Tomador",
-    "3": "Retido pelo Intermediário",
-}
-
-# ATENÇÃO: valide esses de-para com a tabela de domínios oficial mais
-# recente do MDF-e/NFS-e nacional (podem mudar ou ter mais opções).
-# Fonte de referência: manual do DANFSe / layout nacional da NFS-e.
-
-
-# --------------------------------------------------------------------
-# Helpers de formatação
-# --------------------------------------------------------------------
-
-def _fmt_cnpj_cpf(v: str) -> str:
-    if not v:
-        return "-"
-    v = re.sub(r"\D", "", v)
-    if len(v) == 14:
-        return f"{v[0:2]}.{v[2:5]}.{v[5:8]}/{v[8:12]}-{v[12:14]}"
-    if len(v) == 11:
-        return f"{v[0:3]}.{v[3:6]}.{v[6:9]}-{v[9:11]}"
-    return v
-
-
-def _fmt_cep(v: str) -> str:
-    if not v:
-        return "-"
-    v = re.sub(r"\D", "", v)
-    return f"{v[0:5]}-{v[5:8]}" if len(v) == 8 else v
-
-
-def _fmt_fone(v: str) -> str:
-    if not v:
-        return "-"
-    v = re.sub(r"\D", "", v)
-    if len(v) == 11:  # celular com 9 dígitos
-        return f"({v[0:2]}) {v[2:7]}-{v[7:11]}"
-    if len(v) == 10:  # fixo
-        return f"({v[0:2]}) {v[2:6]}-{v[6:10]}"
-    return v
-
-
-def _fmt_datahora(v: str) -> str:
-    # "2025-12-10T19:47:04-03:00" -> "10/12/2025 19:47:04"
-    if not v:
-        return "-"
-    data, resto = v.split("T")
-    hora = resto.split("-")[0].split("+")[0]
-    y, m, d = data.split("-")
-    return f"{d}/{m}/{y} {hora}"
-
-
-def _fmt_data(v: str) -> str:
-    # "2025-12-10" -> "10/12/2025"
-    if not v:
-        return "-"
-    y, m, d = v.split("-")
-    return f"{d}/{m}/{y}"
-
-
-def _fmt_moeda(v: str) -> str:
-    if v in (None, ""):
-        return "-"
-    try:
-        return f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except ValueError:
-        return v
-
-
-def _txt(el, path, default=None):
-    node = el.find(path, NS)
-    return node.text if node is not None and node.text else default
-
-
-def _montar_endereco(xLgr, nro, xCpl, xBairro):
-    partes = [p for p in [xLgr, nro, xCpl, xBairro] if p]
-    return ", ".join(partes) if partes else "-"
-
-
-def _extrair_chave(attr_id: str, prefixo: str) -> str:
-    """Remove o prefixo (NFS/DPS) do atributo Id para obter a chave de acesso."""
-    if attr_id and attr_id.startswith(prefixo):
-        return attr_id[len(prefixo):]
-    return attr_id or "-"
-
-
-# --------------------------------------------------------------------
-# Parser principal
-# --------------------------------------------------------------------
-
-def extrair_dados_nfse(xml_path: str, prefeitura_info: dict | None = None) -> dict:
-    """
-    Lê um XML de NFS-e (padrão nacional) e retorna o dicionário pronto
-    para NfsePdfService.gerar_danfse_espelho().
-
-    prefeitura_info (opcional): dict com dados fixos do município, ex:
-        {
-            "municipio_prefeitura": "Hidrolândia-GO",
-            "orgao_prefeitura": "Departamento de Arrecadação e Fiscalização.",
-            "telefone_prefeitura": "(62)99506-8320",
-            "email_prefeitura": "coletoria.hidrolandia@gmail.com",
-        }
-    Se não vier, esses campos ficam em branco (não inventamos contato).
-    """
-    tree = ET.parse(xml_path)
-    root = tree.getroot()
-
-    infNFSe = root.find("nfse:infNFSe", NS)
-    dps = infNFSe.find("nfse:DPS/nfse:infDPS", NS)
-    emit = infNFSe.find("nfse:emit", NS)
-    prest = dps.find("nfse:prest", NS)
-    toma = dps.find("nfse:toma", NS)
-    serv = dps.find("nfse:serv", NS)
-    cServ = serv.find("nfse:cServ", NS)
-    valores_nfse = infNFSe.find("nfse:valores", NS)
-    valores_dps = dps.find("nfse:valores", NS)
-    vServPrest = valores_dps.find("nfse:vServPrest", NS)
-    trib = valores_dps.find("nfse:trib", NS)
-    tribMun = trib.find("nfse:tribMun", NS) if trib is not None else None
-    regTrib = prest.find("nfse:regTrib", NS) if prest is not None else None
-
-    # Chaves de acesso
-    chave_acesso = _extrair_chave(infNFSe.get("Id"), "NFS")
-
-    # Endereço emitente
-    enderNac = emit.find("nfse:enderNac", NS)
-    emit_endereco = _montar_endereco(
-        _txt(enderNac, "nfse:xLgr"), _txt(enderNac, "nfse:nro"),
-        _txt(enderNac, "nfse:xCpl"), _txt(enderNac, "nfse:xBairro"),
-    )
-
-    # Endereço tomador
-    tom_end = toma.find("nfse:end", NS) if toma is not None else None
-    tom_endereco = "-"
-    tom_cep = "-"
-    tom_municipio = "-"
-    if tom_end is not None:
-        tom_endereco = _montar_endereco(
-            _txt(tom_end, "nfse:xLgr"), _txt(tom_end, "nfse:nro"),
-            _txt(tom_end, "nfse:xCpl"), _txt(tom_end, "nfse:xBairro"),
-        )
-        tom_cep = _fmt_cep(_txt(tom_end, "nfse:endNac/nfse:CEP"))
-
-    xLocPrestacao = _txt(infNFSe, "nfse:xLocPrestacao", "-")
-    xLocIncid = _txt(infNFSe, "nfse:xLocIncid", "-")
-
-    op_simp_nac = _txt(regTrib, "nfse:opSimpNac") if regTrib is not None else None
-    reg_esp_trib = _txt(regTrib, "nfse:regEspTrib") if regTrib is not None else None
-    trib_issqn_cod = _txt(tribMun, "nfse:tribISSQN") if tribMun is not None else None
-    tp_ret_issqn_cod = _txt(tribMun, "nfse:tpRetISSQN") if tribMun is not None else None
-
-    cTribNac = _txt(cServ, "nfse:cTribNac", "")
-    cTribNac_fmt = f"{cTribNac[0:2]}.{cTribNac[2:4]}.{cTribNac[4:6]}" if len(cTribNac) == 6 else cTribNac
-    xTribNac = _txt(infNFSe, "nfse:xTribNac", "")
-    cTribMun = _txt(cServ, "nfse:cTribMun")
-    xTribMun = _txt(infNFSe, "nfse:xTribMun")
-
-    dados = {
-        # Cabeçalho / prefeitura (não vem no XML — vem do seu cadastro por município)
-        "municipio_prefeitura": (prefeitura_info or {}).get("municipio_prefeitura", f"{xLocPrestacao}"),
-        "orgao_prefeitura": (prefeitura_info or {}).get("orgao_prefeitura", ""),
-        "telefone_prefeitura": (prefeitura_info or {}).get("telefone_prefeitura", ""),
-        "email_prefeitura": (prefeitura_info or {}).get("email_prefeitura", ""),
-
-        # Identificação
-        "chave_acesso": chave_acesso,
-        "numero_nfse": _txt(infNFSe, "nfse:nNFSe"),
-        "competencia": _fmt_data(_txt(dps, "nfse:dCompet")),
-        "data_emissao_nfse": _fmt_datahora(_txt(infNFSe, "nfse:dhProc")),
-        "numero_dps": _txt(dps, "nfse:nDPS"),
-        "serie_dps": _txt(dps, "nfse:serie"),
-        "data_emissao_dps": _fmt_datahora(_txt(dps, "nfse:dhEmi")),
-
-        # Emitente
-        "emit_cnpj": _fmt_cnpj_cpf(_txt(emit, "nfse:CNPJ") or _txt(emit, "nfse:CPF")),
-        "emit_inscricao_municipal": _txt(emit, "nfse:IM", "-"),
-        "emit_telefone": _fmt_fone(_txt(emit, "nfse:fone")),
-        "emit_nome": _txt(emit, "nfse:xNome"),
-        "emit_email": _txt(emit, "nfse:email", "-"),
-        "emit_endereco": emit_endereco,
-        "emit_municipio": f"{xLocPrestacao} - " + (enderNac.find('nfse:UF', NS).text if enderNac is not None and enderNac.find('nfse:UF', NS) is not None else ""),
-        "emit_cep": _fmt_cep(_txt(enderNac, "nfse:CEP")),
-        "emit_simples_nacional": OP_SIMP_NAC.get(op_simp_nac, "-"),
-        "emit_regime_apuracao": (
-            "Regime de apuração dos tributos federais e municipal pelo Simples Nacional"
-            if op_simp_nac in ("2", "3") else "-"
-        ),
-
-        # Tomador
-        "tom_cnpj": _fmt_cnpj_cpf(_txt(toma, "nfse:CNPJ") or _txt(toma, "nfse:CPF")) if toma is not None else "-",
-        "tom_inscricao_municipal": _txt(toma, "nfse:IM", "-") if toma is not None else "-",
-        "tom_telefone": _fmt_fone(_txt(toma, "nfse:fone")) if toma is not None else "-",
-        "tom_nome": _txt(toma, "nfse:xNome", "-") if toma is not None else "-",
-        "tom_email": _txt(toma, "nfse:email", "-") if toma is not None else "-",
-        "tom_endereco": tom_endereco,
-        "tom_municipio": xLocPrestacao,
-        "tom_cep": tom_cep,
-
-        # Serviço
-        "codigo_tributacao_nacional": f"{cTribNac_fmt} - {xTribNac}".strip(" -"),
-        "codigo_tributacao_municipal": f"{cTribMun} - {xTribMun}" if cTribMun else "-",
-        "local_prestacao": xLocPrestacao,
-        "pais_prestacao": "-",
-        "descricao_servico": _txt(cServ, "nfse:xDescServ", "-"),
-
-        # Tributação municipal
-        "tributacao_issqn": TRIB_ISSQN.get(trib_issqn_cod, "-"),
-        "municipio_incidencia_issqn": xLocIncid,
-        "regime_especial_tributacao": REG_ESP_TRIB.get(reg_esp_trib, "Nenhum"),
-        "retencao_issqn": TP_RET_ISSQN.get(tp_ret_issqn_cod, "-"),
-        "valor_servico": _fmt_moeda(_txt(vServPrest, "nfse:vServ")),
-
-        # Valor total
-        "total_retencoes_federais": _fmt_moeda(_txt(valores_nfse, "nfse:vTotalRet")),
-        "valor_liquido_nfse": _fmt_moeda(_txt(valores_nfse, "nfse:vLiq")),
-
-        "nfse_subst": "-",
-    }
-    return dados
-
-
-if __name__ == "__main__":
-    import sys
-    import json
-
-    caminho = sys.argv[1] if len(sys.argv) > 1 else None
-    if not caminho:
-        print("Uso: python nfse_xml_parser.py caminho/para/arquivo.xml")
-        sys.exit(1)
-
-    dados = extrair_dados_nfse(caminho)
-    print(json.dumps(dados, indent=2, ensure_ascii=False))
+from __future__ import annotations
+
+import re
+import xml.etree.ElementTree as ET
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+
+
+OP_SIMP_NAC = {
+    "1": "Não Optante",
+    "2": "Optante - Microempreendedor Individual (MEI)",
+    "3": "Optante - Microempresa ou Empresa de Pequeno Porte (ME/EPP)",
+}
+
+REG_ESP_TRIB = {
+    "0": "Nenhum",
+    "1": "Ato Cooperado",
+    "2": "Estimativa",
+    "3": "Sociedade de Profissionais",
+    "4": "Cooperativa",
+    "5": "Microempresario Individual (MEI)",
+    "6": "Microempresario e Empresa de Pequeno Porte (ME/EPP)",
+}
+
+TRIB_ISSQN = {
+    "1": "Operação Tributável",
+    "2": "Imunidade",
+    "3": "Exportação de Serviço",
+    "4": "Não Incidência",
+    "5": "Isenção",
+    "6": "Exigibilidade Suspensa",
+}
+
+TP_RET_ISSQN = {
+    "1": "Não Retido",
+    "2": "Retido pelo Tomador",
+    "3": "Retido pelo Intermediario",
+}
+
+UF_BY_IBGE_PREFIX = {
+    "11": "RO",
+    "12": "AC",
+    "13": "AM",
+    "14": "RR",
+    "15": "PA",
+    "16": "AP",
+    "17": "TO",
+    "21": "MA",
+    "22": "PI",
+    "23": "CE",
+    "24": "RN",
+    "25": "PB",
+    "26": "PE",
+    "27": "AL",
+    "28": "SE",
+    "29": "BA",
+    "31": "MG",
+    "32": "ES",
+    "33": "RJ",
+    "35": "SP",
+    "41": "PR",
+    "42": "SC",
+    "43": "RS",
+    "50": "MS",
+    "51": "MT",
+    "52": "GO",
+    "53": "DF",
+}
+
+
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _children(el: ET.Element | None, name: str | None = None) -> list[ET.Element]:
+    if el is None:
+        return []
+    if name is None:
+        return list(el)
+    return [child for child in list(el) if _local_name(child.tag) == name]
+
+
+def _child(el: ET.Element | None, *path: str) -> ET.Element | None:
+    current = el
+    for name in path:
+        matches = _children(current, name)
+        if not matches:
+            return None
+        current = matches[0]
+    return current
+
+
+def _find_first(el: ET.Element | None, name: str) -> ET.Element | None:
+    if el is None:
+        return None
+    for node in el.iter():
+        if _local_name(node.tag) == name:
+            return node
+    return None
+
+
+def _txt(el: ET.Element | None, *path: str, default: str = "-") -> str:
+    node = _child(el, *path) if path else el
+    if node is not None and node.text and node.text.strip():
+        return node.text.strip()
+    return default
+
+
+def _raw(el: ET.Element | None, *path: str) -> str:
+    return _txt(el, *path, default="")
+
+
+def _raw_first(el: ET.Element | None, *names: str) -> str:
+    for name in names:
+        value = _raw(_find_first(el, name))
+        if value:
+            return value
+    return ""
+
+
+def _decimal(value: str) -> Decimal | None:
+    text = str(value or "").strip().replace(",", ".")
+    if not text:
+        return None
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return None
+
+
+def _money_text(value: Decimal) -> str:
+    return f"{value.quantize(Decimal('0.01')):.2f}"
+
+
+def _sum_values(*values: str) -> str:
+    total = Decimal("0")
+    has_value = False
+    for value in values:
+        parsed = _decimal(value)
+        if parsed is None:
+            continue
+        total += parsed
+        has_value = True
+    return _money_text(total) if has_value else ""
+
+
+def _fmt_cnpj_cpf(value: str) -> str:
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) == 14:
+        return f"{digits[0:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:14]}"
+    if len(digits) == 11:
+        return f"{digits[0:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:11]}"
+    return digits or "-"
+
+
+def _fmt_cep(value: str) -> str:
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) == 8:
+        return f"{digits[0:5]}-{digits[5:8]}"
+    return digits or "-"
+
+
+def _fmt_fone(value: str) -> str:
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) == 11:
+        return f"({digits[0:2]}) {digits[2:7]}-{digits[7:11]}"
+    if len(digits) == 10:
+        return f"({digits[0:2]}) {digits[2:6]}-{digits[6:10]}"
+    return digits or "-"
+
+
+def _fmt_data(value: str) -> str:
+    if not value or value == "-":
+        return "-"
+    try:
+        year, month, day = value[:10].split("-")
+    except ValueError:
+        return value
+    return f"{day}/{month}/{year}"
+
+
+def _fmt_datahora(value: str) -> str:
+    if not value or value == "-":
+        return "-"
+    if "T" not in value:
+        return _fmt_data(value)
+    data, rest = value.split("T", 1)
+    hora = rest.split("-", 1)[0].split("+", 1)[0]
+    return f"{_fmt_data(data)} {hora}"
+
+
+def _montar_endereco(end: ET.Element | None) -> str:
+    if end is None:
+        return "-"
+    parts = [_raw(end, "xLgr"), _raw(end, "nro"), _raw(end, "xCpl"), _raw(end, "xBairro")]
+    parts = [part for part in parts if part]
+    return ", ".join(parts) if parts else "-"
+
+
+def _format_codigo_tributacao(value: str) -> str:
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) == 6:
+        return f"{digits[0:2]}.{digits[2:4]}.{digits[4:6]}"
+    return value or "-"
+
+
+def _municipio_uf(nome: str, uf: str = "", codigo_municipio: str = "") -> str:
+    nome = (nome or "").strip()
+    uf = (uf or "").strip().upper()
+    codigo_municipio = re.sub(r"\D", "", codigo_municipio or "")
+    if not uf and len(codigo_municipio) >= 2:
+        uf = UF_BY_IBGE_PREFIX.get(codigo_municipio[:2], "")
+    if nome and uf:
+        return f"{nome} - {uf}"
+    return nome or "-"
+
+
+def _extrair_chave(attr_id: str | None, prefixo: str) -> str:
+    value = attr_id or ""
+    return value[len(prefixo):] if value.startswith(prefixo) else value or "-"
+
+
+def _has_real_data(el: ET.Element | None) -> bool:
+    if el is None:
+        return False
+    for node in el.iter():
+        if node.text and node.text.strip():
+            return True
+    return False
+
+
+def extrair_dados_nfse(xml_path: str | Path, prefeitura_info: dict | None = None) -> dict:
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+
+    inf_nfse = _find_first(root, "infNFSe")
+    if inf_nfse is None:
+        raise ValueError("XML sem infNFSe.")
+
+    dps = _child(inf_nfse, "DPS", "infDPS") or _find_first(inf_nfse, "infDPS")
+    emit = _child(inf_nfse, "emit")
+    prest = _child(dps, "prest")
+    toma = _child(dps, "toma")
+    serv = _child(dps, "serv")
+    c_serv = _child(serv, "cServ")
+    loc_prest = _child(serv, "locPrest")
+    valores_nfse = _child(inf_nfse, "valores")
+    valores_dps = _child(dps, "valores")
+    v_serv_prest = _child(valores_dps, "vServPrest")
+    descontos = _child(valores_dps, "vDescCondIncond")
+    trib = _child(valores_dps, "trib")
+    trib_mun = _child(trib, "tribMun")
+    trib_fed = _child(trib, "tribFed")
+    tot_trib = _child(trib, "totTrib", "pTotTrib")
+    reg_trib = _child(prest, "regTrib")
+    emit_end = _child(emit, "enderNac")
+    tom_end = _child(toma, "end")
+    tom_end_nac = _child(tom_end, "endNac")
+
+    chave_acesso = _extrair_chave(inf_nfse.get("Id"), "NFS")
+    x_loc_emi = _raw(inf_nfse, "xLocEmi")
+    x_loc_prestacao = _raw(inf_nfse, "xLocPrestacao")
+    x_loc_incid = _raw(inf_nfse, "xLocIncid")
+    c_loc_prestacao = _raw(loc_prest, "cLocPrestacao")
+    c_loc_incid = _raw(inf_nfse, "cLocIncid")
+    emit_uf = _raw(emit_end, "UF")
+    emit_cmun = _raw(emit_end, "cMun") or _raw(dps, "cLocEmi")
+
+    c_trib_nac = _raw(c_serv, "cTribNac")
+    x_trib_nac = _raw(inf_nfse, "xTribNac")
+    c_trib_nac_fmt = _format_codigo_tributacao(c_trib_nac)
+    codigo_tributacao_nacional = (
+        f"{c_trib_nac_fmt} - {x_trib_nac}" if c_trib_nac_fmt != "-" and x_trib_nac else c_trib_nac_fmt
+    )
+
+    c_trib_mun = _raw(c_serv, "cTribMun")
+    x_trib_mun = _raw(inf_nfse, "xTribMun")
+    codigo_tributacao_municipal = f"{c_trib_mun} - {x_trib_mun}" if c_trib_mun and x_trib_mun else c_trib_mun or "-"
+
+    tomador_identificado = _has_real_data(toma)
+    tom_uf = _raw(tom_end_nac, "UF")
+    tom_cmun = _raw(tom_end_nac, "cMun")
+
+    municipio_prefeitura = (prefeitura_info or {}).get("municipio_prefeitura")
+    if not municipio_prefeitura and x_loc_emi:
+        municipio_prefeitura = x_loc_emi
+
+    nbs = _raw(c_serv, "cNBS")
+    descricao_nbs = _raw(inf_nfse, "xNBS")
+    info_complementar = _raw(_child(serv, "infoCompl"), "xInfComp")
+    retencao_iss_codigo = _raw(trib_mun, "tpRetISSQN")
+    issqn_apurado = _raw(valores_nfse, "vISSQN")
+    valor_irrf = _raw_first(trib_fed, "vRetIRRF")
+    valor_inss = _raw_first(trib_fed, "vRetCP")
+    valor_csll = _raw_first(trib_fed, "vRetCSLL")
+    valor_pis = _raw_first(trib_fed, "vPis")
+    valor_cofins = _raw_first(trib_fed, "vCofins")
+    total_retencoes_federais = _raw(valores_nfse, "vTotalRet") or _sum_values(
+        valor_irrf,
+        valor_inss,
+        valor_csll,
+        valor_pis,
+        valor_cofins,
+    )
+
+    return {
+        "municipio_prefeitura": municipio_prefeitura or "",
+        "orgao_prefeitura": (prefeitura_info or {}).get("orgao_prefeitura", ""),
+        "telefone_prefeitura": (prefeitura_info or {}).get("telefone_prefeitura", ""),
+        "email_prefeitura": (prefeitura_info or {}).get("email_prefeitura", ""),
+        "chave_acesso": chave_acesso,
+        "numero_nfse": _txt(inf_nfse, "nNFSe"),
+        "competencia": _fmt_data(_raw(dps, "dCompet")),
+        "data_emissao_nfse": _fmt_datahora(_raw(inf_nfse, "dhProc")),
+        "numero_dps": _txt(dps, "nDPS"),
+        "serie_dps": _txt(dps, "serie"),
+        "data_emissao_dps": _fmt_datahora(_raw(dps, "dhEmi")),
+        "emit_cnpj": _fmt_cnpj_cpf(_raw(emit, "CNPJ") or _raw(emit, "CPF") or _raw(emit, "NIF")),
+        "emit_inscricao_municipal": _txt(emit, "IM"),
+        "emit_telefone": _fmt_fone(_raw(emit, "fone") or _raw(prest, "fone")),
+        "emit_nome": _txt(emit, "xNome"),
+        "emit_email": _txt(emit, "email", default=_txt(prest, "email")),
+        "emit_endereco": _montar_endereco(emit_end),
+        "emit_municipio": _municipio_uf(x_loc_emi or x_loc_prestacao, emit_uf, emit_cmun),
+        "emit_cep": _fmt_cep(_raw(emit_end, "CEP")),
+        "emit_simples_nacional": OP_SIMP_NAC.get(_raw(reg_trib, "opSimpNac"), "-"),
+        "emit_regime_apuracao": (
+            "Regime de apuracao dos tributos federais e municipal pelo Simples Nacional"
+            if _raw(reg_trib, "opSimpNac") in {"2", "3"}
+            else "-"
+        ),
+        "tomador_identificado": tomador_identificado,
+        "tom_cnpj": _fmt_cnpj_cpf(_raw(toma, "CNPJ") or _raw(toma, "CPF") or _raw(toma, "NIF")) if tomador_identificado else "-",
+        "tom_inscricao_municipal": _txt(toma, "IM") if tomador_identificado else "-",
+        "tom_telefone": _fmt_fone(_raw(toma, "fone")) if tomador_identificado else "-",
+        "tom_nome": _txt(toma, "xNome") if tomador_identificado else "-",
+        "tom_email": _txt(toma, "email") if tomador_identificado else "-",
+        "tom_endereco": _montar_endereco(tom_end) if tomador_identificado else "-",
+        "tom_municipio": _municipio_uf(_raw(tom_end_nac, "xMun"), tom_uf, tom_cmun) if tomador_identificado else "-",
+        "tom_cep": _fmt_cep(_raw(tom_end_nac, "CEP")) if tomador_identificado else "-",
+        "codigo_tributacao_nacional": codigo_tributacao_nacional,
+        "codigo_tributacao_municipal": codigo_tributacao_municipal,
+        "local_prestacao": _municipio_uf(x_loc_prestacao, emit_uf, c_loc_prestacao or emit_cmun),
+        "pais_prestacao": "-",
+        "descricao_servico": _txt(c_serv, "xDescServ"),
+        "nbs": nbs,
+        "descricao_nbs": descricao_nbs,
+        "informacoes_complementares": info_complementar,
+        "tributacao_issqn": TRIB_ISSQN.get(_raw(trib_mun, "tribISSQN"), "-"),
+        "municipio_incidencia_issqn": _municipio_uf(x_loc_incid, emit_uf, c_loc_incid or emit_cmun),
+        "regime_especial_tributacao": REG_ESP_TRIB.get(_raw(reg_trib, "regEspTrib"), "Nenhum"),
+        "retencao_issqn": TP_RET_ISSQN.get(retencao_iss_codigo, "-"),
+        "suspensao_exigibilidade_issqn": "Nao",
+        "valor_servico": _raw(v_serv_prest, "vServ"),
+        "desconto_incondicionado": _raw(descontos, "vDescIncond"),
+        "desconto_incondicionado_mun": _raw(descontos, "vDescIncond"),
+        "desconto_condicionado": _raw(descontos, "vDescCond"),
+        "bc_issqn": _raw(valores_nfse, "vBC"),
+        "aliquota_aplicada": _raw(valores_nfse, "pAliqAplic") or _raw(trib_mun, "pAliq"),
+        "issqn_apurado": issqn_apurado,
+        "issqn_retido": issqn_apurado if retencao_iss_codigo in {"2", "3"} else "",
+        "valor_liquido_nfse": _raw(valores_nfse, "vLiq"),
+        "total_retencoes_federais": total_retencoes_federais,
+        "irrf": valor_irrf,
+        "contrib_previdenciaria_retida": valor_inss,
+        "contrib_sociais_retidas": valor_csll,
+        "pis_retido": valor_pis,
+        "cofins_retido": valor_cofins,
+        "totais_federais": _raw(tot_trib, "pTotTribFed") or _raw(valores_nfse, "vTotTribFed"),
+        "totais_estaduais": _raw(tot_trib, "pTotTribEst") or _raw(valores_nfse, "vTotTribEst"),
+        "totais_municipais": _raw(tot_trib, "pTotTribMun") or _raw(valores_nfse, "vTotTribMun"),
+        "nfse_subst": "-",
+    }
+
+
+if __name__ == "__main__":
+    import json
+    import sys
+
+    print(json.dumps(extrair_dados_nfse(sys.argv[1]), indent=2, ensure_ascii=False))

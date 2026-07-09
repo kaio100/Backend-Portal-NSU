@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">
+    <infNFSe Id="NFS52051091201562359000115000000000254926036072747579">
+        <xLocEmi>5205109</xLocEmi>
+        <xLocPrestacao>5212808</xLocPrestacao>
+        <nNFSe>2549</nNFSe>
+        <cLocIncid>5212808</cLocIncid>
+        <xLocIncid>MARA ROSA</xLocIncid>
+        <xTribNac>Serviços de transporte coletivo municipal rodoviário, metroviário, ferroviário e aquaviário de passageiros.(Alteração conforme LC nº 157 de 29/12/2016.)</xTribNac>
+        <xTribMun>Serviços de transporte coletivo municipal rodoviário de passageiros.</xTribMun>
+        <verAplic>SIG_2.14.25</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2026-03-03T11:13:00-03:00</dhProc>
+        <nDFSe>2549</nDFSe>
+        <emit>
+            <CNPJ>01562359000115</CNPJ>
+            <IM>46470001</IM>
+            <xNome>AS TURISMO LTDA.</xNome>
+            <xFant>AS TURISMO.</xFant>
+            <enderNac>
+                <xLgr>AV 20 DE AGOSTO</xLgr>
+                <nro>795</nro>
+                <xBairro>CENTRO</xBairro>
+                <cMun>5205109</cMun>
+                <UF>GO</UF>
+                <CEP>75701010</CEP>
+            </enderNac>
+            <email>asturismo@innet.psi.br</email>
+        </emit>
+        <valores>
+            <vBC>23000.00</vBC>
+            <pAliqAplic>3.00</pAliqAplic>
+            <vISSQN>690.00</vISSQN>
+            <vTotalRet>759.00</vTotalRet>
+            <vLiq>21551.00</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS520510920156235900011500001000000000002549">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2026-03-03T11:13:00-03:00</dhEmi>
+                <verAplic>SIG_2.14.25</verAplic>
+                <serie>00001</serie>
+                <nDPS>2549</nDPS>
+                <dCompet>2026-03-03</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>5205109</cLocEmi>
+                <prest>
+                    <CNPJ>01562359000115</CNPJ>
+                    <IM>46470001</IM>
+                    <email>asturismo@innet.psi.br</email>
+                    <regTrib>
+                        <opSimpNac>1</opSimpNac>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>26743708000126</CNPJ>
+                    <IM>35535259</IM>
+                    <xNome>GUARDIA SEGURANCA E VIGILANCIA LTDA.</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>5201405</cMun>
+                            <CEP>74905730</CEP>
+                        </endNac>
+                        <xLgr>RUA TUPINAMBAS</xLgr>
+                        <nro>0</nro>
+                        <xCpl>QD,01 LOTE 10</xCpl>
+                        <xBairro>VILA BRASILIA</xBairro>
+                    </end>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>5212808</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>160101</cTribNac>
+                        <xDescServ>NOTA REFERENTE AO TRANSPORTE DE UMA VAN NO PERÍODO DE FEVEREIRO DE 2026 DA CIDADE DE MARA ROSA/GO PARA A PORTARIA DA MINERAÇÃO
+HOCHSCHILD EM MARA ROSA/GO.</xDescServ>
+                        <cNBS>104011119</cNBS>
+                    </cServ>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>23000.00</vServ>
+                    </vServPrest>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>2</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                            </piscofins>
+                            <vRetCP>759.00</vRetCP>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>759.00</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>690.00</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS52051091201562359000115000000000254926036072747579"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>jqdKPX1rAsGDJrHAunIiJTLRdbc=</DigestValue></Reference></SignedInfo><SignatureValue>Zx4yJlQPTJPz33/0TiOE6wRn5mfnjIzk7YZfMVXpky4P720JefSj7XjwxWvGVSoO4VnVzHlJsN+j&#13;
+C22ThnfbXVqOgdk74lK+7MxTPlZC9Fo0U8za9vnD8/DVrQSIX2+WGfJze1c0R3XaXEzHgBLvjxfk&#13;
+RkAJcjXu4jZc7viBbGXYNQVUpfnl9SA1ab9B18U0B6KxYlSN2mQYeqtlGJMEZSozlLUURDrsPVND&#13;
+yQR9gE+L+nd3c3zK0ckPxhbcjc3HSD9WWncIuZqT35XHX490Kh2AbtSKRa0WFoxwhpxY3bOzhcQ8&#13;
+FBI0L7h7tP0xeMabTs1V8RwjVec4thH1qNlQyg==</SignatureValue><KeyInfo><X509Data><X509Certificate>MIIH2DCCBcCgAwIBAgIKPlpo5paXTWU8STANBgkqhkiG9w0BAQsFADBbMQswCQYDVQQGEwJCUjEW&#13;
+MBQGA1UECwwNQUMgU3luZ3VsYXJJRDETMBEGA1UECgwKSUNQLUJyYXNpbDEfMB0GA1UEAwwWQUMg&#13;
+U3luZ3VsYXJJRCBNdWx0aXBsYTAeFw0yNjAxMTUyMzA0MjBaFw0yNzAxMTUyMzA0MjBaMIHMMQsw&#13;
+CQYDVQQGEwJCUjETMBEGA1UECgwKSUNQLUJyYXNpbDEcMBoGA1UECwwTQ0VSVElGSUNBRE8gRElH&#13;
+SVRBTDEiMCAGA1UECwwZQ2VydGlmaWNhZG8gRGlnaXRhbCBQSiBBMTEXMBUGA1UECwwONDM4MjY0&#13;
+NzkwMDAxMjIxHzAdBgNVBAsMFkFDIFN5bmd1bGFySUQgTXVsdGlwbGExLDAqBgNVBAMMI01VTklD&#13;
+SVBJTyBERSBDQVRBTEFPOjAxNTA1NjQzMDAwMTUwMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB&#13;
+CgKCAQEAkpakxs9twZs6iBN3NrRPed/000aQwvc5Rm1L6ijVPDdCLbghhGRKMcse4qZDU9Qqtu2F&#13;
+nDEWXxbQ14m8QJhf3GbrLD4HModmiCCC/1KmVsBPChTBiCcMC4boUkjo3/QaNCDEggsMxY4BSioA&#13;
+DJPXAhpUWwLujPz+NbxhNMmfX0J8zI9Vh49E/26NmcIHz2BdqBAWF0YmiSeDP+dZjpOZmuBb7D9Y&#13;
+DN0txG9TyruP9t9caJuzrgb8KfyK7Q/aFeZbmT330tan9VcX72cTacZ0o4JlDWVTGdwhVJWrAhkt&#13;
+ltaT6FqSohn1xiSpBXD+JXAvRpsaU5zBKi3XLZwc+lQE4wIDAQABo4IDKjCCAyYwDgYDVR0PAQH/&#13;
+BAQDAgXgMB0GA1UdJQQWMBQGCCsGAQUFBwMEBggrBgEFBQcDAjAJBgNVHRMEAjAAMB8GA1UdIwQY&#13;
+MBaAFJPh/34d5fXkTeE5YoshaZXmr3IWMB0GA1UdDgQWBBSLIJ+QBjrsk0rNe/75yR1coeMfgTB/&#13;
+BggrBgEFBQcBAQRzMHEwbwYIKwYBBQUHMAKGY2h0dHA6Ly9zeW5ndWxhcmlkLmNvbS5ici9yZXBv&#13;
+c2l0b3Jpby9hYy1zeW5ndWxhcmlkLW11bHRpcGxhL2NlcnRpZmljYWRvcy9hYy1zeW5ndWxhcmlk&#13;
+LW11bHRpcGxhLnA3YjCBggYDVR0gBHsweTB3BgdgTAECAYEFMGwwagYIKwYBBQUHAgEWXmh0dHA6&#13;
+Ly9zeW5ndWxhcmlkLmNvbS5ici9yZXBvc2l0b3Jpby9hYy1zeW5ndWxhcmlkLW11bHRpcGxhL2Rw&#13;
+Yy9kcGMtYWMtc3luZ3VsYXJJRC1tdWx0aXBsYS5wZGYwgb4GA1UdEQSBtjCBs6AhBgVgTAEDAqAY&#13;
+BBZWZWxvbWFyIEdvbmNhbHZlcyBSaW9zoBkGBWBMAQMDoBAEDjAxNTA1NjQzMDAwMTUwoEIGBWBM&#13;
+AQMEoDkENzI0MDkxOTU5MjYzNTg4MjQxMDQwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw&#13;
+MDAwMDCgFwYFYEwBAwegDgQMMDAwMDAwMDAwMDAwgRZyaWNhcmRvcnNtODZAZ21haWwuY29tMIHi&#13;
+BgNVHR8EgdowgdcwZKBioGCGXmh0dHA6Ly9zeW5ndWxhcmlkLmNvbS5ici9yZXBvc2l0b3Jpby9h&#13;
+Yy1zeW5ndWxhcmlkLW11bHRpcGxhL2xjci9sY3ItYWMtc3luZ3VsYXJpZC1tdWx0aXBsYS5jcmww&#13;
+b6BtoGuGaWh0dHA6Ly9pY3AtYnJhc2lsLnN5bmd1bGFyaWQuY29tLmJyL3JlcG9zaXRvcmlvL2Fj&#13;
+LXN5bmd1bGFyaWQtbXVsdGlwbGEvbGNyL2xjci1hYy1zeW5ndWxhcmlkLW11bHRpcGxhLmNybDAN&#13;
+BgkqhkiG9w0BAQsFAAOCAgEAWMeNMeR2ANOF51pF9Cqv7LbJY1vOgdf7qPP9taV1FO7OkQ0mSUaF&#13;
+Sjwt/LzunlSYlc6hxyS1tENDZygd92qyzOLEn73S/iJaLC2ZMQnCR5PbA9duQ5wGUWWyr1x8YD+l&#13;
+wpWCAeZKEF0oPziIHrzxZPQqT/5HJQhwwmjj2t1kcZTRWHYz6OBRZu9uItgt2SNLom83MF9Sgg4g&#13;
+p9Se/04p1y9srkECyjtM/pXv8m3C2AQTgxWk96EfOm/lymBHEjrg6kVCcb1Bjex9RVixtYpubxkY&#13;
+5JZJTO9pwDUN+OWThgu+PLRJk396umAjFVnGVTqKYdXFWpn/yj41/0BE4hnO1GISxTy3tuCsP7KX&#13;
+IQ3KXzYWQ1VQ/vjOgK4o88y4VPKa2GAzk+53a1kzhkK/u/XlvkoF0X87yoS4rJdgnkuYisL/9F8Y&#13;
+Ef1bYxnfBTtceEGVaFR66M2gKlIr+eBxMMXSJyenGWJ46aE4bO6G+tFkwy1CqiL+I1SS/v5RNt/z&#13;
+yqZyKPWoiq4scDf4k/ROyOXdQouzCU7NtyIJVKJvREptQ6eDN7cH4X1uO7UXSLRELMETS4Kea+KV&#13;
+scOlhXVV9LsLe743MXvtjs0NVzgOMHJqJ5a/OrRkGwlJZpThTHF61ZEzyzOITYv65qFXINd300fX&#13;
+cfuPdw9SIxOHscAyNqc+zF0=</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

@@ -42,6 +42,12 @@ def _form_int(value: object) -> int | None:
         return None
 
 
+def _validar_nsu_inicio(value: int | None) -> int | None:
+    if value is not None and value < 0:
+        raise HTTPException(status_code=422, detail="nsu_inicio nao pode ser negativo.")
+    return value
+
+
 def _first_form_value(form, *names: str) -> str | None:
     for name in names:
         value = form.get(name)
@@ -95,6 +101,9 @@ async def create_certificado_compat(
 
     ambiente = _first_form_value(form, "ambiente") or "producao"
     limite = _form_int(form.get("limite"))
+    nsu_inicio = _validar_nsu_inicio(
+        _form_int(_first_form_value(form, "nsu_inicio", "nsu_recomendado", "nsu_recomendado_usuario", "recommended_nsu"))
+    )
     forcar = _form_bool(form.get("forcar"), default=False)
     auto_iniciar = _form_bool(form.get("auto_iniciar"), default=True)
     alias = _first_form_value(form, "alias", "nome", "client_name")
@@ -111,6 +120,7 @@ async def create_certificado_compat(
             ambiente=ambiente,
             auto_iniciar=auto_iniciar,
             limite=limite,
+            nsu_inicio=nsu_inicio,
             forcar=forcar,
         )
         certificado = result["certificado"]
@@ -190,12 +200,25 @@ async def autocadastrar_certificado(
     ambiente: str = Form(default="producao"),
     auto_iniciar: bool = Form(default=True),
     limite: int | None = Form(default=None),
+    nsu_inicio: int | None = Form(default=None),
+    nsu_recomendado: int | None = Form(default=None),
+    nsu_recomendado_usuario: int | None = Form(default=None),
+    recommended_nsu: int | None = Form(default=None),
     forcar: bool = Form(default=False),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
 ):
     try:
         pfx_bytes = await arquivo.read()
+        nsu_inicial = _validar_nsu_inicio(
+            nsu_inicio
+            if nsu_inicio is not None
+            else nsu_recomendado
+            if nsu_recomendado is not None
+            else nsu_recomendado_usuario
+            if nsu_recomendado_usuario is not None
+            else recommended_nsu
+        )
         return certificados_service.autocadastrar_certificado(
             db=db,
             storage=storage,
@@ -205,6 +228,7 @@ async def autocadastrar_certificado(
             ambiente=ambiente,
             auto_iniciar=auto_iniciar,
             limite=limite,
+            nsu_inicio=nsu_inicial,
             forcar=forcar,
         )
     except CertificadoServiceError as exc:

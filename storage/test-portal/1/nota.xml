@@ -1,15 +1,30 @@
 
+
 <NFSe>
+
   <infNFSe Id="NFS53001081237381902000125000000000012326010112345678">
+
     <xLocPrestacao>Brasilia</xLocPrestacao>
+
     <xLocIncid>Goiania</xLocIncid>
+
     <xTribNac>Servicos administrativos</xTribNac>
+
     <DPS>
+
       <infDPS>
+
         <serv><cServ><cTribNac>170601</cTribNac><xDescServ>Descricao detalhada do XML</xDescServ></cServ></serv>
+
         <valores><trib><tribFed><vRetIRRF>10.00</vRetIRRF><vRetCP>20.00</vRetCP><vRetCSLL>3.00</vRetCSLL><piscofins><vPis>1.00</vPis><vCofins>2.00</vCofins></piscofins></tribFed></trib></valores>
+
       </infDPS>
+
     </DPS>
+
     <valores><vBC>1000.00</vBC><vISSQN>50.00</vISSQN><pAliqAplic>5.00</pAliqAplic><vLiq>900.00</vLiq></valores>
+
   </infNFSe>
+
 </NFSe>
+

@@ -201,12 +201,15 @@ def autocadastrar_certificado(
     ambiente: str = "producao",
     auto_iniciar: bool = True,
     limite: int | None = None,
+    nsu_inicio: int | None = None,
     forcar: bool = False,
 ) -> dict[str, Any]:
     if not pfx_bytes:
         raise CertificadoServiceError("Arquivo PFX/P12 e obrigatorio.")
     if not senha:
         raise CertificadoServiceError("Senha do certificado e obrigatoria.")
+    if nsu_inicio is not None and int(nsu_inicio) < 0:
+        raise CertificadoServiceError("nsu_inicio nao pode ser negativo.")
 
     safe_filename = _sanitize_filename(filename)
     ambiente_normalizado = _normalizar_ambiente(ambiente)
@@ -226,6 +229,7 @@ def autocadastrar_certificado(
 
     logger.info("CNPJ extraido do certificado: %s", metadata.cnpj)
     empresa = empresas_repo.get_empresa_by_cnpj(db, metadata.cnpj)
+    empresa_existente = empresa is not None
     if empresa is None:
         empresa = empresas_repo.create_empresa(
             db,
@@ -305,11 +309,13 @@ def autocadastrar_certificado(
 
     processo = None
     if auto_iniciar:
+        nsu_inicio_efetivo = int(nsu_inicio) if empresa_existente and nsu_inicio is not None else None
         options = ConsultaIniciarRequest(
             automatico=True,
             intervalo_minutos=15,
             empresa_ids=[int(empresa.id)],
             certificado_ids=[int(certificado.id)],
+            nsu_inicio=nsu_inicio_efetivo,
             limite=limite or settings.consultas_default_limite,
             pausa=settings.consultas_default_pausa,
             forcar=forcar,

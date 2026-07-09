@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     download_lote_max_notas: int = 1000
     secrets_key: str | None = None
     cors_origins: str = "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
+    invertexto_enabled: bool = False
+    invertexto_token: str | None = None
+    invertexto_rpm: int = 30
+    invertexto_delay_seconds: float = 0.6
+    invertexto_cache_days: int = 30
 
     @property
     def cors_origin_list(self) -> list[str]:
