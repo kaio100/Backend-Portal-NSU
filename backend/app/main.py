@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import socket
 import uuid
 from contextlib import asynccontextmanager
@@ -136,9 +137,40 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+def _parse_cors_origins() -> list[str]:
+    raw = (
+        os.getenv("CORS_ORIGINS")
+        or os.getenv("BACKEND_CORS_ORIGINS")
+        or os.getenv("FRONTEND_URL")
+        or settings.cors_origins
+        or ""
+    )
+
+    origins = []
+    for item in raw.split(","):
+        origin = item.strip().rstrip("/")
+        if origin and origin not in origins:
+            origins.append(origin)
+
+    default_origins = [
+        "https://frontend-portal-nsu.vercel.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+    for origin in default_origins:
+        if origin not in origins:
+            origins.append(origin)
+
+    return origins
+
+
+cors_origins = _parse_cors_origins()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
