@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" versao="1.00">
+    <infNFSe Id="NFS23044001251320856000185000000000044826010942871106">
+        <xLocEmi>FORTALEZA</xLocEmi>
+        <xLocPrestacao>FORTALEZA</xLocPrestacao>
+        <nNFSe>448</nNFSe>
+        <cLocIncid>2304400</cLocIncid>
+        <xLocIncid>FORTALEZA</xLocIncid>
+        <xTribNac>CORRETAGEM NA COMPRA E VENDA DE IMÓVEIS</xTribNac>
+        <xTribMun>CORRETAGEM NA COMPRA E VENDA DE IMÓVEIS</xTribMun>
+        <xNBS>SERVIÇOS DE INTERMEDIAÇÃO NA COMPRA E VENDA DE IMÓVEIS RESIDENCIAIS</xNBS>
+        <verAplic>1.00</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2026-01-10T11:42:07-00:00</dhProc>
+        <nDFSe>518812625</nDFSe>
+        <emit>
+            <CNPJ>51320856000185</CNPJ>
+            <IM>8383375</IM>
+            <xNome>SUA IMOBILIARIA INTERMEDIACAO DE NEGOCIOS LTDA</xNome>
+            <enderNac>
+                <xLgr>R ALBERTO MAGNO</xLgr>
+                <nro>1440</nro>
+                <xCpl>****</xCpl>
+                <xBairro>MONTESE</xBairro>
+                <cMun>2304400</cMun>
+                <UF>CE</UF>
+                <CEP>60410225</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vBC>8768.00</vBC>
+            <pAliqAplic>4.23</pAliqAplic>
+            <vISSQN>370.89</vISSQN>
+            <vTotalRet>370.89</vTotalRet>
+            <vLiq>8397.11</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS230440025132085600018500001000000000000448">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2026-01-10T11:42:07-00:00</dhEmi>
+                <verAplic>1.00</verAplic>
+                <serie>1</serie>
+                <nDPS>448</nDPS>
+                <dCompet>2026-01-01</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>2304400</cLocEmi>
+                <prest>
+                    <CNPJ>51320856000185</CNPJ>
+                    <IM>8383375</IM>
+                    <fone>85992647895</fone>
+                    <email>suaimobiliarialtda@gmail.com</email>
+                    <regTrib>
+                        <opSimpNac>3</opSimpNac>
+                        <regApTribSN>2</regApTribSN>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>26354401000133</CNPJ>
+                    <xNome>CANOPUS CONSTRUCOES FORTALEZA LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>60150165</CEP>
+                        </endNac>
+                        <xLgr>AV SANTOS DUMONT</xLgr>
+                        <nro>3131</nro>
+                        <xCpl>SALA 1013</xCpl>
+                        <xBairro>ALDEOTA</xBairro>
+                    </end>
+                    <fone>8530226501</fone>
+                    <email>fernandoferreira@canopusconstrucoes.com.br</email>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>2304400</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>100502</cTribNac>
+                        <cTribMun>002</cTribMun>
+                        <xDescServ>MARIA GUADALUPE DA SILVA OLIVEIRA
+GRAN VILLAGE CAUCAIA III 
+BLOCO 07 APTO 503 
+COMISSÃO TOTAL: 8.768,00
+IMOBILIÁRIA: SUA IMOBILIARIA 
+DADOS BANCÁRIOS PARA PAGAMENTO:
+Ag 001 CONTA 21911133-8 BANCO 260 NUBANK</xDescServ>
+                        <cNBS>110012100</cNBS>
+                    </cServ>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>8768.00</vServ>
+                    </vServPrest>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>2</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                                <vPis>0.00</vPis>
+                                <vCofins>0.00</vCofins>
+                            </piscofins>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>0.00</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>370.89</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS23044001251320856000185000000000044826010942871106"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>6+LYlvIk+GNsCvH6XqV0bPkMbc0=</DigestValue></Reference></SignedInfo><SignatureValue>tLSpsqcghFqsbLKkhZGd2/1nHpZ+juMk+EbIcAqTCm8HsejK4gvCE9Ff/f3YU7E090pXVXH+fW8+q93bw2Gp6lkiksQ+WIBa3gxFumxxlDLfIrjf+0rP4Rau6Z5Xhy8H+FdRV+3e0mCoG67hU6EVIeRXIbV/EQe/lwh9S6LXNZVKN+yGuzKQA990VU2RpTHLU8ojJKZroqBLkbsMucmZ8ex8lwjMLwPj0lTAfmMqO0LOZY7NmkrD/5RAsbUMi93YyqxVsXPAYthaMPay7dRj3TJ/iLxh0KwRXw3KaFdO+jvSYTmTZ/f4Bx3DZkRlCTXC48agO2NcdNtI46ZfogvYRg==</SignatureValue><KeyInfo><X509Data><X509Certificate>MIIH9TCCBd2gAwIBAgIIeBf0ZFoqfrUwDQYJKoZIhvcNAQELBQAwdjELMAkGA1UEBhMCQlIxEzARBgNVBAoTCklDUC1CcmFzaWwxNjA0BgNVBAsTLVNlY3JldGFyaWEgZGEgUmVjZWl0YSBGZWRlcmFsIGRvIEJyYXNpbCAtIFJGQjEaMBgGA1UEAxMRQUMgU0FGRVdFQiBSRkIgdjUwHhcNMjUwNDI1MTY0OTIyWhcNMjYwNDI1MTY0OTIyWjCB9zELMAkGA1UEBhMCQlIxEzARBgNVBAoTCklDUC1CcmFzaWwxCzAJBgNVBAgTAkNFMRIwEAYDVQQHEwlGT1JUQUxFWkExNjA0BgNVBAsTLVNlY3JldGFyaWEgZGEgUmVjZWl0YSBGZWRlcmFsIGRvIEJyYXNpbCAtIFJGQjEWMBQGA1UECxMNUkZCIGUtQ05QSiBBMTEXMBUGA1UECxMOMTE1ODc5NzUwMDAxODQxGTAXBgNVBAsTEHZpZGVvY29uZmVyZW5jaWExLjAsBgNVBAMTJU1VTklDSVBJTyBERSBGT1JUQUxFWkE6MDc5NTQ2MDUwMDAxNjAwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDBL+NVkbb91rp4Fuf0vgin5RpIIRFw6Nfa7pvPq5MmzwDO4HaTp/L92YAcVL+4VUSEWcr+LJgViayG1akqxe2PHyDQY4q8xcmEpiQ7AHF8+CXIs9bdZOJgHUYja5fVf8nCVrgDhRQXqMQT91AYuQGljq5VapqaF8PibxLivTkMpnmVVCzo2Oannq7lgzx1SPh/D1bB4w5uLQ4g1TL62dthFsxZPxE1hnP8mCtJ0dDY6r0wGFHZgpIvgwlYmh3bOszwzYN1Yx8QV7QE27P0buiTOztYRvTJtCBxVwy69wpoHHSFK4TzMKwTXw8KyPu725G4giHXwiWNaYWB1z3ZTIPpAgMBAAGjggMDMIIC/zAfBgNVHSMEGDAWgBQpXkvVRky7/hanY8EdxCby3djzBTAOBgNVHQ8BAf8EBAMCBeAwaQYDVR0gBGIwYDBeBgZgTAECATMwVDBSBggrBgEFBQcCARZGaHR0cDovL3JlcG9zaXRvcmlvLmFjc2FmZXdlYi5jb20uYnIvYWMtc2FmZXdlYnJmYi9kcGMtYWNzYWZld2VicmZiLnBkZjCBrgYDVR0fBIGmMIGjME+gTaBLhklodHRwOi8vcmVwb3NpdG9yaW8uYWNzYWZld2ViLmNvbS5ici9hYy1zYWZld2VicmZiL2xjci1hYy1zYWZld2VicmZidjUuY3JsMFCgTqBMhkpodHRwOi8vcmVwb3NpdG9yaW8yLmFjc2FmZXdlYi5jb20uYnIvYWMtc2FmZXdlYnJmYi9sY3ItYWMtc2FmZXdlYnJmYnY1LmNybDCBtwYIKwYBBQUHAQEEgaowgacwUQYIKwYBBQUHMAKGRWh0dHA6Ly9yZXBvc2l0b3Jpby5hY3NhZmV3ZWIuY29tLmJyL2FjLXNhZmV3ZWJyZmIvYWMtc2FmZXdlYnJmYnY1LnA3YjBSBggrBgEFBQcwAoZGaHR0cDovL3JlcG9zaXRvcmlvMi5hY3NhZmV3ZWIuY29tLmJyL2FjLXNhZmV3ZWJyZmIvYWMtc2FmZXdlYnJmYnY1LnA3YjCBywYDVR0RBIHDMIHAgSpFVkFORFJPLkxFSVRBT0BHQUJQUkVGLkZPUlRBTEVaQS5DRS5HT1YuQlKgJAYFYEwBAwKgGxMZRVZBTkRSTyBTQSBCQVJSRVRPIExFSVRBT6AZBgVgTAEDA6AQEw4wNzk1NDYwNTAwMDE2MKA4BgVgTAEDBKAvEy0xNjA0MTk2NzI1ODgzNzA0Mzg3MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDCgFwYFYEwBAwegDhMMMDAwMDAwMDAwMDAwMB0GA1UdJQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDBDAJBgNVHRMEAjAAMA0GCSqGSIb3DQEBCwUAA4ICAQCD59F7UHs5jKpE5a0SdqpbmHiGzUC0hF42jh1F5doBWGfiDg7uhXastVzTr7usxw7LW7YAEAWiLcuqZRQm+SkkIo4LKfBFgUoSRIzFRz5BK+JR5eLdm9QrnaayFmjN9Z0e82C9qsFkkY7kJ3oC3kEJXpw+FmeQ8xh1ZaQwF8cgxzmtQCGjwuz/j7FeS6bAr3rEPS1Af85ZCGeAXMDZPWgqgUyNvRv1EqHDMGpnJpZy+daF0J6sfLrzthYd4rxuA0duzmy/JKslrPC4lVOQMqKh42JQS6H6PeK36MvKHTXALJ6QRfJmOJUtuvMOgqd59CeCiDEL7khsIz2WT4lb+Keq/U1+2UmpiKMNPmh3EzER7+RXZEatIXaCWNRsvwPuXoAkfApeA+DRZm+i9/7qMxU73gKGjygcn4leRUWFTgIhRNG9tsU1CfEDH6eRws3eep7+slhSpOpCLTII5YoG2b8KBekUFwOYs/lp+dxxbodTmS4fl9ho61n4V3YIi1jXpc5SYpP7wPCrTC0R1/DT592VaqBfvD3UsQCe2HfiPtbA2fDxTiHwy0wUchlodh4Z4iPjZuVVvHBIBrewRA64d6nsv+nA6hgRyMAiiajzrHJjzpNpu52G/hoqsyuwmqo2GC+Pr0g8jjmQeK+n24OpBGXjZWMRaSfXB6jiMjnV6ABUbA==</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

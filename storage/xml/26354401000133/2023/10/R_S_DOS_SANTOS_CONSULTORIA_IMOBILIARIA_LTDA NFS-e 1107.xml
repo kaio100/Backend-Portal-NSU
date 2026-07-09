@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" versao="1.00">
+    <infNFSe Id="NFS23044001242521608000101000000000110723100380780602">
+        <xLocEmi>FORTALEZA</xLocEmi>
+        <xLocPrestacao>FORTALEZA</xLocPrestacao>
+        <nNFSe>1107</nNFSe>
+        <cLocIncid>2304400</cLocIncid>
+        <xLocIncid>FORTALEZA</xLocIncid>
+        <xTribNac>CORRETAGEM NA COMPRA E VENDA DE IMÓVEIS</xTribNac>
+        <xTribMun>CORRETAGEM NA COMPRA E VENDA DE IMÓVEIS</xTribMun>
+        <xNBS>0</xNBS>
+        <verAplic>1.00</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2023-10-30T13:31:22-00:00</dhProc>
+        <nDFSe>382240029</nDFSe>
+        <emit>
+            <CNPJ>42521608000101</CNPJ>
+            <IM>6597181</IM>
+            <xNome>R S DOS SANTOS CONSULTORIA IMOBILIARIA LTDA</xNome>
+            <enderNac>
+                <xLgr>AV GODOFREDO MACIEL</xLgr>
+                <nro>2640</nro>
+                <xCpl>LOJA-11</xCpl>
+                <xBairro>MARAPONGA</xBairro>
+                <cMun>2304400</cMun>
+                <UF>CE</UF>
+                <CEP>60710684</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vBC>9567.87</vBC>
+            <pAliqAplic>5.00</pAliqAplic>
+            <vISSQN>478.39</vISSQN>
+            <vTotalRet>621.90</vTotalRet>
+            <vLiq>8945.97</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS230440024252160800010100001000000000001107">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2023-10-30T13:31:22-00:00</dhEmi>
+                <verAplic>1.00</verAplic>
+                <serie>1</serie>
+                <nDPS>1107</nDPS>
+                <dCompet>2023-10-01</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>2304400</cLocEmi>
+                <prest>
+                    <CNPJ>42521608000101</CNPJ>
+                    <IM>6597181</IM>
+                    <email>kilson-sq@hotmail.com</email>
+                    <regTrib>
+                        <opSimpNac>1</opSimpNac>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>26354401000133</CNPJ>
+                    <xNome>CANOPUS CONSTRUÇOES FORTALEZA LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>60150161</CEP>
+                        </endNac>
+                        <xLgr>AV SANTOS DUMONT</xLgr>
+                        <nro>3131</nro>
+                        <xBairro>ALDEOTA</xBairro>
+                    </end>
+                    <fone>85998341510</fone>
+                    <email>sheilalopes@canopuscontrucoes.com.br</email>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>2304400</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>100502</cTribNac>
+                        <cTribMun>002</cTribMun>
+                        <xDescServ>REFERENTE A CORRETAGEM SOBRE VENDA DO IMÓVEL CONST.CANOPUS –GV EUSEBIO III, A ALEXSANDRO APRIGIO MENEZES , NO VALOR FATURADO DA NOTA: R$ 9.567,87 (SENDO R$ 7.567,87 COM. E R$ 2.000,00 BNS). REFERENTE AO PAGAMENTO DA PARTE INTEGRAL DA COMISSÃO E BÔNUS. CORRETOR: TIAGO SANTOS| GERENTE: MARIANA HONORIO .
+
+EM ATENDIMENTO A LEI N°12471/2012 (LEI DO IMPOSTO NA NOTA FISCAL) INFORMAMOS QUE O VALOR APROXIMADO DOS TRIBUTOS INCIDENTES SOBRE AS OPERAÇÕES DESTE ESTABELECIMENTO É DE 8,41% CONFORME ANEXO DO SIMPLES NACIONAL. SEGUEM DADOS PARA TRANSFERÊNCIA BANCÁRIA: Banco ITAÚ Ag 7412 Conta 99652-7 CNPJ 42.521.608/0001-01 RAZÃO SOCIAL R S DOS SANTOS CONSULTORIA IMOBILIARIA LTDA. PIX: RSIMOBCE@GMAIL.COM.</xDescServ>
+                    </cServ>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>9567.87</vServ>
+                    </vServPrest>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>2</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                                <vPis>0.00</vPis>
+                                <vCofins>0.00</vCofins>
+                            </piscofins>
+                            <vRetIRRF>143.51</vRetIRRF>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>143.51</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>478.39</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS23044001242521608000101000000000110723100380780602"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>7Dmv4736S3l+E98fgmCmrG+8jBc=</DigestValue></Reference></SignedInfo><SignatureValue>CSsf5ge2OdHkd+ds+3MDaUlawpyja/MBV6xgOUIJkS9igKaH7o+3EKkf7Sww8OS4J0KwBM4JfCBwKiYKWsmqQBUztWxSpCeIXBFwbXvOK8/AWwBncUhvfOWTBrotuUGUyUp37q/axFR0zr37ZduT5ory88a7O7QXQwvpknddkvU6/kJWvbN3WUyHexmY5rIEwTlohRDdcXv//YImx7cUWbYa0S0rHuLdKZZPXbKW6602B58kUSsPK6j2soyGdx0H3Xvr5srrFH5Yx7rZ1KDCZ9v1GpQzsfMCY4MSk/Wq+Dgsx5UBLlql7n5Vr+ZSiwd/v5nDaYcxxpt4gp7r6ec5SQ==</SignatureValue><KeyInfo><X509Data><X509Certificate>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</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

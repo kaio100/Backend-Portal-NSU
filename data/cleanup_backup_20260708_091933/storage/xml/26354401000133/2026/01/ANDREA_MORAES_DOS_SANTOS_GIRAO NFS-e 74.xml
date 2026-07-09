@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" versao="1.00">
+    <infNFSe Id="NFS23044001236189055000139000000000007426010760488743">
+        <xLocEmi>FORTALEZA</xLocEmi>
+        <xLocPrestacao>FORTALEZA</xLocPrestacao>
+        <nNFSe>74</nNFSe>
+        <cLocIncid>2304400</cLocIncid>
+        <xLocIncid>FORTALEZA</xLocIncid>
+        <xTribNac>SERVIÇOS DE DESENHO TÉCNICO RELACIONADOS À ARQUITETURA E ENGENHARIA</xTribNac>
+        <xTribMun>SERVIÇOS DE DESENHO TÉCNICO RELACIONADOS À ARQUITETURA E ENGENHARIA</xTribMun>
+        <xNBS>SERVIÇOS PROFISSIONAIS, TÉCNICOS E GERENCIAIS NÃO CLASSIFICADOS EM POSIÇÕES ANTERIORES</xNBS>
+        <verAplic>1.00</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2026-01-19T10:49:04-00:00</dhProc>
+        <nDFSe>519984717</nDFSe>
+        <emit>
+            <CNPJ>36189055000139</CNPJ>
+            <IM>5353955</IM>
+            <xNome>ANDREA MORAES DOS SANTOS GIRAO</xNome>
+            <enderNac>
+                <xLgr>R DOM ANTONIO LUSTOSA</xLgr>
+                <nro>121</nro>
+                <xCpl>****</xCpl>
+                <xBairro>PASSARÉ</xBairro>
+                <cMun>2304400</cMun>
+                <UF>CE</UF>
+                <CEP>60862070</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vBC>7100.00</vBC>
+            <pAliqAplic>2.17</pAliqAplic>
+            <vISSQN>154.07</vISSQN>
+            <vTotalRet>154.07</vTotalRet>
+            <vLiq>6945.93</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS230440023618905500013900001000000000000074">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2026-01-19T10:49:04-00:00</dhEmi>
+                <verAplic>1.00</verAplic>
+                <serie>1</serie>
+                <nDPS>74</nDPS>
+                <dCompet>2026-01-01</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>2304400</cLocEmi>
+                <prest>
+                    <CNPJ>36189055000139</CNPJ>
+                    <IM>5353955</IM>
+                    <email>arquitetura.prosper@gmail.com</email>
+                    <regTrib>
+                        <opSimpNac>3</opSimpNac>
+                        <regApTribSN>2</regApTribSN>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>26354401000133</CNPJ>
+                    <xNome>CANOPUS CONSTRUÇÕES FORTALEZA LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>60150165</CEP>
+                        </endNac>
+                        <xLgr>AV. SANTOS DUMONT</xLgr>
+                        <nro>3131</nro>
+                        <xCpl>SALA 1013 E 1014</xCpl>
+                        <xBairro>ALDEOTA</xBairro>
+                    </end>
+                    <fone>9832354377</fone>
+                    <email>fernandoferreira@canopusconstrucoes.com.br</email>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>2304400</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>320101</cTribNac>
+                        <cTribMun>001</cTribMun>
+                        <xDescServ>SERVIÇOS TECNICOS DE ARQUITETURA</xDescServ>
+                        <cNBS>114150000</cNBS>
+                    </cServ>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>7100.00</vServ>
+                    </vServPrest>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>2</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                                <vPis>0.00</vPis>
+                                <vCofins>0.00</vCofins>
+                            </piscofins>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>0.00</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>154.07</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS23044001236189055000139000000000007426010760488743"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>ZhKZKrtFISLAkmkltNYnlFvniDg=</DigestValue></Reference></SignedInfo><SignatureValue>GhjUDYMuZktb7rj4PjLDD4ex5mRhdbgHSxMs/hB1hiOjW0tJN8ZheXt9O7FYi2/BuS7fGwGB+KwJqaZH0L4V32+nMkhgdsASCiorS8evZHZVc/hdoapnJKnGgsfKlknJpqi4G//HY80KRSnbfpyim4FKXzoKnfaOB1z557soKr//UTcrMBQrQXuBO5I+Vf4KYlVb0yOp9/ZHBSXKrUK8cph76lmgGvA7uFh5FfZR/gqJzLL7hKdkBDG+V3gaapT5K3/jgJXPpNN/Dol0+io+NrjiX+jh4NJrtgHnkkbHAuxuQ3xM/70ytN691gkmF2k72ZJeC3D8K9iaZnjjVASWQg==</SignatureValue><KeyInfo><X509Data><X509Certificate>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</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

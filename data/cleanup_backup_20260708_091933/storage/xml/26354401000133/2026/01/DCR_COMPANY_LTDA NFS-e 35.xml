@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" versao="1.00">
+    <infNFSe Id="NFS23044001239556828000166000000000003526010163388982">
+        <xLocEmi>FORTALEZA</xLocEmi>
+        <xLocPrestacao>FORTALEZA</xLocPrestacao>
+        <nNFSe>35</nNFSe>
+        <cLocIncid>2304400</cLocIncid>
+        <xLocIncid>FORTALEZA</xLocIncid>
+        <xTribNac>PROMOÇÃO DE VENDAS</xTribNac>
+        <xTribMun>PROMOÇÃO DE VENDAS</xTribMun>
+        <xNBS>SERVIÇOS DE MARKETING DIRETO E MALA DIRETA</xNBS>
+        <verAplic>1.00</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2026-01-15T18:06:18-00:00</dhProc>
+        <nDFSe>519596408</nDFSe>
+        <emit>
+            <CNPJ>39556828000166</CNPJ>
+            <IM>8189820</IM>
+            <xNome>DCR COMPANY LTDA</xNome>
+            <enderNac>
+                <xLgr>R MON BRUNO</xLgr>
+                <nro>1153</nro>
+                <xCpl>SALA 1423</xCpl>
+                <xBairro>ALDEOTA</xBairro>
+                <cMun>2304400</cMun>
+                <UF>CE</UF>
+                <CEP>60115191</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vBC>800.00</vBC>
+            <pAliqAplic>2.22</pAliqAplic>
+            <vISSQN>17.76</vISSQN>
+            <vTotalRet>17.76</vTotalRet>
+            <vLiq>782.24</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS230440023955682800016600001000000000000035">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2026-01-15T18:06:18-00:00</dhEmi>
+                <verAplic>1.00</verAplic>
+                <serie>1</serie>
+                <nDPS>35</nDPS>
+                <dCompet>2026-01-01</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>2304400</cLocEmi>
+                <prest>
+                    <CNPJ>39556828000166</CNPJ>
+                    <IM>8189820</IM>
+                    <fone>8130915644</fone>
+                    <email>danilocabralrocha@hotmail.com</email>
+                    <regTrib>
+                        <opSimpNac>3</opSimpNac>
+                        <regApTribSN>2</regApTribSN>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>26354401000133</CNPJ>
+                    <xNome>CANOPUS CONSTRUCOES FORTALEZA LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>60150165</CEP>
+                        </endNac>
+                        <xLgr>Endereço SANTOS DUMONT</xLgr>
+                        <nro>3131</nro>
+                        <xCpl>1013</xCpl>
+                        <xBairro>aldeota</xBairro>
+                    </end>
+                    <fone>9832354377</fone>
+                    <email>fernandoferreira@canopusconstrucoes.com.br</email>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>2304400</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>170601</cTribNac>
+                        <cTribMun>003</cTribMun>
+                        <xDescServ>REFERENTE AS VENDAS GRAN VILLAGE MARACANAU I
+Conta PJ
+BANCO 260
+Nu pagamentos SA AG 0001
+CONTA 47768780/4</xDescServ>
+                        <cNBS>114061200</cNBS>
+                    </cServ>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>800.00</vServ>
+                    </vServPrest>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>2</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                                <vPis>0.00</vPis>
+                                <vCofins>0.00</vCofins>
+                            </piscofins>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>0.00</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>17.76</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS23044001239556828000166000000000003526010163388982"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>LPa6q7pvGW1ZdaaNGd08jXtnFoE=</DigestValue></Reference></SignedInfo><SignatureValue>Xw5Gk278xSBtxBx872Lg8BrGwmFZl/suDx5S13HGzTfFCDqG23a8o1YOXCHuV7HGneIatopGVZtFPBIGAYsmd43IPKeIv1xbWn8lEFcfhBfM48fVUXJ3I1S42p9lnNHQdItxXM7MFA8vtfwGfyBhRJnD4Ei18KhWpQj2eaO2tc59aspWJNdJCnZ29LeRhre5g8KCcM32NHTAQ0XkMxfALWATOm8gyn3rjz3XLklRrBMBpOXTSoAEcq8cxaSz6JkGhsPnbXxF6Z+dMTNxg7jZ+d82Irrlv3tfCjlH8NKwbzxdxrnsbJ24nny77p9L1n9Lr9+6R9SlUG6F3l3HzkyTmQ==</SignatureValue><KeyInfo><X509Data><X509Certificate>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</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

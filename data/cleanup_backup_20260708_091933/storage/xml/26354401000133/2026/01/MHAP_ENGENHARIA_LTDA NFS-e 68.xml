@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" versao="1.00">
+    <infNFSe Id="NFS23044001243837865000110000000000006826010281806041">
+        <xLocEmi>FORTALEZA</xLocEmi>
+        <xLocPrestacao>MARACANAU</xLocPrestacao>
+        <nNFSe>68</nNFSe>
+        <cLocIncid>2307650</cLocIncid>
+        <xLocIncid>MARACANAU</xLocIncid>
+        <xTribNac>CONSTRUÇÃO DE EDIFICIOS</xTribNac>
+        <xTribMun>CONSTRUÇÃO DE EDIFICIOS</xTribMun>
+        <xNBS>SERVIÇOS DE CONSTRUÇÃO DE EDIFICAÇÕES RESIDENCIAIS COM MAIS DE DOIS PAVIMENTOS</xNBS>
+        <verAplic>1.00</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2026-01-19T09:08:04-00:00</dhProc>
+        <nDFSe>519959338</nDFSe>
+        <emit>
+            <CNPJ>43837865000110</CNPJ>
+            <IM>6834922</IM>
+            <xNome>MHAP ENGENHARIA LTDA</xNome>
+            <enderNac>
+                <xLgr>R JOAO CORDEIRO</xLgr>
+                <nro>3069</nro>
+                <xCpl>****</xCpl>
+                <xBairro>JOAQUIM TÁVORA</xBairro>
+                <cMun>2304400</cMun>
+                <UF>CE</UF>
+                <CEP>60110535</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vBC>18000.00</vBC>
+            <pAliqAplic>2.39</pAliqAplic>
+            <vISSQN>430.20</vISSQN>
+            <vTotalRet>430.20</vTotalRet>
+            <vLiq>17569.80</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS230440024383786500011000001000000000000068">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2026-01-19T09:08:04-00:00</dhEmi>
+                <verAplic>1.00</verAplic>
+                <serie>1</serie>
+                <nDPS>68</nDPS>
+                <dCompet>2026-01-01</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>2304400</cLocEmi>
+                <prest>
+                    <CNPJ>43837865000110</CNPJ>
+                    <IM>6834922</IM>
+                    <email>henriqueamaropedrosa@outlook.com</email>
+                    <regTrib>
+                        <opSimpNac>3</opSimpNac>
+                        <regApTribSN>2</regApTribSN>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>26354401000133</CNPJ>
+                    <IM>467252</IM>
+                    <xNome>CANOPUS CONSTRUÇOES FORTALEZA LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>60150165</CEP>
+                        </endNac>
+                        <xLgr>AV SANTOS DUMONT</xLgr>
+                        <nro>3131</nro>
+                        <xCpl>SL 1013/1014</xCpl>
+                        <xBairro>ALDEOTA</xBairro>
+                    </end>
+                    <fone>88997474200</fone>
+                    <email>henriquepedrosa@canopusconstrucoes.com.br</email>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>2307650</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>070201</cTribNac>
+                        <cTribMun>001</cTribMun>
+                        <xDescServ>Serviços técnicos de engenharia executados na obra Gran Village Maracanaú I, período: 01/01/2026 á 31/01/2026.
+Obs: declaro que os serviços técnicos de engenharia citados nesta nota fiscal foram executados pelo proprietário MARCOS HENRIQUE AMARO
+PEDROSA, CNH: 06830704150</xDescServ>
+                        <cNBS>101011200</cNBS>
+                    </cServ>
+                    <obra>
+                        <end>
+                            <CEP>61932600</CEP>
+                            <xLgr>Rua Luis Gonzaga dos Santos</xLgr>
+                            <nro>1555</nro>
+                            <xBairro>Pajuçara</xBairro>
+                        </end>
+                    </obra>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>18000.00</vServ>
+                    </vServPrest>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>2</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                                <vPis>0.00</vPis>
+                                <vCofins>0.00</vCofins>
+                            </piscofins>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>0.00</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>430.20</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS23044001243837865000110000000000006826010281806041"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>hyt1gEma2Guarf4giAEHTu0zPR8=</DigestValue></Reference></SignedInfo><SignatureValue>VCnXYgtbIvMjzul+0wtFgp3ZFMpnll7mwRywTNW8sMBPK4tpn2NhDWjt0fIZMkDVQr9SkbfbRZ9RIqowxc6TbK19C/BbuRsiFDZEsk4w1XqduRz88RxVuIz6gOHsHrW3HigkQR08rSYD70WaVZ/enJ+Ykv5SL9tZlIZBwUZnnr0CXUuReNc3KlnnvYIY78Fz+AQwL2nePsEQS+ddZb+2xdoFXcY6hNKaL7X30OAoWCOM6QYeBZhX9JaATIvnySv8KhvzNXUcKcUhryD5ltR2xUdGzGYF6JF696DJKhxi1WO3VYPUHNR8/xiZacngDesZrmjoeILwAzohPyIQ39Y6qg==</SignatureValue><KeyInfo><X509Data><X509Certificate>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</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

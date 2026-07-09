@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" versao="1.00">
+    <infNFSe Id="NFS23044001205386318000176000000004025423090377218290">
+        <xLocEmi>FORTALEZA</xLocEmi>
+        <xLocPrestacao>CAUCAIA</xLocPrestacao>
+        <nNFSe>40254</nNFSe>
+        <cLocIncid>2303709</cLocIncid>
+        <xLocIncid>CAUCAIA</xLocIncid>
+        <xTribNac>COLETA DE RESÍDUOS NÃO-PERIGOSOS</xTribNac>
+        <xTribMun>COLETA DE RESÍDUOS NÃO-PERIGOSOS</xTribMun>
+        <xNBS>0</xNBS>
+        <verAplic>1.0</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2023-09-01T19:47:47-00:00</dhProc>
+        <nDFSe>373534104</nDFSe>
+        <emit>
+            <CNPJ>05386318000176</CNPJ>
+            <IM>1770390</IM>
+            <xNome>F E A TRANSPORTE E SERVICOS LTDA</xNome>
+            <enderNac>
+                <xLgr>R ESV AZEVEDO</xLgr>
+                <nro>91</nro>
+                <xCpl>****</xCpl>
+                <xBairro>CIDADE DOS FUNCIONÁRIOS</xBairro>
+                <cMun>2304400</cMun>
+                <UF>CE</UF>
+                <CEP>60822520</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vBC>5880.00</vBC>
+            <pAliqAplic>5.00</pAliqAplic>
+            <vISSQN>0.00</vISSQN>
+            <vTotalRet>294.00</vTotalRet>
+            <vLiq>5586.00</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS230440020538631800017600001000000000040254">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2023-09-01T19:47:47-00:00</dhEmi>
+                <verAplic>1.00</verAplic>
+                <serie>1</serie>
+                <nDPS>40254</nDPS>
+                <dCompet>2023-09-01</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>2304400</cLocEmi>
+                <prest>
+                    <CNPJ>05386318000176</CNPJ>
+                    <IM>1770390</IM>
+                    <xNome>F E A TRANSPORTE E SERVICOS LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>60822520</CEP>
+                        </endNac>
+                        <xLgr>R ESV AZEVEDO</xLgr>
+                        <nro>91</nro>
+                        <xCpl>****</xCpl>
+                        <xBairro>CIDADE DOS FUNCIONÁRIOS</xBairro>
+                    </end>
+                    <fone>8534639419</fone>
+                    <email>teleentulho07@hotmail.com</email>
+                    <regTrib>
+                        <opSimpNac>1</opSimpNac>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>26354401000133</CNPJ>
+                    <xNome>CANOPUS CONSTRUCOES FORTALEZA LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>60150165</CEP>
+                        </endNac>
+                        <xLgr>AV SANTOS DUMONT</xLgr>
+                        <nro>3131</nro>
+                        <xCpl>SL 1013 E 1014</xCpl>
+                        <xBairro>ALDEOTA</xBairro>
+                    </end>
+                    <fone>8532354377</fone>
+                    <email>walterclecio@canopusconstrucoes.com.br</email>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>2303709</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>070902</cTribNac>
+                        <xDescServ>14 TRANSPORTES DE CONTEINER NÃO SEGREGADO R$ 420,00 = 5.880,00
+REFERENTE AGOSTO/2023
+OBRA 15 DE NOVEMBRO 941
+VENCIMENTO 15/09/2023</xDescServ>
+                    </cServ>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>5880.00</vServ>
+                    </vServPrest>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>2</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                                <vPis>0.00</vPis>
+                                <vCofins>0.00</vCofins>
+                            </piscofins>
+                            <vRetCP>0.00</vRetCP>
+                            <vRetIRRF>0.00</vRetIRRF>
+                            <vRetCSLL>0.00</vRetCSLL>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>0.00</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>294.00</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS23044001205386318000176000000004025423090377218290"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>i/j6Y1OI3d0WrSULCGo+L6MvlSs=</DigestValue></Reference></SignedInfo><SignatureValue>ewoQ20Te+9M9osraSDU1oAhmTvLyeWRNC7YuCM6/LkJFNyBqWG7uHV2e8/Eg0rLwUYN+q3SEcLiPAMOyAvoGgPg4basMDfjKvHq2RA6s37uuAPdGQBf6E8iJmf1jiCEV3yuo/korETRlKc/t/87qSXVSW5liywlI/gaP7VBjJMwOb4Qc/HmsesGw/Cxp5IYU1d6BurWjEYX8OMRzQu7I9Noq9wnW9+YMsQZ5rmDS4rQe/gf3lEU0C4tWMc82whSx+35uf1o2J3T5qj/pl7VT7clk66V4HTq1IJV0l7cQminz/FcpKQB7f0ug//hUfB2Yzl+vCIQsQzZEGAgYXC+jxQ==</SignatureValue><KeyInfo><X509Data><X509Certificate>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</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

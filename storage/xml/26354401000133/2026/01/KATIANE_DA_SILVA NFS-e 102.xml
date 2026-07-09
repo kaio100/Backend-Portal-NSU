@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" versao="1.00">
+    <infNFSe Id="NFS23037091240075200000128000000000010226019272609431">
+        <xLocEmi>Caucaia</xLocEmi>
+        <xLocPrestacao>Caucaia</xLocPrestacao>
+        <nNFSe>102</nNFSe>
+        <cLocIncid>2303709</cLocIncid>
+        <xLocIncid>Caucaia</xLocIncid>
+        <xTribNac>CORRETAGEM NA COMPRA E VENDA E AVALIAÇÃO DE IMÓVEIS</xTribNac>
+        <xTribMun>CORRETAGEM NA COMPRA E VENDA E AVALIAÇÃO DE IMÓVEIS</xTribMun>
+        <xNBS>0</xNBS>
+        <verAplic>1.0</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2026-01-12T11:16:42-03:00</dhProc>
+        <nDFSe>1</nDFSe>
+        <emit>
+            <CNPJ>40075200000128</CNPJ>
+            <IM>0234788</IM>
+            <xNome>KATIANE DA SILVA </xNome>
+            <enderNac>
+                <xLgr>R PLACIDO MONTEIRO GONDIM</xLgr>
+                <nro>SN</nro>
+                <xCpl>ANEXO ARMARINHO</xCpl>
+                <xBairro>CENTRO</xBairro>
+                <cMun>2303709</cMun>
+                <UF>CE</UF>
+                <CEP>61600200</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vBC>9040.00</vBC>
+            <pAliqAplic>2.00</pAliqAplic>
+            <vISSQN>180.80</vISSQN>
+            <vTotalRet>0.00</vTotalRet>
+            <vLiq>9040.00</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS230370924007520000012800003000000000000102">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2026-01-12T11:16:42-03:00</dhEmi>
+                <verAplic>1.00</verAplic>
+                <serie>3</serie>
+                <nDPS>102</nDPS>
+                <dCompet>2026-01-12</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>2303709</cLocEmi>
+                <prest>
+                    <CNPJ>40075200000128</CNPJ>
+                    <IM>0234788</IM>
+                    <regTrib>
+                        <opSimpNac>3</opSimpNac>
+                        <regApTribSN>1</regApTribSN>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>26354401000133</CNPJ>
+                    <xNome>CANOPUS CONSTRUCOES FORTALEZA LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>60150165</CEP>
+                        </endNac>
+                        <xLgr>SANTOS DUMONT</xLgr>
+                        <nro>3131</nro>
+                        <xCpl>SALA 1013</xCpl>
+                        <xBairro>ALDEOTA</xBairro>
+                    </end>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>2303709</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>100501</cTribNac>
+                        <xDescServ>NOME: JOSE ANDERSON FERREIRA CAMURCA
+EMPREENDIMENTO: GRAN VILLAGE CAUCAIA III
+UNIDADE: BLOCO 07 APTO 206
+COMISSÃO TOTAL: 9.040,00
+IMOBILIARIA: KATIANE SILVA
+Dados bancários:
+C/C: 9211456-3
+AG: 0001
+Banco: 077 - Banco Inter</xDescServ>
+                        <cNBS>110012100</cNBS>
+                    </cServ>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>9040.00</vServ>
+                    </vServPrest>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>1</tpRetISSQN>
+                        </tribMun>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>0.00</vTotTribFed>
+                                <vTotTribEst>0</vTotTribEst>
+                                <vTotTribMun>180.80</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS23037091240075200000128000000000010226019272609431"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>ckBuU4lrH9r/Dy6sdTF805sDfZU=</DigestValue></Reference></SignedInfo><SignatureValue>R+7sZAKrL/UY9O2LW+DnqSd5N2bWhzlB11PohsW82DElAAVrczu6AaGITKfxW1L8l49UEmKGQB8N&#13;
+xsXhCBluezr5Q4TWN3VN7rWgKSMWd5Z4IB3zt7Curq5s5NBR1SyGJvUDC57yP4+zhL1iA8xZWaST&#13;
+kR/nJqvj8SRjR/HRprhSFKG6g97/mOX3ci8umEbEXHxhFreHfMoS4/a/DW6beHrBPI/vi/0Ud4dO&#13;
+BDrXKNI/i/bNZ3uG1lTf6HkZ8Ro5ZX9l4e6dzR1t/umnAQ5tp7tEa1xU4JrHp5GT20YlQTCv9KXZ&#13;
+33a9Nwwgw25nM6zt78csFhbocmOm15cGBxduLw==</SignatureValue><KeyInfo><X509Data><X509Certificate>MIIHhDCCBWygAwIBAgIMVZlNNEVcG5jXRE4tMA0GCSqGSIb3DQEBCwUAMIGRMQswCQYDVQQGEwJC&#13;
+UjETMBEGA1UECgwKSUNQLUJyYXNpbDE7MDkGA1UECwwyU2VydmljbyBGZWRlcmFsIGRlIFByb2Nl&#13;
+c3NhbWVudG8gZGUgRGFkb3MgLSBTRVJQUk8xMDAuBgNVBAMMJ0F1dG9yaWRhZGUgQ2VydGlmaWNh&#13;
+ZG9yYSBTQUZFLUlEIEJSQVNJTDAeFw0yNTA1MDkxODE0MzlaFw0yNjA1MDkxODE0MzlaMIIBBzEL&#13;
+MAkGA1UEBhMCQlIxCzAJBgNVBAgMAkNFMRAwDgYDVQQHDAdDQVVDQUlBMRMwEQYDVQQKDApJQ1At&#13;
+QnJhc2lsMRkwFwYDVQQLDBB2aWRlb2NvbmZlcmVuY2lhMRcwFQYDVQQLDA40NDY2NDQ4MjAwMDE1&#13;
+MDEbMBkGA1UECwwSUGVzc29hIEp1cmlkaWNhIEExMRMwEQYDVQQLDApBUkdST1dURUNIMTAwLgYD&#13;
+VQQLDCdBdXRvcmlkYWRlIENlcnRpZmljYWRvcmEgU0FGRS1JRCBCUkFTSUwxLDAqBgNVBAMMI01V&#13;
+TklDSVBJTyBERSBDQVVDQUlBOjA3NjE2MTYyMDAwMTA2MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A&#13;
+MIIBCgKCAQEAqmHx5wjgmpvGzhIN8KJOKOVWtT3n9IYJXrwI3P0prhygDZUTfY+sc4EODF5Wnvkj&#13;
+7mYGvyXM5s1EC7zWjCPQwyp4+kTvnJ5hH5a3Sy7it1vmnL37wyJN0bR4emsDyMsTbNglqG89XI1G&#13;
+++TmaT3odMJ4AlFaa/t2cYwuuv3aU58sBmFIeQZULlmSLu3Z/aB9xOeTo7o/BfRqxytTcpj36jGL&#13;
+8w6J+SM1g/zRkNPxug5l5NK2GgZLyqRbGC87Dg0BXRWCo3BqMP/9N2c+NXqMDDKaLKcFn6gGzyMQ&#13;
+IFdV4MkRn8AUuq+XLIMbcAwfTchiuLRebjWx0ZlAapNiRorZtQIDAQABo4ICYTCCAl0wHwYDVR0j&#13;
+BBgwFoAUuehU/EzcjeKPymwbiPSnmb9w/c0wDgYDVR0PAQH/BAQDAgXgMF4GA1UdIARXMFUwUwYG&#13;
+YEwBAgF5MEkwRwYIKwYBBQUHAgEWO2h0dHA6Ly9yZXBvc2l0b3Jpby5zZXJwcm8uZ292LmJyL2Rv&#13;
+Y3MvZHBjYWNzYWZlaWRicmFzaWwucGRmMIHDBgNVHREEgbswgbigOAYFYEwBAwSgLwQtMzAwMTE5&#13;
+Njc0MDMwNjg0NDE2ODAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwoCAGBWBMAQMCoBcEFU5BVU1J&#13;
+IEdPTUVTIERFIEFNT1JJTaAZBgVgTAEDA6AQBA4wNzYxNjE2MjAwMDEwNqAXBgVgTAEDB6AOBAww&#13;
+MDAwMDAwMDAwMDCBJmFsaW5lLmNhcnZhbGhvQHNlZmluLmNhdWNhaWEuY2UuZ292LmJyMB0GA1Ud&#13;
+JQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDBDCBiwYDVR0fBIGDMIGAMD2gO6A5hjdodHRwOi8vcmVw&#13;
+b3NpdG9yaW8uc2VycHJvLmdvdi5ici9sY3IvYWNzYWZlaWRicmFzaWwuY3JsMD+gPaA7hjlodHRw&#13;
+Oi8vY2VydGlmaWNhZG9zMi5zZXJwcm8uZ292LmJyL2xjci9hY3NhZmVpZGJyYXNpbC5jcmwwVwYI&#13;
+KwYBBQUHAQEESzBJMEcGCCsGAQUFBzAChjtodHRwOi8vcmVwb3NpdG9yaW8uc2VycHJvLmdvdi5i&#13;
+ci9jYWRlaWFzL2Fjc2FmZWlkYnJhc2lsLnA3YjANBgkqhkiG9w0BAQsFAAOCAgEAF+7FYSnjXTyk&#13;
+bc9tshxPcqhwMp34mGqisU9awTsdIA5AJ8b6wXKQxjENOW/Y6IDdi4zICQiX/MA9whF1f/tGnuPu&#13;
+6xDVd6w1SOt5UpEKL7OtZe4tMH3UxaM4N40p5Ud2HHJ1kyngTpINKsQ0dIiPB2YH+cn77kYdxNov&#13;
+fSvWnJKIoOTYWi7eufpbd7kIMy3a6Qr5rNcj+Ukqn5BVG2k1elT1x92d9Lsa3Qdj9vqB6hmNTeYr&#13;
+fAVnsVLTEhZw2ZHtImIQkqCWUFpQyHXAF3LJwPoaMtLsQubjBVvZTsS2JDzuGb3JefhnEeUnwKsA&#13;
+70DdPGKVEiMjCyOueBtjAAcYkeVgyEb2XK8/bWnwj5AVG4xy7PyfbFx3oM1cd3oDFnR9n3FHd+J8&#13;
+7Z04codpsuC01kH1+bo0Rylwi0fe5T1ehWVZ8VJ33Ro6TECBeBz7argg2yeKx+/JKvsF4d4XU1Id&#13;
+pTBUj58C0+TdoBk5viRrm+NL17SIvfiD8fe2oOofx/5W0gPnm4zTJoDFy9l90G3wdT9A323UEGFQ&#13;
+Y4io7wF+fUoMUxJXcqWJnGC245i+dW11+C6ddcJK9rVBcnMT7mHWaj1AQUh9KVtwG0GHIDgl2PzF&#13;
+zXfgHQm0n15QEK+QCbHL/xzNS/2L2I3sivLHPXh99q0Gw6DVEk9UvW6qtdTgAK4=</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

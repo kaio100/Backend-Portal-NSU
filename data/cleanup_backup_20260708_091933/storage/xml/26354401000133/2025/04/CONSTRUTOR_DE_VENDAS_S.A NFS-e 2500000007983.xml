@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<NFSe xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" versao="1.00" xmlns="http://www.sped.fazenda.gov.br/nfse">
+  <infNFSe Id="NFS28067011211224696000156250000000798325040011093398">
+    <xLocEmi>São Cristóvão</xLocEmi>
+    <xLocPrestacao>São Cristóvão</xLocPrestacao>
+    <nNFSe>2500000007983</nNFSe>
+    <cLocIncid>2806701</cLocIncid>
+    <xLocIncid>São Cristóvão</xLocIncid>
+    <xTribNac>Licenciamento ou cessão de direito de uso de programas de computação.</xTribNac>
+    <xTribMun>Licenciamento ou cessão de direito de uso de programas de computação.</xTribMun>
+    <verAplic>Abrasf_202</verAplic>
+    <ambGer>1</ambGer>
+    <tpEmis>2</tpEmis>
+    <cStat>100</cStat>
+    <dhProc>2025-04-01T20:52:03-03:00</dhProc>
+    <nDFSe>1109339</nDFSe>
+    <emit>
+      <CNPJ>11224696000156</CNPJ>
+      <IM>5400376</IM>
+      <xNome>CONSTRUTOR DE VENDAS S.A</xNome>
+      <xFant>CV CONSTRUTOR DE VENDAS</xFant>
+      <enderNac>
+        <xLgr>AVENIDA JOSE CONRADO DE ARAUJO</xLgr>
+        <nro>731</nro>
+        <xCpl>SALA  03 BL B TERREO</xCpl>
+        <xBairro>ROSA ELZE</xBairro>
+        <cMun>2806701</cMun>
+        <UF>SE</UF>
+        <CEP>49100000</CEP>
+      </enderNac>
+      <fone>7933027830</fone>
+      <email>financeiro@grupoalfama.com.br</email>
+    </emit>
+    <valores>
+      <vCalcDR>0.00</vCalcDR>
+      <vBC>262.78</vBC>
+      <pAliqAplic>2.00</pAliqAplic>
+      <vISSQN>5.26</vISSQN>
+      <vLiq>262.78</vLiq>
+      <xOutInf>Trib. aprox. R$ 35,34 Federal e R$ 13,14 Municipal. Fonte: IBPT [F11483]</xOutInf>
+    </valores>
+    <DPS versao="1.00">
+      <infDPS Id="DPS280670121122469600015602025202500000007983">
+        <tpAmb>1</tpAmb>
+        <dhEmi>2025-04-01T20:52:03-03:00</dhEmi>
+        <verAplic>Abrasf_202</verAplic>
+        <serie>2025</serie>
+        <nDPS>202500000007983</nDPS>
+        <dCompet>2025-04-01</dCompet>
+        <tpEmit>1</tpEmit>
+        <cLocEmi>2806701</cLocEmi>
+        <prest>
+          <CNPJ>11224696000156</CNPJ>
+          <IM>5400376</IM>
+          <xNome>CONSTRUTOR DE VENDAS S.A</xNome>
+          <end>
+            <endNac>
+              <cMun>2806701</cMun>
+              <CEP>49100000</CEP>
+            </endNac>
+            <xLgr>AVENIDA JOSE CONRADO DE ARAUJO</xLgr>
+            <nro>731</nro>
+            <xCpl>SALA  03 BL B TERREO</xCpl>
+            <xBairro>ROSA ELZE</xBairro>
+          </end>
+          <fone>7933027830</fone>
+          <email>financeiro@grupoalfama.com.br</email>
+          <regTrib>
+            <opSimpNac>1</opSimpNac>
+            <regEspTrib>0</regEspTrib>
+          </regTrib>
+        </prest>
+        <toma>
+          <CNPJ>26354401000133</CNPJ>
+          <xNome>CANOPUS CONSTRUCOES FORTALEZA LTDA</xNome>
+          <end>
+            <endNac>
+              <cMun>2304400</cMun>
+              <CEP>60150165</CEP>
+            </endNac>
+            <xLgr>AV SANTOS DUMONT</xLgr>
+            <nro>3131</nro>
+            <xCpl>SALA 1013</xCpl>
+            <xBairro>ALDEOTA</xBairro>
+          </end>
+          <fone>9832354377</fone>
+          <email>gersoncosta@canopusconstrucoes.com.br</email>
+        </toma>
+        <serv>
+          <locPrest>
+            <cLocPrestacao>2806701</cLocPrestacao>
+          </locPrest>
+          <cServ>
+            <cTribNac>010500</cTribNac>
+            <xDescServ>Licenca de uso, manutencao e suporte do Construtor de Vendas - 01 empreendimento - Aditivo 7000 (rateio)  Contrato N. 678 - Vencto. 22/04/2025</xDescServ>
+          </cServ>
+        </serv>
+        <valores>
+          <vServPrest>
+            <vServ>262.78</vServ>
+          </vServPrest>
+          <trib>
+            <tribMun>
+              <tribISSQN>1</tribISSQN>
+              <pAliq>2.00</pAliq>
+              <tpRetISSQN>1</tpRetISSQN>
+            </tribMun>
+            <totTrib>
+              <indTotTrib>0</indTotTrib>
+            </totTrib>
+          </trib>
+        </valores>
+      </infDPS>
+    </DPS>
+  </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" /><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1" /><Reference URI="#NFS28067011211224696000156250000000798325040011093398"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature" /><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" /></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1" /><DigestValue>bsSlo4U9co8gFaicsrLg+wU0O80=</DigestValue></Reference></SignedInfo><SignatureValue>wqg12We4t6zvNeL4AH4D+hKQU/E7DmUCn8DzjSiM7GyPS1dG47VtfNNHjM3Z4o4OutTrobiNgbpahd5BnoZJliWC6GYuwna/o5xCuGt1IIgx5d146rUwbtVWu/t6jyq6qeOkjQoRiZKeqRKwdeUtufNBuytJZur/kIgW7qzVRlqjH/znTBqqPQ4PzcmzfVDW6QMN5GSIJMedfyN08kdnXwcjCWgTRPjQzDqIyfG43Ylgo4OBDRQc1ZYgI1PfKlFQz3UtMJIcDVGmqNcmRI02JuADDIP4bIyYGUcFWuY4Relzs1ANYgz3A2vFS9TYH6YxzvwRx5/7e+mkeqYbAAsqIg==</SignatureValue><KeyInfo><X509Data><X509Certificate>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</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

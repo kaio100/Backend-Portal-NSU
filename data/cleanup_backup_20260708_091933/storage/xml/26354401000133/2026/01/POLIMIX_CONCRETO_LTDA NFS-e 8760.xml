@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" versao="1.00">
+    <infNFSe Id="NFS23044001229067113031822000000000876026010330618984">
+        <xLocEmi>FORTALEZA</xLocEmi>
+        <xLocPrestacao>EUSEBIO</xLocPrestacao>
+        <nNFSe>8760</nNFSe>
+        <cLocIncid>2304285</cLocIncid>
+        <xLocIncid>EUSEBIO</xLocIncid>
+        <xTribNac>OUTRAS OBRAS DE ENGENHARIA CIVIL NAO ESPECIFICADAS ANTERIORMENTE</xTribNac>
+        <xTribMun>OUTRAS OBRAS DE ENGENHARIA CIVIL NAO ESPECIFICADAS ANTERIORMENTE</xTribMun>
+        <xNBS>SERVIÇOS DE CONSTRUÇÃO DE OBRAS DE ENGENHARIA CIVIL NÃO CLASSIFICADOS EM SUBPOSIÇÕES ANTERIORES</xNBS>
+        <verAplic>1.00</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2026-01-14T16:59:53-00:00</dhProc>
+        <nDFSe>519389816</nDFSe>
+        <emit>
+            <CNPJ>29067113031822</CNPJ>
+            <IM>4596722</IM>
+            <xNome>POLIMIX CONCRETO LTDA</xNome>
+            <enderNac>
+                <xLgr>ROD SANTOS-DUMONT</xLgr>
+                <nro>2131</nro>
+                <xCpl>CASA PARTE B</xCpl>
+                <xBairro>CAJAZEIRAS</xBairro>
+                <cMun>2304400</cMun>
+                <UF>CE</UF>
+                <CEP>60823105</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vCalcDR>3291.32</vCalcDR>
+            <vBC>4936.98</vBC>
+            <pAliqAplic>5.00</pAliqAplic>
+            <vISSQN>246.85</vISSQN>
+            <vTotalRet>246.85</vTotalRet>
+            <vLiq>7981.45</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS230440022906711303182200001000000000008760">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2026-01-14T16:59:53-00:00</dhEmi>
+                <verAplic>1.00</verAplic>
+                <serie>1</serie>
+                <nDPS>8760</nDPS>
+                <dCompet>2026-01-01</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>2304400</cLocEmi>
+                <prest>
+                    <CNPJ>29067113031822</CNPJ>
+                    <IM>4596722</IM>
+                    <fone>1141680300</fone>
+                    <email>fiscalcdc@polimix.com.br</email>
+                    <regTrib>
+                        <opSimpNac>1</opSimpNac>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>26354401000133</CNPJ>
+                    <xNome>CANOPUS CONSTRUCOES FORTALEZA LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>60150165</CEP>
+                        </endNac>
+                        <xLgr>AVENIDA SANTOS DUMONT</xLgr>
+                        <nro>3131</nro>
+                        <xCpl>SALA 1013 E 1014</xCpl>
+                        <xBairro>ALDEOTA</xBairro>
+                    </end>
+                    <fone>8588959571</fone>
+                    <email>diegocarvalho@canopusconstrucoe.com.br</email>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>2304285</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>070202</cTribNac>
+                        <cTribMun>016</cTribMun>
+                        <xDescServ>Prestação de Serviço de Concretagem/Bombeamento referente a RPS 8760
+Endereço Obra: RUA: SANTA CECILIA – Nº 1967 – GUARIBAS – EUSEBIO/CE – CEP:61760-000
+Valor Total da NF: R$ 8.228,30
+Valor do Material: R$ 2.256,87
+Valor do Serviço: R$ 5.971,43
+ Base de Cálculo do ISS: R$ 4.936,98
+Alíquota: 5,00%  
+ Valor do ISS: R$ 246,85
+ Valor Líquido da NF: R$ 7.981,45
+ Valor aproximado dos tributos 1.106,71 (17,39%) Fonte IBPT</xDescServ>
+                        <cNBS>101029000</cNBS>
+                    </cServ>
+                    <obra>
+                        <end>
+                            <CEP>61760000</CEP>
+                            <xLgr>RUA SANTA CECILIA</xLgr>
+                            <nro>1967</nro>
+                            <xBairro>GUARIBAS</xBairro>
+                        </end>
+                    </obra>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>8228.30</vServ>
+                    </vServPrest>
+                    <vDedRed>
+                        <vDR>3291.32</vDR>
+                    </vDedRed>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>2</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                                <vPis>0.00</vPis>
+                                <vCofins>0.00</vCofins>
+                            </piscofins>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>0.00</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>246.85</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS23044001229067113031822000000000876026010330618984"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>lfzWAIGpx1Vf8H6ujNE5q2qXAr8=</DigestValue></Reference></SignedInfo><SignatureValue>sLQsvmevDOp5McmssU+4UB5BAEl2eBRL0iPJDqiaJ8jBt4yGSHr+j4iQrs+wCAO1Nyq7+CyE9cs+1qsYKC3jZbn8OVE9PG7JyGko2q5WRBmmXg8z49NY3cELboL8o87qbbxzqU6afnKdHHDFj53i+2eGfuhKQ9qPRVSzYX/HI5I4kpBixf/aCEm11gT9grLwY4gavZirNv+yjRd+GX+jcpKDpFWhBe/BzqzOcravHb4HXHvlPm/QkcH7/kJ2S/q0i/HZJiCmrkxr6T5N+e0dNRxBrrndV1QLTdt6Acj5FScEA8QD/gSUMIQVfF1b0qeiKNzD9tZqPbo87sDyffF70Q==</SignatureValue><KeyInfo><X509Data><X509Certificate>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</X509Certificate></X509Data></KeyInfo></Signature></NFSe>
