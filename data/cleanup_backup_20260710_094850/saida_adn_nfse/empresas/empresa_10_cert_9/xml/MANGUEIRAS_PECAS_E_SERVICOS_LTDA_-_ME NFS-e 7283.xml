@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00">
+    <infNFSe Id="NFS52051091200321908000105000000000728326011585806660">
+        <xLocEmi>5205109</xLocEmi>
+        <xLocPrestacao>5205109</xLocPrestacao>
+        <nNFSe>7283</nNFSe>
+        <cLocIncid>5205109</cLocIncid>
+        <xLocIncid>CATALAO</xLocIncid>
+        <xTribNac>Lubrificação, limpeza, lustração, revisão, carga e recarga, conserto, restauração, blindagem, manutenção e conservação de máquinas, veículos, aparelhos, equipamentos, motores, elevadores ou de qualquer objeto (exceto peças e partes empregadas, que ficam sujeitas ao ICMS).</xTribNac>
+        <xTribMun>Lubrificação, limpeza, lustração, revisão, carga e recarga, conserto, restauração, blindagem, manutenção e conservação de máquinas, veículos, aparelhos, equipamentos, motores, elevadores ou de qualquer objeto (exceto peças e partes empregadas, que ficam sujeitas ao ICMS).</xTribMun>
+        <verAplic>SIG_1.0</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2026-01-06T14:00:00-03:00</dhProc>
+        <nDFSe>7283</nDFSe>
+        <emit>
+            <CNPJ>00321908000105</CNPJ>
+            <IM>43879001</IM>
+            <xNome>MANGUEIRAS PECAS E SERVICOS LTDA - ME.</xNome>
+            <xFant>AUTO ELETRICA MANGUEIRAS</xFant>
+            <enderNac>
+                <xLgr>AV. JOSE SEVERINO</xLgr>
+                <nro>1800</nro>
+                <xBairro>NOSSA SENHORA DE FATIMA</xBairro>
+                <cMun>5205109</cMun>
+                <UF>GO</UF>
+                <CEP>75709150</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vBC>690.00</vBC>
+            <pAliqAplic>2.79</pAliqAplic>
+            <vISSQN>19.25</vISSQN>
+            <vLiq>690.00</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS520510920032190800010500001000000000007283">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2026-01-06T14:00:00-03:00</dhEmi>
+                <verAplic>SIG_1.0</verAplic>
+                <serie>00001</serie>
+                <nDPS>7283</nDPS>
+                <dCompet>2026-01-06</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>5205109</cLocEmi>
+                <prest>
+                    <CNPJ>00321908000105</CNPJ>
+                    <IM>43879001</IM>
+                    <regTrib>
+                        <opSimpNac>1</opSimpNac>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>97458533000153</CNPJ>
+                    <xNome>GUARDIA ADMINISTRACAO E SERV.LTDA.</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>5201405</cMun>
+                            <CEP>74905730</CEP>
+                        </endNac>
+                        <xLgr>TUPINAMBAS</xLgr>
+                        <nro>S/N</nro>
+                        <xCpl>QUADRA 01 LOTE 09</xCpl>
+                        <xBairro>VILA BRASILIA</xBairro>
+                    </end>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>5205109</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>140101</cTribNac>
+                        <xDescServ>SERVIÇOS ELETRICOS.</xDescServ>
+                        <cNBS>120013110</cNBS>
+                    </cServ>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>690.00</vServ>
+                    </vServPrest>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>1</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                            </piscofins>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>0.00</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>19.25</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS52051091200321908000105000000000728326011585806660"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>ttic1oqdBEWCEqYfGqcwz/f3UYg=</DigestValue></Reference></SignedInfo><SignatureValue>4f4B9tzyZ2TZqN98KMsbIKjHiEezJtYlITz1bxWOU3XM92EzfUhnRZOtkXnm38GTFKmwNhtY6owm&#13;
+2/p4USZi13L0A2L/WBBsGMZKqX4WjqmQdyleHElVNY1K68AYnVuvpKCc6383duHtU5TPB5EoNXGo&#13;
+ALIkVSvyDZfcc8w9+svn7b8ZwiOJXsLr2haHjPRPbETK5iSHr4WZhG/4PXjiS/QfWFk1+XFNPA4w&#13;
+nIob3YbMD4gud5vW1RZDWRX2silGBvhKGdPwq8KPgVlKKHXdCZkfyD5mzh5Sm+VRGB5nlSGUgHWQ&#13;
+v+4GYpLpPXSDDQ8UTHVbxTjW9nG0y+KRjOfBkQ==</SignatureValue><KeyInfo><X509Data><X509Certificate>MIIHSjCCBTKgAwIBAgIIUgMlARNYbHAwDQYJKoZIhvcNAQELBQAwWTELMAkGA1UEBhMCQlIxEzAR&#13;
+BgNVBAoTCklDUC1CcmFzaWwxFTATBgNVBAsTDEFDIFNPTFVUSSB2NTEeMBwGA1UEAxMVQUMgU09M&#13;
+VVRJIE11bHRpcGxhIHY1MB4XDTI1MDExMzE3NTIwMFoXDTI2MDExMzE3NTIwMFowgeIxCzAJBgNV&#13;
+BAYTAkJSMRMwEQYDVQQKEwpJQ1AtQnJhc2lsMQswCQYDVQQIEwJHTzEQMA4GA1UEBxMHQ2F0YWxh&#13;
+bzEeMBwGA1UECxMVQUMgU09MVVRJIE11bHRpcGxhIHY1MRcwFQYDVQQLEw4zODAzODAwNjAwMDEy&#13;
+MDEcMBoGA1UECxMTQ2VydGlmaWNhZG8gRGlnaXRhbDEaMBgGA1UECxMRQ2VydGlmaWNhZG8gUEog&#13;
+QTExLDAqBgNVBAMTI01VTklDSVBJTyBERSBDQVRBTEFPOjAxNTA1NjQzMDAwMTUwMIIBIjANBgkq&#13;
+hkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8zrtnad6BEI3kYfDD2u0UVAmQzQwUh6OxkPVbHNYknb8&#13;
+1DSA7svPWya8ID7LV1k6Ck/2UT9ETYIYxw1kebGM5QIRHp+EaEMGFmeskqgfKOxohv7rUqjQnGzd&#13;
+6FllM+YGZTHAxW2T/xbxd8iZDQY+2kNQuzE+z6b3gWWTWThRYC3vA3WdZJOxER4QGbpuxinm/Vvp&#13;
+LnSz/1yNHf3L2M+rBopOUFOVes8NGjBnPHguHxGi8hVW/RtisASH8VMzmzpr0pmXNfvTO19eU78p&#13;
+yuabJlNiCvwc0C4L2v2IfnrldpqPsV/5nmWqo2Di0oASTHGpnFfuw9C6nnxGSvSPqnlajQIDAQAB&#13;
+o4ICijCCAoYwCQYDVR0TBAIwADAfBgNVHSMEGDAWgBTFUu0lgAnfnILIn0fG3bRfMd25sTBUBggr&#13;
+BgEFBQcBAQRIMEYwRAYIKwYBBQUHMAKGOGh0dHA6Ly9jY2QuYWNzb2x1dGkuY29tLmJyL2xjci9h&#13;
+Yy1zb2x1dGktbXVsdGlwbGEtdjUucDdiMIHFBgNVHREEgb0wgbqBIGNvbnRhdG9AY29udHJvbGxl&#13;
+cmNhdGFsYW8uY29tLmJyoCEGBWBMAQMCoBgTFlZFTE9NQVIgR09OQ0FMVkVTIFJJT1OgGQYFYEwB&#13;
+AwOgEBMOMDE1MDU2NDMwMDAxNTCgPwYFYEwBAwSgNhM0MjQwOTE5NTkyNjM1ODgyNDEwNDAwMDAw&#13;
+MDAwMDAwMDAwMDAwMDAwOTA5ODk2U1NQUENHT6AXBgVgTAEDB6AOEwwwMDAwMDAwMDAwMDAwXQYD&#13;
+VR0gBFYwVDBSBgZgTAECASYwSDBGBggrBgEFBQcCARY6aHR0cDovL2NjZC5hY3NvbHV0aS5jb20u&#13;
+YnIvZG9jcy9kcGMtYWMtc29sdXRpLW11bHRpcGxhLnBkZjAdBgNVHSUEFjAUBggrBgEFBQcDAgYI&#13;
+KwYBBQUHAwQwgYwGA1UdHwSBhDCBgTA+oDygOoY4aHR0cDovL2NjZC5hY3NvbHV0aS5jb20uYnIv&#13;
+bGNyL2FjLXNvbHV0aS1tdWx0aXBsYS12NS5jcmwwP6A9oDuGOWh0dHA6Ly9jY2QyLmFjc29sdXRp&#13;
+LmNvbS5ici9sY3IvYWMtc29sdXRpLW11bHRpcGxhLXY1LmNybDAdBgNVHQ4EFgQUyNahI7QPs4V0&#13;
+Ee4OsxSch4s4k1cwDgYDVR0PAQH/BAQDAgXgMA0GCSqGSIb3DQEBCwUAA4ICAQBFzgi2Q6iAp/cV&#13;
+/USUChHbF/G1M4D/zYbbLyBo48nJxOmCVDyctD2YM3H808TxnnhcD71x5dW1QIiOxHsRRHL/zDw4&#13;
+piSCBYoYt2abqAvdVT0VqQ855mZxNdxPWsAD4k6eJjkrG6odkt2mYuLtjzjaWoetXa2c3CPFXP7B&#13;
+MCpmgk1yCKmiuUMqcn/Rm7UqLfVHzyJ7GwWnwmG6yTUDJBQ85q0PHmXHF6baZuaCiNJ5aOiXQwpC&#13;
+a8CBcHZ7qnsTvgm2BMkZlJ5d6j8IF2GoU2B1/FeP402QzXzn+FbYvq075ISPtj6L0DgMqTk3z2Bs&#13;
+HJhV2WIu1UXQirqi4e2jWdMCwjC8m0pea3Ko9klcVxEsm2F78IUrhF0XS33ywDrJd7KQjcJdlg7j&#13;
+Q3oeFnZnx414ihTQ9HAiFLHHt0z9Gmd0M+gCyDO/Jrfh+fY1/JS1ZuDwVR7yVtU6H9wm4xCaC19R&#13;
+uja/fsbaPBzD513uCE8YLQWEE3n/P4O6e15mk/gQl4CL1zQyeFG8mMrMFXPNM+NTCMGqwF3f8rhX&#13;
+wn50ChVY1BA96T7rzKfbqjq99/Cp5ALdX2tMRHz4Dp2jgDAYMdQYJk+YR09fErq8e5J8bWj3dg4N&#13;
+hzo789fnlU2c1KPTymYta4ySHx3Gy57kJAOT6ytAPkChs3MAkBNeAjup5mnz6Q==</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

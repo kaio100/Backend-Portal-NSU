@@ -30,7 +30,7 @@ from backend.app.db.models import (  # noqa: E402
 )
 from backend.app.db.session import SessionLocal, init_db  # noqa: E402
 from backend.app.main import app  # noqa: E402
-from backend.app.services import cnpj_cache_service, portal_support_service  # noqa: E402
+from backend.app.services import cnpj_cache_service, cnpj_enrichment_service, portal_support_service  # noqa: E402
 from backend.app.services.storage_service import get_storage_service  # noqa: E402
 
 
@@ -632,3 +632,31 @@ def test_invertexto_cache_expira_em_trinta_dias(monkeypatch):
         cache = db.query(CnpjCache).filter(CnpjCache.cnpj == "11222333000181").first()
 
     assert cache.data_expiracao == cache.data_consulta + timedelta(days=30)
+
+
+def test_enriquecimento_pos_certificado_consulta_cnpjs_do_processo(monkeypatch):
+    _reset_db()
+    _, processo_id, _ = _base_data()
+    chamadas = []
+
+    def fake_consultar(db, cnpjs):
+        chamadas.append(set(cnpjs))
+        return {
+            cnpj: {
+                "consulta": "Optante S.N",
+                "consulta_simples_api": "Optante S.N",
+                "cnae": "6201501",
+                "codigo_cnae": "6201501",
+                "descricao_cnae": "Desenvolvimento de programas",
+            }
+            for cnpj in cnpjs
+        }
+
+    monkeypatch.setattr(portal_support_service, "_consultar_invertexto_cnpjs", fake_consultar)
+
+    with SessionLocal() as db:
+        resumo = cnpj_enrichment_service.enriquecer_cnpjs_do_processo(db, processo_id=processo_id, certificado_id=123)
+
+    assert chamadas == [{"11111111000191"}]
+    assert resumo["cnpjs_total"] == 1
+    assert resumo["pendentes"] == 1

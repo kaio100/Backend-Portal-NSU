@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" versao="1.00">
+    <infNFSe Id="NFS23044001263554067000198000005312460323110121417220">
+        <xLocEmi>FORTALEZA</xLocEmi>
+        <xLocPrestacao>APARECIDA DE GOIANIA</xLocPrestacao>
+        <nNFSe>53124603</nNFSe>
+        <cLocIncid>5201405</cLocIncid>
+        <xLocIncid>APARECIDA DE GOIANIA</xLocIncid>
+        <xTribNac>PLANOS DE SAUDE</xTribNac>
+        <xTribMun>PLANOS DE SAUDE</xTribMun>
+        <xNBS>0</xNBS>
+        <verAplic>1.0</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2023-11-08T16:10:08-00:00</dhProc>
+        <nDFSe>383736612</nDFSe>
+        <emit>
+            <CNPJ>63554067000198</CNPJ>
+            <IM>1065343</IM>
+            <xNome>HAPVIDA ASSISTENCIA MEDICA S.A.</xNome>
+            <enderNac>
+                <xLgr>AV HERACLITO GRACA</xLgr>
+                <nro>406</nro>
+                <xBairro>CENTRO</xBairro>
+                <cMun>2304400</cMun>
+                <UF>CE</UF>
+                <CEP>60140060</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vBC>1499.04</vBC>
+            <pAliqAplic>2.00</pAliqAplic>
+            <vISSQN>29.98</vISSQN>
+            <vTotalRet>0.00</vTotalRet>
+            <vLiq>1499.04</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS230440026355406700019800001000000053124603">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2023-11-08T16:10:08-00:00</dhEmi>
+                <verAplic>1.00</verAplic>
+                <serie>1</serie>
+                <nDPS>53124603</nDPS>
+                <dCompet>2023-11-08</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>2304400</cLocEmi>
+                <prest>
+                    <CNPJ>63554067000198</CNPJ>
+                    <IM>1065343</IM>
+                    <xNome>HAPVIDA ASSISTENCIA MEDICA S.A.</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>60140060</CEP>
+                        </endNac>
+                        <xLgr>AV HERACLITO GRACA</xLgr>
+                        <nro>406</nro>
+                        <xBairro>CENTRO</xBairro>
+                    </end>
+                    <fone>8532559010</fone>
+                    <email>vanessacc@hapvida.com.br</email>
+                    <regTrib>
+                        <opSimpNac>1</opSimpNac>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>97458533000153</CNPJ>
+                    <xNome>GUARDIA ADMINISTRACAO E SERVICOS LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>5201405</cMun>
+                            <CEP>74905250</CEP>
+                        </endNac>
+                        <xLgr>RRUA CAPIBARIBE ESQ C RUA TUPINAMBAS</xLgr>
+                        <nro>0</nro>
+                        <xCpl>QD 01 LT 09</xCpl>
+                        <xBairro>VILA BRASILIA</xBairro>
+                    </end>
+                    <email>beneficios@guardia.com.br</email>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>5201405</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>042201</cTribNac>
+                        <xDescServ>ESTE PAGAMENTO REFERE-SE AO CONTRATO N04RR0 FIRMADO COM A EMPRESA, REFERENTE A COMPETENCIA 112023 ,FICANDO MENCIONADO PAGAMENTO VINCULADO A VIGENCIA DO CITADO CONTRATO COLETIVO. </xDescServ>
+                    </cServ>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>1499.04</vServ>
+                    </vServPrest>
+                    <vDescCondIncond>
+                        <vDescIncond>0.00</vDescIncond>
+                        <vDescCond>0.00</vDescCond>
+                    </vDescCondIncond>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>1</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                                <vPis>0.00</vPis>
+                                <vCofins>0.00</vCofins>
+                            </piscofins>
+                            <vRetCP>0.00</vRetCP>
+                            <vRetIRRF>0.00</vRetIRRF>
+                            <vRetCSLL>0.00</vRetCSLL>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>0.00</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>29.98</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFS23044001263554067000198000005312460323110121417220"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>rIvkppllh6r7LG0J/uvnnjNybPc=</DigestValue></Reference></SignedInfo><SignatureValue>lIDoPYKtHhnsR/SeZn/REZaOcKWjR8NVQAL5iN1I/V3CA2+ExRweVQBIif5ZsubBjw/rF2jgWe4K0koGWtphk3OIpnE08f4s8l/uvS6x/Vfm0Be1iQIBlhPcYqyW/Kgyi3mEC4nPfZ40X/Z+RLDhOiLs0w31PWSj6xArsyHnGjdBZE4eHqV3WrOvbJjRaxuaK6+UEDQz72GgCFos+NsX4MvIUloUh6VCxVQc5KpIrZhYxO4Nwji4WOqMidjobMqvQ2t8+Ot2hJMxnTJObEjYcqZw+LW8r60k1rs1myi/hr7VmlHdFt+PFgHxAY0qrrALQPAvYW1/f9icpWnOe6I6Wg==</SignatureValue><KeyInfo><X509Data><X509Certificate>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</X509Certificate></X509Data></KeyInfo></Signature></NFSe>

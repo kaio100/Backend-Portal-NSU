@@ -309,7 +309,15 @@ def autocadastrar_certificado(
 
     processo = None
     if auto_iniciar:
-        nsu_inicio_efetivo = int(nsu_inicio) if empresa_existente and nsu_inicio is not None else None
+        nsu_inicio_efetivo = int(nsu_inicio) if nsu_inicio is not None else None
+        if nsu_inicio_efetivo is not None:
+            logger.info(
+                "NSU inicial informado no autocadastro aplicado: empresa_id=%s certificado_id=%s nsu_inicio=%s empresa_existente=%s",
+                empresa.id,
+                certificado.id,
+                nsu_inicio_efetivo,
+                empresa_existente,
+            )
         options = ConsultaIniciarRequest(
             automatico=True,
             intervalo_minutos=15,

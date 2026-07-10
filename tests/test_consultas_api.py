@@ -18,8 +18,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import inspect  # noqa: E402
 
 from backend.app.core.config import settings  # noqa: E402
-from backend.app.db.models import Certificado, Job, Nota, Processo  # noqa: E402
-from backend.app.db.session import SessionLocal, engine  # noqa: E402
+from backend.app.db.models import Certificado, Empresa, Job, Nota, NsuControle, Processo  # noqa: E402
+from backend.app.db.session import SessionLocal, engine, init_db  # noqa: E402
 from backend.app.main import app  # noqa: E402
 from backend.app.services import certificado_metadata_service, certificados_service, legacy_ingestion_service, legacy_processing_service, secrets_service  # noqa: E402
 from backend.app.services.certificado_metadata_service import CertificadoMetadata, CertificadoMetadataError  # noqa: E402
@@ -497,7 +497,111 @@ def test_autocadastro_empresa_existente_usa_nsu_recomendado(monkeypatch):
             assert job.payload_json["nsu_inicio"] == 345
 
 
-def test_autocadastro_empresa_nova_ignora_nsu_recomendado(monkeypatch):
+def test_execucao_real_aplica_nsu_inicio_usuario_no_motor_e_estado(monkeypatch):
+    init_db()
+
+    class FakeConfig:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+        def validar(self):
+            return None
+
+    class FakeLegacy:
+        Config = FakeConfig
+        INDEX_FIELDS = []
+
+        def __init__(self):
+            self.estados = []
+            self.chamadas = []
+
+        def salvar_estado(self, cnpj, ultimo_nsu):
+            self.estados.append((cnpj, int(ultimo_nsu)))
+
+        def executar_baixa_empresa(self, **kwargs):
+            self.chamadas.append(kwargs)
+            return {
+                "empresa": kwargs["config"].cnpj,
+                "cnpj": kwargs["config"].cnpj,
+                "pasta_saida": None,
+                "status": "finalizado",
+                "ultimo_nsu": kwargs["inicio"],
+            }
+
+    fake_legacy = FakeLegacy()
+    monkeypatch.setattr(legacy_processing_service, "_load_legacy_module", lambda processo_id: fake_legacy)
+    monkeypatch.setattr(
+        legacy_processing_service.cnpj_enrichment_service,
+        "enriquecer_cnpjs_do_processo",
+        lambda db, processo_id, certificado_id=None: {"cnpjs_total": 0},
+    )
+
+    storage = get_storage_service()
+    storage_key = "certificados/teste-nsu-inicial.pfx"
+    storage.put_bytes(storage_key, b"pfx-bytes", content_type="application/x-pkcs12")
+
+    with SessionLocal() as db:
+        empresa = Empresa(nome="Empresa NSU Execucao LTDA", cnpj="22333444000163", ambiente="producao", ativo=True)
+        db.add(empresa)
+        db.flush()
+        certificado = Certificado(
+            empresa_id=empresa.id,
+            nome="Certificado NSU Execucao",
+            storage_key=storage_key,
+            ativo=True,
+        )
+        db.add(certificado)
+        db.flush()
+        ref = secrets_service.build_certificado_senha_ref(certificado.id)
+        secrets_service.save_secret(db, ref, "pfx_password", "senha-teste")
+        certificado.senha_secret_ref = ref
+        processo = Processo(
+            empresa_id=empresa.id,
+            certificado_id=certificado.id,
+            tipo="consulta_nfse",
+            status="rodando",
+            nsu_inicio=1000,
+            limite=1,
+            pausa=0,
+            gerar_pdf_espelho=True,
+            baixar_pdf_oficial=False,
+        )
+        db.add(processo)
+        db.flush()
+        job = Job(
+            processo_id=processo.id,
+            empresa_id=empresa.id,
+            certificado_id=certificado.id,
+            tipo="consulta_nfse",
+            status="rodando",
+            payload_json={
+                "empresa_id": empresa.id,
+                "certificado_id": certificado.id,
+                "nsu_inicio": 1000,
+                "limite": 1,
+                "pausa": 0,
+                "gerar_pdf_espelho": True,
+                "baixar_pdf_oficial": False,
+            },
+        )
+        db.add(job)
+        db.commit()
+
+        result = legacy_processing_service.executar_consulta_nfse_legado(db, storage, processo, job, "worker-nsu")
+        controle = (
+            db.query(NsuControle)
+            .filter(NsuControle.empresa_id == empresa.id, NsuControle.certificado_id == certificado.id)
+            .first()
+        )
+
+    assert result["ok"] is True
+    assert fake_legacy.chamadas[0]["inicio"] == 1000
+    assert fake_legacy.estados[0] == ("22333444000163", 1000)
+    assert controle is not None
+    assert controle.ultimo_nsu == 1000
+
+
+def test_autocadastro_empresa_nova_respeita_nsu_recomendado(monkeypatch):
     monkeypatch.setattr(
         certificado_metadata_service,
         "extrair_metadata_pfx",
@@ -508,7 +612,7 @@ def test_autocadastro_empresa_nova_ignora_nsu_recomendado(monkeypatch):
         assert response.status_code == 200
         payload = response.json()
         assert payload["empresa"]["cnpj"] == "22333444000162"
-        assert payload["processo"]["nsu_inicio"] is None
+        assert payload["processo"]["nsu_inicio"] == 987
 
         with SessionLocal() as db:
             job = (
@@ -518,7 +622,7 @@ def test_autocadastro_empresa_nova_ignora_nsu_recomendado(monkeypatch):
                 .first()
             )
             assert job is not None
-            assert job.payload_json["nsu_inicio"] is None
+            assert job.payload_json["nsu_inicio"] == 987
 
 
 def test_autocadastro_auto_iniciar_false_nao_cria_job(monkeypatch):

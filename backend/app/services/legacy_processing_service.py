@@ -16,7 +16,7 @@ from backend.app.core.config import settings
 from backend.app.db.models import Empresa, Job, Nota, Processo
 from backend.app.db.session import SessionLocal
 from backend.app.repositories import certificados_repo, empresas_repo
-from backend.app.services import legacy_ingestion_service, logs_service, nsu_control_service, secrets_service
+from backend.app.services import cnpj_enrichment_service, legacy_ingestion_service, logs_service, nsu_control_service, secrets_service
 from backend.app.services.storage_service import StorageService, get_storage_service
 
 
@@ -516,7 +516,29 @@ def executar_consulta_nfse_legado(
         }
         config = _build_legacy_config(legacy, empresa_item)
         nsu_inicio_efetivo = nsu_inicio
-        if nsu_inicio_efetivo is None:
+        if nsu_inicio_efetivo is not None:
+            nsu_inicio_efetivo = int(nsu_inicio_efetivo)
+            processo.nsu_inicio = nsu_inicio_efetivo
+            db.add(processo)
+            legacy.salvar_estado(config.cnpj, nsu_inicio_efetivo)
+            nsu_control_service.atualizar_ultimo_nsu(
+                db,
+                empresa_id=int(empresa.id),
+                certificado_id=int(certificado.id),
+                cnpj=str(empresa.cnpj),
+                ultimo_nsu=nsu_inicio_efetivo,
+                origem="inicio_usuario",
+            )
+            logs_service.registrar_log(
+                db,
+                processo.id,
+                empresa.id,
+                "info",
+                "NSU inicial informado pelo usuario aplicado",
+                {"nsu_inicio": nsu_inicio_efetivo, "certificado_id": certificado.id},
+            )
+            db.commit()
+        else:
             nsu_inicio_efetivo = nsu_control_service.obter_ultimo_nsu(
                 db,
                 empresa_id=int(empresa.id),
@@ -681,6 +703,39 @@ def executar_consulta_nfse_legado(
                 "info",
                 "NSU central atualizado ao final do processo",
                 {"ultimo_nsu": ultimo_nsu_final},
+            )
+        db.commit()
+        try:
+            logs_service.registrar_log(
+                db,
+                processo.id,
+                empresa.id,
+                "info",
+                "Enriquecimento Invertexto pos-certificado iniciado",
+                {"certificado_id": certificado.id},
+            )
+            resumo_enriquecimento = cnpj_enrichment_service.enriquecer_cnpjs_do_processo(
+                db,
+                processo_id=int(processo.id),
+                certificado_id=int(certificado.id),
+            )
+            logs_service.registrar_log(
+                db,
+                processo.id,
+                empresa.id,
+                "info",
+                "Enriquecimento Invertexto pos-certificado finalizado",
+                resumo_enriquecimento,
+            )
+        except Exception as exc:
+            db.rollback()
+            logs_service.registrar_log(
+                db,
+                processo.id,
+                empresa.id,
+                "warning",
+                "Enriquecimento Invertexto pos-certificado falhou sem interromper a consulta ADN",
+                {"erro": str(exc), "certificado_id": certificado.id},
             )
         logs_service.registrar_log(
             db,
