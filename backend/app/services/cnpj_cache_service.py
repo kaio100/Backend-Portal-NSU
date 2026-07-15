@@ -55,6 +55,30 @@ def get_cache_valido(db: Session, cnpj: str, fonte: str = DEFAULT_FONTE) -> dict
     return _cache_to_dict(cache)
 
 
+def get_caches_validos(
+    db: Session,
+    cnpjs: set[str] | list[str],
+    fonte: str = DEFAULT_FONTE,
+) -> dict[str, dict[str, Any]]:
+    """Busca em lote (sem chamada externa) as consultas de CNPJ ja cacheadas
+    e ainda validas, evitando N+1 quando anotando uma lista de notas."""
+    cnpjs_digits = {only_digits(cnpj) for cnpj in cnpjs if only_digits(cnpj)}
+    if not cnpjs_digits:
+        return {}
+    hoje = _today()
+    rows = (
+        db.query(CnpjCache)
+        .filter(CnpjCache.cnpj.in_(cnpjs_digits))
+        .filter(CnpjCache.fonte == fonte)
+        .all()
+    )
+    return {
+        cache.cnpj: _cache_to_dict(cache)
+        for cache in rows
+        if cache.data_expiracao is not None and cache.data_expiracao >= hoje
+    }
+
+
 def salvar_cache(
     db: Session,
     cnpj: str,

@@ -23,7 +23,10 @@ from backend.app.services.operational_fields_service import (
     simples_xml_from_codes,
 )
 from backend.app.services.retencoes_calculo_service import calcular_retencoes_esperadas, parse_decimal_xml
-from backend.app.services.retencoes_regras_service import obter_regra_por_subitem, resolver_subitem_lc116
+from backend.app.services.retencoes_regras_service import (
+    normalizar_subitem_lc116,
+    obter_regra_por_subitem,
+)
 from backend.app.services.storage_service import (
     StorageService,
     build_pdf_espelho_key,
@@ -77,12 +80,6 @@ def _parse_decimal(value: str) -> Decimal | None:
         return Decimal(value)
     except InvalidOperation:
         return None
-
-
-def _decimal_equal(left: Decimal | None, right: Decimal | None) -> bool:
-    if left is None or right is None:
-        return False
-    return left.quantize(Decimal("0.01")) == right.quantize(Decimal("0.01"))
 
 
 def _ano_mes(row: dict[str, str]) -> tuple[str, str]:
@@ -211,13 +208,113 @@ def _sum_existing_decimals(*values: str) -> str:
     return str(sum(valid))
 
 
-def _bool_iss_retido(value: str, valor_iss_retido: str = "") -> bool:
-    text = (value or "").strip().lower()
-    if text in {"1", "s", "sim", "true", "retido"}:
-        return True
-    if text in {"2", "0", "n", "nao", "não", "false"}:
-        return False
-    return (parse_decimal_xml(valor_iss_retido) or Decimal("0")) > 0
+TP_RET_ISSQN_DESCRICAO = {
+    "1": "Não Retido",
+    "2": "Retido pelo Tomador",
+    "3": "Retido pelo Intermediário",
+}
+
+
+def identificar_iss_retido(root: ElementTree.Element) -> tuple[bool, str]:
+    """Determina se o ISS foi retido, usando o XML como fonte principal.
+
+    A NFS-e Nacional usa `tpRetISSQN` com dominio proprio (1=Nao Retido,
+    2=Retido pelo Tomador, 3=Retido pelo Intermediario) - diferente do
+    dominio booleano ("1"=Sim/"2"=Nao) usado por campos legados no estilo
+    ABRASF (IssRetido/indISSRet/RetencaoISS). Por isso cada campo precisa
+    da sua propria interpretacao, em vez de tratar todos como sinonimos.
+    """
+    tp_ret = _find_text(root, "tpRetISSQN")
+    if tp_ret:
+        retido = tp_ret in {"2", "3"}
+        descricao = TP_RET_ISSQN_DESCRICAO.get(tp_ret, "Retido pelo Tomador" if retido else "Não Retido")
+        return retido, descricao
+
+    flag = _find_text(root, "ISSRetido", "IssRetido", "indISSRet", "RetencaoISS")
+    if flag:
+        text = flag.strip().lower()
+        retido = text in {"1", "s", "sim", "true", "retido"}
+        return retido, "Retido pelo Tomador" if retido else "Não Retido"
+
+    valor_iss_retido = _find_text(root, "vISSRet", "ValorIssRetido", "ValorISSRetido")
+    if (parse_decimal_xml(valor_iss_retido) or Decimal("0")) > 0:
+        return True, "Retido pelo Tomador"
+
+    return False, "Não Retido"
+
+
+CAMPOS_CODIGO_SERVICO_PRIORIDADE: tuple[str, ...] = (
+    "cTribNac",
+    "cTribMun",
+    "itemListaServico",
+    "ItemListaServico",
+    "codigoServico",
+    "CodigoServico",
+    "CodigoTributacaoMunicipio",
+    "cServMun",
+    "cServ",
+)
+# cNBS (Nomenclatura Brasileira de Servicos) e proposital-mente EXCLUIDO
+# daqui: e uma classificacao diferente da LC116 e um codigo NBS numerico
+# pode coincidir em tamanho (4 ou 6 digitos) com um codigo LC116 valido,
+# levando a derivar um subitem_lc116 errado e aplicar regra fiscal (IRRF/
+# CSRF/INSS/ISS) do subitem errado. O NBS e capturado separadamente no
+# campo "codigo_nbs" do resumo, sem nunca alimentar subitem_lc116.
+
+
+def _formatar_codigo_servico_display(raw: str) -> str:
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    digits = _text_digits(raw)
+    if len(digits) == 6:
+        return f"{digits[0:2]}.{digits[2:4]}.{digits[4:6]}"
+    if len(digits) == 4:
+        return f"{digits[0:2]}.{digits[2:4]}"
+    if re.fullmatch(r"\d{1,2}\.\d{1,2}(\.\d{1,2})?", raw):
+        return raw
+    return raw
+
+
+def extrair_codigo_servico_xml(root: ElementTree.Element) -> dict[str, str]:
+    """Extrai codigo de servico/subitem LC116 do XML, testando varios campos
+    por local-name (sem depender de namespace), na ordem de prioridade da
+    NFS-e Nacional -> campos municipais -> nomenclaturas legadas ABRASF.
+
+    Nunca usa um default silencioso: se nenhum campo produzir um subitem
+    valido, retorna subitem_lc116 vazio para que o alerta correto seja gerado.
+    """
+    primeiro_valor_bruto: tuple[str, str] | None = None
+    for nome in CAMPOS_CODIGO_SERVICO_PRIORIDADE:
+        valor = _find_text(root, nome)
+        if not valor:
+            continue
+        if primeiro_valor_bruto is None:
+            primeiro_valor_bruto = (nome, valor)
+        subitem = normalizar_subitem_lc116(valor)
+        if subitem:
+            return {
+                "codigo_servico_raw": valor,
+                "codigo_servico_display": _formatar_codigo_servico_display(valor),
+                "subitem_lc116": subitem,
+                "campo_origem_codigo_servico": nome,
+            }
+
+    if primeiro_valor_bruto is not None:
+        nome, valor = primeiro_valor_bruto
+        return {
+            "codigo_servico_raw": valor,
+            "codigo_servico_display": _formatar_codigo_servico_display(valor),
+            "subitem_lc116": "",
+            "campo_origem_codigo_servico": nome,
+        }
+
+    return {
+        "codigo_servico_raw": "",
+        "codigo_servico_display": "",
+        "subitem_lc116": "",
+        "campo_origem_codigo_servico": "",
+    }
 
 
 def _to_text(value) -> str:
@@ -287,30 +384,29 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
     valor_servico = _find_text(root, "ValorServicos", "ValorServico", "vServ")
     valor_base = _find_text(root, "vBC", "BaseCalculo", "ValorBaseCalculo") or valor_servico
     origem_base = "xml" if _find_text(root, "vBC", "BaseCalculo", "ValorBaseCalculo") else "fallback_valor_servico"
-    codigo_servico = _find_text(root, "cTribNac")
     pis = _find_text(root, "vPis", "ValorPis", "ValorPIS", "ValorPisRetido")
     cofins = _find_text(root, "vCofins", "ValorCofins", "ValorCOFINS", "ValorCofinsRetido")
     csll = _find_text(root, "vRetCSLL", "vCSLL", "ValorCsll", "ValorCSLL", "ValorCsllRetido")
     csrf_direto = _find_text(root, "ValorCsrf", "ValorCSRF", "ContribuicoesSociaisRetidas", "ValorContribuicoesSociaisRetidas")
     csrf = csrf_direto or _sum_existing_decimals(pis, cofins, csll)
-    valor_iss_retido = _find_text(root, "vISSRet", "ValorIssRetido", "ValorISSRetido")
-    iss_retido = _bool_iss_retido(_find_text(root, "tpRetISSQN", "ISSRetido", "IssRetido", "indISSRet", "RetencaoISS"), valor_iss_retido)
-    subitem_lc116 = resolver_subitem_lc116(
-        {
-            "cTribNac": codigo_servico,
-            "cServ": _find_text(root, "cServ"),
-            "cServMun": _find_text(root, "cServMun"),
-            "ItemListaServico": _find_text(root, "ItemListaServico", "itemListaServico"),
-            "CodigoServico": _find_text(root, "CodigoServico"),
-            "CodigoTributacaoMunicipio": _find_text(root, "CodigoTributacaoMunicipio"),
-        }
-    )
-    regra = obter_regra_por_subitem(subitem_lc116)
+    valor_iss_apurado = _find_text(root, "vISSQN", "ValorIss", "ValorISS", "ValorIssqn")
+    iss_retido, descricao_retencao_iss = identificar_iss_retido(root)
+    valor_iss_retido_raw = _find_text(root, "vISSRet", "ValorIssRetido", "ValorISSRetido")
+    # Quando o ISS e retido mas o XML nao traz um campo dedicado com o valor
+    # retido (comum na NFS-e Nacional), usa o ISSQN apurado como o valor retido.
+    valor_iss_retido = valor_iss_retido_raw or (valor_iss_apurado if iss_retido else "")
+
+    codigo_info = extrair_codigo_servico_xml(root)
+    codigo_servico = codigo_info["codigo_servico_raw"] or _find_text(root, "cTribNac")
+    codigo_servico_raw = codigo_info["codigo_servico_raw"]
+    codigo_servico_display = codigo_info["codigo_servico_display"]
+    subitem_lc116 = codigo_info["subitem_lc116"]
+    regra = obter_regra_por_subitem(subitem_lc116) if subitem_lc116 else None
     dados_fiscais = {
         "valor_servico": valor_servico,
         "valor_base_calculo": valor_base,
         "aliquota_iss": _find_text(root, "pAliqAplic", "pAliq", "Aliquota", "AliquotaServicos", "AliquotaIss"),
-        "valor_iss": _find_text(root, "vISSQN", "ValorIss", "ValorISS", "ValorIssqn"),
+        "valor_iss": valor_iss_apurado,
         "iss_retido": iss_retido,
         "valor_iss_retido": valor_iss_retido,
         "valor_irrf": _find_text(root, "vRetIRRF", "vIRRF", "ValorIr", "ValorIR", "ValorIrRetido", "ValorIRRF"),
@@ -326,7 +422,7 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
         "valor_liquido": valor_liquido,
         "simples_xml": simples_xml,
     }
-    calculo = calcular_retencoes_esperadas(dados_fiscais, regra)
+    calculo = calcular_retencoes_esperadas(dados_fiscais, regra, subitem_lc116=subitem_lc116 or None)
     return {
         "tipo_xml": "evento" if is_evento else "nota",
         "chave": _extract_chave_from_xml(xml_path, root),
@@ -353,6 +449,7 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
         "valor_csrf": csrf,
         "valor_iss_retido": valor_iss_retido,
         "iss_retido": iss_retido,
+        "descricao_retencao_iss": descricao_retencao_iss,
         "valor_outras_retencoes": dados_fiscais["valor_outras_retencoes"],
         "valor_deducoes": dados_fiscais["valor_deducoes"],
         "valor_desconto_incondicionado": dados_fiscais["valor_desconto_incondicionado"],
@@ -368,6 +465,8 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
         "incidencia_iss": extrair_incidencia_iss_xml(root) or "",
         "municipio": extrair_municipio_prestacao_xml(root) or "",
         "codigo_servico": codigo_servico,
+        "codigo_servico_raw": codigo_servico_raw,
+        "codigo_servico_display": codigo_servico_display,
         "codigo_servico_nacional": codigo_servico,
         "subitem_lc116": subitem_lc116 or "",
         "descricao_servico_nacional": _find_text(root, "xTribNac"),
@@ -495,6 +594,8 @@ def _aplicar_campos_fiscais_xml(nota_data: dict[str, Any], resumo: dict[str, Any
     }
     text_fields = {
         "subitem_lc116",
+        "codigo_servico_raw",
+        "codigo_servico_display",
         "codigo_servico_nacional",
         "origem_base_calculo",
         "status_iss",
@@ -554,13 +655,15 @@ def _build_pdf_key(cnpj: str, ano: str, mes: str, filename: str, tipo: str) -> s
 def _put_file_if_needed(storage: StorageService, storage_key: str, source_path: Path, content_type: str) -> tuple[dict[str, Any], bool]:
     data = source_path.read_bytes()
     if storage.exists(storage_key):
-        return {
+        meta = {
             "backend": storage.backend,
             "key": storage_key,
-            "path": str(storage.get_path(storage_key)),
             "size": len(data),
             "content_type": content_type,
-        }, False
+        }
+        if storage.backend == "local":
+            meta["path"] = str(storage.get_path(storage_key))
+        return meta, False
     return storage.put_bytes(storage_key, data, content_type=content_type), True
 
 
@@ -694,9 +797,6 @@ def ingerir_saida_legado(
 
             valor_liquido_planilha = _parse_decimal(row.get("valor_liquido", ""))
             valor_liquido_xml = _parse_decimal(xml_resumo.get("valor_liquido", ""))
-            status_valor_liquido = None
-            if valor_liquido_xml is not None:
-                status_valor_liquido = "OK" if _decimal_equal(valor_liquido_planilha or valor_liquido_xml, valor_liquido_xml) else "Divergente"
             nota_data = {
                 "empresa_id": processo.empresa_id,
                 "processo_id": processo.id,
@@ -717,8 +817,15 @@ def ingerir_saida_legado(
                 "inss": _parse_decimal(xml_resumo.get("inss", "")),
                 "csrf": _parse_decimal(xml_resumo.get("csrf", "")),
                 "valor_liquido": valor_liquido_planilha or valor_liquido_xml,
-                "valor_liquido_correto": valor_liquido_xml,
-                "status_valor_liquido": status_valor_liquido,
+                # Usa o valor liquido REALMENTE calculado (base - retencoes,
+                # considerando ISS retido/IRRF/INSS/CSRF) que ja vem pronto em
+                # xml_resumo (via calcular_retencoes_esperadas). Antes isto
+                # comparava planilha x XML (dois valores informados, quase
+                # sempre iguais entre si) e nunca detectava divergencia real,
+                # deixando o comparativo de tributos com um "OK" que nao
+                # batia com o alerta fiscal (que usa o valor calculado certo).
+                "valor_liquido_correto": _parse_decimal(xml_resumo.get("valor_liquido_correto", "")),
+                "status_valor_liquido": xml_resumo.get("status_valor_liquido") or None,
                 "simples_xml": row.get("simples_xml") or xml_resumo.get("simples_xml") or None,
                 "simples_nacional_xml": row.get("simples_nacional_xml") or xml_resumo.get("simples_nacional_xml") or None,
                 "status_simples_nacional": xml_resumo.get("status_simples_nacional") or None,

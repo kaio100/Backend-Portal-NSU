@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,6 +11,13 @@ class Settings(BaseSettings):
     storage_backend: str = "local"
     storage_root: str = "storage"
     storage_bucket: str = "nfse"
+    r2_bucket_name: str | None = None
+    r2_account_id: str | None = None
+    r2_endpoint_url: str | None = None
+    r2_access_key_id: str | None = None
+    r2_secret_access_key: str | None = None
+    r2_region: str = "auto"
+    r2_presigned_expires_seconds: int = 300
     database_url: str = "sqlite:///./data/nfse_backend.db"
     worker_dry_run: bool = True
     worker_dry_run_sleep: float = 0.2
@@ -32,6 +40,16 @@ class Settings(BaseSettings):
     invertexto_rpm: int = 30
     invertexto_delay_seconds: float = 0.6
     invertexto_cache_days: int = 30
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: str | None) -> str:
+        if not value:
+            return "sqlite:///./data/nfse_backend.db"
+        url = str(value).strip()
+        if url.startswith("postgresql://"):
+            return "postgresql+psycopg://" + url.removeprefix("postgresql://")
+        return url
 
     @property
     def cors_origin_list(self) -> list[str]:

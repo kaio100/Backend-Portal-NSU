@@ -100,6 +100,8 @@ def _ensure_runtime_columns() -> None:
             "status_iss": "VARCHAR(80)",
             "municipio": "VARCHAR(120)",
             "codigo_servico": "VARCHAR(80)",
+            "codigo_servico_raw": "VARCHAR(80)",
+            "codigo_servico_display": "VARCHAR(20)",
             "subitem_lc116": "VARCHAR(20)",
             "codigo_servico_nacional": "VARCHAR(80)",
             "descricao_servico_nacional": "TEXT",

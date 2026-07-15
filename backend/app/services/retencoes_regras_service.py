@@ -104,7 +104,19 @@ def obter_regra_por_subitem(subitem: str | None) -> dict[str, Any] | None:
 
 
 def resolver_subitem_lc116(dados_xml: dict[str, Any]) -> str | None:
-    for key in ("cTribNac", "codigo_servico_nacional", "codigo_servico", "cServ", "cServMun", "ItemListaServico", "itemListaServico", "CodigoServico", "CodigoTributacaoMunicipio"):
+    for key in (
+        "cTribNac",
+        "codigo_servico_nacional",
+        "codigo_servico",
+        "cTribMun",
+        "cServ",
+        "cServMun",
+        "ItemListaServico",
+        "itemListaServico",
+        "CodigoServico",
+        "codigoServico",
+        "CodigoTributacaoMunicipio",
+    ):
         subitem = normalizar_subitem_lc116(dados_xml.get(key))
         if subitem:
             return subitem

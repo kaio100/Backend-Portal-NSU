@@ -210,6 +210,8 @@ class Nota(TimestampMixin, Base):
     status_valor_liquido: Mapped[str | None] = mapped_column(String(80), nullable=True)
     municipio: Mapped[str | None] = mapped_column(String(120), nullable=True)
     codigo_servico: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    codigo_servico_raw: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    codigo_servico_display: Mapped[str | None] = mapped_column(String(20), nullable=True)
     subitem_lc116: Mapped[str | None] = mapped_column(String(20), nullable=True)
     codigo_servico_nacional: Mapped[str | None] = mapped_column(String(80), nullable=True)
     descricao_servico_nacional: Mapped[str | None] = mapped_column(Text, nullable=True)

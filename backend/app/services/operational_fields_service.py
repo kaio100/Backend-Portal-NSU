@@ -14,7 +14,7 @@ SLA_THRESHOLDS = {
     "baixa": {"warn": 72, "danger": 120},
 }
 
-OK_VALUES = {"", "ok", "correto", "correta", "sem divergencia", "sem divergência", "regular"}
+OK_VALUES = {"", "ok", "correto", "correta", "sem divergencia", "sem divergência", "regular", "nao se aplica", "não se aplica"}
 DIVERGENT_VALUES = {"divergente", "ausente", "erro", "inconsistente"}
 DIVERGENCE_HINTS = (
     "base zerada",
@@ -141,23 +141,32 @@ def _status_field_is_divergent(value: str | None) -> bool:
 
 
 def calcular_status_fila(nota) -> str:
+    observacao = getattr(nota, "conferencia_observacao", None) or getattr(nota, "observacao_interna", None)
+    alertas = getattr(nota, "alertas_fiscais", None)
+    tem_alerta_fiscal = bool(alertas) and not any(word in _norm(alertas) for word in ("correto", "correta"))
+
+    # A conferencia manual (marcar ok/corrigir/pendente) e a decisao final do
+    # revisor e tem que valer em qualquer lugar que mostre o status da nota
+    # (dashboard, conferencia S/Tomados, S/Prestados) assim que ele salva —
+    # nao fica condicionada a alertas_fiscais. Como alertas_fiscais agora e
+    # somente leitura (preenchido so pela analise automatica, nao editavel
+    # por usuario), nao ha risco de o usuario "forjar" esse resultado.
     manual = normalizar_status_fila(getattr(nota, "status_fila_manual", None))
     if manual:
         return manual
+
     documento = normalizar_status_fila(getattr(nota, "status_documento", None))
     if documento in {"cancelada", "substituida"}:
         return documento
 
-    observacao = getattr(nota, "conferencia_observacao", None) or getattr(nota, "observacao_interna", None)
-    alertas = getattr(nota, "alertas_fiscais", None)
     if _contains_divergence_hint(observacao):
         return "divergente"
     if _contains_divergence_hint(alertas):
         return "divergente"
-    if alertas and any(word in _norm(alertas) for word in ("correto", "correta")):
-        return "correta"
-    if alertas:
+    if tem_alerta_fiscal:
         return "divergente"
+    if alertas:
+        return "correta"
 
     for field in ("status_csrf", "status_irrf", "status_inss", "status_base_calculo", "status_valor_liquido"):
         if _status_field_is_divergent(getattr(nota, field, None)):
@@ -221,7 +230,7 @@ def calcular_sla_operacional(entrada_fila: datetime | None, prioridade_fila: str
     }
 
 
-def montar_campos_operacionais(nota) -> dict:
+def montar_campos_operacionais(nota, consulta_simples_api: str | None = None) -> dict:
     simples_xml = normalizar_simples_xml(
         getattr(nota, "simples_xml", None) or getattr(nota, "simples_nacional_xml", None)
     )
@@ -234,7 +243,7 @@ def montar_campos_operacionais(nota) -> dict:
     return {
         "simples_xml": simples_xml,
         "simples_nacional": simples_xml,
-        "consulta_simples_api": None,
+        "consulta_simples_api": consulta_simples_api,
         "status_simples_nacional": status_simples,
         "incidencia_iss": getattr(nota, "incidencia_iss", None),
         "status_fila": status_fila,
@@ -247,9 +256,12 @@ def montar_campos_operacionais(nota) -> dict:
     }
 
 
-def aplicar_campos_operacionais(nota):
-    for key, value in montar_campos_operacionais(nota).items():
+def aplicar_campos_operacionais(nota, consulta_simples_api: str | None = None):
+    campos = montar_campos_operacionais(nota, consulta_simples_api=consulta_simples_api)
+    for key, value in campos.items():
         if key in {"sla", "consulta_simples_api"}:
+            # consulta_simples_api vem da tabela cnpj_cache (join externo), nao
+            # deve ser persistido de volta na linha de `notas` via commit.
             set_committed_value(nota, key, value)
         else:
             setattr(nota, key, value)

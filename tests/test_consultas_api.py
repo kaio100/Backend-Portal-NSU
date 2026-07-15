@@ -400,6 +400,95 @@ def test_ingestao_sem_index_cria_nota_arquivos_e_endpoints(tmp_path):
         assert download.headers["content-type"] in {"application/xml", "application/pdf"}
 
 
+def test_ingestao_com_index_csv_usa_valor_liquido_realmente_calculado(tmp_path):
+    # Antes desta correcao, quando a ingestao vinha pelo index_nfse.csv (o
+    # fluxo mais comum), "valor_liquido_correto"/"status_valor_liquido" eram
+    # calculados comparando a planilha contra o proprio XML (dois valores
+    # informados, quase sempre iguais), nunca contra o valor liquido
+    # REALMENTE esperado apos as retencoes (que so entrava no texto do
+    # alerta fiscal). Isso fazia o "comparativo de tributos" mostrar "OK"
+    # numa nota que o proprio alertas_fiscais dizia estar divergente.
+    chave = "98765432109876543210987654321098765432109876"
+    xml_dir = tmp_path / "xml"
+    pdf_dir = tmp_path / "pdf"
+    xml_dir.mkdir()
+    pdf_dir.mkdir()
+    xml_path = xml_dir / f"{chave}.xml"
+    pdf_path = pdf_dir / f"{chave}.pdf"
+    # subitem 1.02: irrf=SIM (1.5%), pcc=NAO, inss=NAO.
+    # valor_servico=5700.00 -> irrf esperado = 85.50 (bate com o informado).
+    # CSRF foi retido no XML (208.05) mas a regra diz que nao deveria
+    # (pcc=NAO) -> "Divergente - retido indevido" e o liquido esperado tem
+    # que descontar os 208.05 que de fato saem do valor (5700 - 85.50 -
+    # 208.05 = 5406.45), mesmo que o vLiq informado no XML (5614.50) nao
+    # reflita isso.
+    xml_path.write_text(
+        """<?xml version="1.0" encoding="utf-8"?>
+<NFSe>
+  <infNFSe Id="NFS53001081237381902000125000000000098765432">
+    <DPS>
+      <infDPS>
+        <serv><cServ><cTribNac>010200</cTribNac></cServ></serv>
+        <valores>
+          <trib>
+            <tribFed><vRetIRRF>85.50</vRetIRRF><vRetCSLL>208.05</vRetCSLL></tribFed>
+            <tribMun><tpRetISSQN>1</tpRetISSQN></tribMun>
+          </trib>
+        </valores>
+      </infDPS>
+    </DPS>
+    <valores>
+      <vServPrest><vServ>5700.00</vServ></vServPrest>
+      <vBC>5700.00</vBC>
+      <vISSQN>114.00</vISSQN>
+      <pAliqAplic>2.00</pAliqAplic>
+      <vLiq>5614.50</vLiq>
+    </valores>
+  </infNFSe>
+</NFSe>
+""",
+        encoding="utf-8",
+    )
+    pdf_path.write_bytes(b"%PDF-1.4\n%teste\n")
+
+    index_path = tmp_path / "index_nfse.csv"
+    index_path.write_text(
+        "chave;xml_path;pdf_path;valor_liquido;prestador_cnpj;prestador_nome;tomador_cnpj;tomador_nome\n"
+        f"{chave};{xml_path};{pdf_path};;11222333000199;Prestador Indice;22333444000155;Tomador Indice\n",
+        encoding="utf-8",
+    )
+
+    init_db()
+    with SessionLocal() as db:
+        empresa = Empresa(nome="Empresa Indice LTDA", cnpj="22333444000155", ambiente="producao", ativo=True)
+        db.add(empresa)
+        db.flush()
+        processo = Processo(empresa_id=empresa.id, certificado_id=None, tipo="consulta_nfse", status="finalizado")
+        db.add(processo)
+        db.flush()
+
+        result = legacy_ingestion_service.ingerir_saida_legado(
+            db,
+            get_storage_service(),
+            processo,
+            tmp_path,
+        )
+        db.commit()
+
+        assert result["index_encontrado"] is True
+        assert result["notas_criadas"] == 1
+
+        nota = db.query(Nota).filter(Nota.chave == chave).first()
+        assert nota is not None
+        assert nota.status_csrf == "Divergente - retido indevido"
+        assert "Valor liquido esperado R$ 5406.45, informado R$ 5614.50." in (nota.alertas_fiscais or "")
+
+        # O bug: valor_liquido_correto ficava igual ao informado (5614.50),
+        # mascarando a divergencia que o proprio alerta ja apontava.
+        assert float(nota.valor_liquido_correto) == 5406.45
+        assert nota.status_valor_liquido == "Divergente"
+
+
 def test_notas_recentes_primeiro_por_updated_at_nao_data_emissao():
     now = datetime.now(timezone.utc)
     with TestClient(app) as client:

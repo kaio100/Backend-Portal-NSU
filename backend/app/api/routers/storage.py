@@ -12,11 +12,13 @@ TEST_CONTENT = b"storage ok"
 
 @router.get("/health")
 def storage_health():
-    return {
+    data = {
         "status": "ok",
         "backend": settings.storage_backend,
-        "root": settings.storage_root,
     }
+    if settings.storage_backend == "local":
+        data["root"] = settings.storage_root
+    return data
 
 
 @router.post("/test-write")
@@ -29,13 +31,15 @@ def storage_test_write():
 def storage_test_read():
     storage = get_storage_service()
     data = storage.get_bytes(TEST_KEY)
-    return {
+    response = {
         "backend": storage.backend,
         "key": TEST_KEY,
-        "path": str(storage.get_path(TEST_KEY)),
         "size": len(data),
         "content": data.decode("utf-8"),
     }
+    if storage.backend == "local":
+        response["path"] = str(storage.get_path(TEST_KEY))
+    return response
 
 
 @router.get("/list")

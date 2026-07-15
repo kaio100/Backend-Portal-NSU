@@ -66,6 +66,8 @@ class NotaListItem(BaseModel):
     empresa_nome: str | None = None
     municipio: str | None = None
     codigo_servico: str | None = None
+    codigo_servico_raw: str | None = None
+    codigo_servico_display: str | None = None
     subitem_lc116: str | None = None
     codigo_servico_nacional: str | None = None
     descricao_servico_nacional: str | None = None
@@ -95,7 +97,7 @@ class NotaListItem(BaseModel):
     valor_liquido_calculado: Decimal | None = None
     status_valor_liquido: str | None = None
     status_nota: str | None = None
-    observacao_interna: str | None = None
+    observacao_interna: str | None = Field(default=None, json_schema_extra={"readOnly": True})
     simples_nacional_api: str | None = None
     prioridade_manual: str | None = None
     status_csrf: str | None = None
@@ -124,7 +126,7 @@ class NotaListItem(BaseModel):
     regra_inss: str | None = None
     regra_observacao: str | None = None
     campos_ausentes_xml: list[str] | None = None
-    alertas_fiscais: str | list[str] | None = None
+    alertas_fiscais: str | list[str] | None = Field(default=None, json_schema_extra={"readOnly": True})
 
     @model_validator(mode="after")
     def preencher_aliases_frontend(self):
@@ -144,7 +146,6 @@ class NotaListItem(BaseModel):
         self.valor_inss = self.valor_inss or self.inss
         self.valor_csrf = self.valor_csrf or self.csrf
         self.status_nota = self.status_nota or self.status_documento
-        self.observacao_interna = self.observacao_interna or self.conferencia_observacao
         self.simples_xml = self.simples_xml or self.simples_nacional_xml
         self.simples_nacional = self.simples_nacional or self.simples_xml
         self.simples_nacional_api = self.simples_nacional_api or self.consulta_simples_api
@@ -180,6 +181,21 @@ class NotaConferenciaUpdate(BaseModel):
     operator_id: str | None = None
     device_id: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def bloquear_campos_somente_sistema(cls, data):
+        if isinstance(data, dict):
+            bloqueados = [
+                campo
+                for campo in ("observacao_interna", "alertas_fiscais")
+                if campo in data
+            ]
+            if bloqueados:
+                raise ValueError(
+                    "observacao_interna e alertas_fiscais sao campos somente leitura, preenchidos apenas pelo sistema."
+                )
+        return data
+
     @model_validator(mode="after")
     def normalizar(self):
         status = (self.conferencia_status or "").strip().lower()
@@ -187,20 +203,22 @@ class NotaConferenciaUpdate(BaseModel):
         if status not in allowed:
             raise ValueError("conferencia_status invalido.")
         self.conferencia_status = status
-        self.conferencia_observacao = (
-            self.conferencia_observacao or self.observacao_interna or self.observacao or ""
-        ).strip() or None
+        # "Observacao interna" e "Alertas fiscais" sao somente leitura: quem
+        # decide o que vai neles e o sistema (analise fiscal automatica),
+        # nao o usuario. Por isso `observacao_interna` nao entra mais na
+        # composicao de `conferencia_observacao` — so o campo "Observacao"
+        # (comentario livre do revisor) pode alterar esse valor.
+        self.conferencia_observacao = (self.conferencia_observacao or self.observacao or "").strip() or None
         self.observacao = (self.observacao or "").strip() or None
-        self.observacao_interna = (self.observacao_interna or "").strip() or None
+        self.observacao_interna = None
         self.responsavel = (self.responsavel or "").strip() or None
         self.prioridade = (self.prioridade or "").strip() or None
         self.prioridade_manual = (self.prioridade_manual or "").strip() or None
         self.status_fila_manual = (self.status_fila_manual or "").strip() or None
         self.divergencia = (self.divergencia or "").strip() or None
-        if isinstance(self.alertas_fiscais, list):
-            self.alertas_fiscais = "\n".join(str(item).strip() for item in self.alertas_fiscais if str(item).strip()) or None
-        elif self.alertas_fiscais is not None:
-            self.alertas_fiscais = str(self.alertas_fiscais).strip() or None
+        # Alertas fiscais so podem vir da analise automatica (calcular_retencoes_esperadas),
+        # nunca de um payload de usuario — mesmo que alguem chame a API direto.
+        self.alertas_fiscais = None
         self.atualizado_por = (self.atualizado_por or "").strip() or None
         self.operator_name = (self.operator_name or "").strip() or None
         self.operator_id = (self.operator_id or "").strip() or None

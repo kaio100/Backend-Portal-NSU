@@ -10,3 +10,4 @@ alembic
 python-multipart
 reportlab
 openpyxl
+boto3

@@ -201,6 +201,58 @@ def test_detalhe_documentos_eventos_e_comparativo_da_nota():
         assert comparativo.json()["items"][0]["status"] == "divergente"
 
 
+def test_comparativo_tributos_usa_calculado_correto_e_esconde_observacao_ok():
+    _reset_db()
+    empresa_id, processo_id, _ = _base_data()
+    with SessionLocal() as db:
+        empresa = db.get(Empresa, empresa_id)
+        nota = Nota(
+            empresa_id=empresa.id,
+            processo_id=processo_id,
+            chave="CHAVE-COMPARATIVO-1",
+            numero_nfse="456",
+            data_emissao=date(2026, 7, 1),
+            competencia=date(2026, 7, 1),
+            prestador_cnpj="22222222000182",
+            prestador_nome="Prestador Comparativo",
+            tomador_cnpj=empresa.cnpj,
+            tomador_nome=empresa.nome,
+            valor_servico=1000,
+            status_documento="autorizada",
+            # INSS: informado bate com o calculado -> nao deve aparecer como divergente
+            # nem usar o "informado" como se fosse o "calculado" (bug antigo).
+            inss=110,
+            inss_calculado=110,
+            status_inss="Correto",
+            # ISS: nao retido -> nao ha calculo/comparacao de aliquota a fazer.
+            iss=16,
+            iss_calculado=None,
+            status_iss="Nao Retido",
+            # IRRF: divergente de verdade, deve continuar aparecendo com observacao.
+            irrf=0,
+            irrf_calculado=15,
+            status_irrf="Divergente",
+        )
+        db.add(nota)
+        db.commit()
+        nota_id = int(nota.id)
+
+    with TestClient(app) as client:
+        response = client.get(f"/notas/{nota_id}/tributos-comparativo")
+        assert response.status_code == 200
+        items = {item["tributo"]: item for item in response.json()["items"]}
+
+        assert items["INSS"]["calculado"] == 110
+        assert items["INSS"]["status"] == "Correto"
+        assert items["INSS"]["observacao"] is None
+
+        assert items["ISS"]["status"] == "Nao Retido"
+        assert items["ISS"]["observacao"] is None
+
+        assert items["IRRF"]["status"] == "Divergente"
+        assert items["IRRF"]["observacao"] == "IRRF esperado diferente do informado"
+
+
 def test_eventos_globais_conferencia_e_busca_avancada():
     _reset_db()
     _, _, nota_id = _base_data()
@@ -219,7 +271,6 @@ def test_eventos_globais_conferencia_e_busca_avancada():
                 "prioridade_manual": "alta",
                 "divergencia": "ISS divergente",
                 "valor_liquido_correto": 850,
-                "alertas_fiscais": ["Revisar retencao"],
                 "atualizado_por": "Kaio",
             },
         )

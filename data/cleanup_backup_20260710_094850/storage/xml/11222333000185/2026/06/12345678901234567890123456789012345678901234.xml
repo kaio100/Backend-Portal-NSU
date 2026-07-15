@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<NFSe>
-  <ChaveAcesso>12345678901234567890123456789012345678901234</ChaveAcesso>
-  <NumeroNfse>42</NumeroNfse>
-  <DataEmissao>2026-06-27</DataEmissao>
-  <Competencia>2026-06-01</Competencia>
-  <ValorServicos>123.45</ValorServicos>
-</NFSe>

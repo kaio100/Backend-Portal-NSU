@@ -183,13 +183,27 @@ def listar_eventos(
     return {"items": [evento_item(db, evento) for evento in eventos], "total": total}
 
 
+# Status que representam "sem problema" - nao ha nada a corrigir, entao a
+# coluna de observacao do comparativo de tributos deve ficar vazia. Qualquer
+# outro status (Divergente, Divergente - retido indevido, Divergente - nao
+# retido, Depende de analise, etc.) mostra a observacao de alerta.
+_STATUS_TRIBUTO_SEM_PROBLEMA = {
+    "ok",
+    "correto",
+    "nao se aplica",
+    "nao retido",
+    "nao informado",
+    "informado",
+}
+
+
 def comparar_tributos_nota(db: Session, nota_id: int) -> dict:
     nota = notas_service.obter_nota(db, nota_id)
     specs = [
         ("IRRF", "irrf", "irrf_calculado", "status_irrf", "IRRF esperado diferente do informado"),
         ("CSRF", "csrf", "csrf_calculado", "status_csrf", "CSRF esperado diferente do informado"),
-        ("INSS", "inss", None, "status_inss", "INSS esperado diferente do informado"),
-        ("ISS", "iss", "iss_calculado", None, "ISS esperado diferente do informado"),
+        ("INSS", "inss", "inss_calculado", "status_inss", "INSS esperado diferente do informado"),
+        ("ISS", "iss", "iss_calculado", "status_iss", "ISS esperado diferente do informado"),
         ("VALOR_LIQUIDO", "valor_liquido", "valor_liquido_correto", "status_valor_liquido", "Valor liquido esperado diferente do informado"),
     ]
     items: list[dict] = []
@@ -202,7 +216,8 @@ def comparar_tributos_nota(db: Session, nota_id: int) -> dict:
         informado_dec = _decimal(informado) if informado is not None else Decimal("0")
         calculado_dec = _decimal(calculado) if calculado is not None else informado_dec
         diferenca = calculado_dec - informado_dec
-        final_status = status or ("ok" if abs(diferenca) < Decimal("0.01") else "divergente")
+        final_status = status or ("Correto" if abs(diferenca) < Decimal("0.01") else "Divergente")
+        sem_problema = final_status.strip().lower() in _STATUS_TRIBUTO_SEM_PROBLEMA
         items.append(
             {
                 "tributo": tributo,
@@ -210,7 +225,7 @@ def comparar_tributos_nota(db: Session, nota_id: int) -> dict:
                 "calculado": float(calculado_dec),
                 "diferenca": float(diferenca),
                 "status": final_status,
-                "observacao": observacao if final_status != "ok" else None,
+                "observacao": None if sem_problema else observacao,
             }
         )
     return {"nota_id": nota_id, "items": items}

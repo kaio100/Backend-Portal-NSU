@@ -163,12 +163,14 @@ async def update_nfse_compat(nota_id: int, request: Request, db: Session = Depen
     payload = await request.json()
     status = str(payload.get("conferencia_status") or payload.get("status_fila_manual") or payload.get("status") or "pendente")
     try:
+        nota_atual = notas_service.obter_nota(db, nota_id)
+        conferencia_observacao = payload.get("observacao") if "observacao" in payload else nota_atual.conferencia_observacao
         nota = notas_service.atualizar_conferencia(
             db,
             nota_id,
             NotaConferenciaUpdate(
                 conferencia_status=status if status in {"pendente", "ok", "corrigir", "observacao"} else "pendente",
-                conferencia_observacao=payload.get("observacao_interna") or payload.get("observacao"),
+                conferencia_observacao=conferencia_observacao,
                 responsavel=payload.get("responsavel"),
                 prioridade_manual=payload.get("prioridade_manual") or payload.get("prioridade"),
                 status_fila_manual=payload.get("status_fila_manual") or payload.get("status"),

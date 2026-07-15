@@ -13,7 +13,7 @@ os.environ["SECRETS_KEY"] = Fernet.generate_key().decode("utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from backend.app.db.models import Arquivo, Empresa, Evento, Job, LogProcesso, Nota, NsuControle, Processo  # noqa: E402
+from backend.app.db.models import Arquivo, CnpjCache, Empresa, Evento, Job, LogProcesso, Nota, NsuControle, Processo  # noqa: E402
 from backend.app.db.session import SessionLocal, init_db  # noqa: E402
 from backend.app.main import app  # noqa: E402
 from backend.app.repositories import notas_repo  # noqa: E402
@@ -39,6 +39,7 @@ def _reset_db() -> None:
         db.query(NsuControle).delete()
         db.query(Processo).delete()
         db.query(Empresa).delete()
+        db.query(CnpjCache).delete()
         db.commit()
 
 
@@ -173,6 +174,36 @@ def test_status_fila_prioridade_e_sla():
     assert calcular_sla_operacional(now - timedelta(hours=49), "alta")["tone"] == "danger"
 
 
+def test_status_nao_se_aplica_nao_e_tratado_como_divergente():
+    # NFS-e 16446: IRRF/CSRF/INSS "Nao se aplica" (tributo nao incide para
+    # o subitem/regra), ISS e valor liquido batendo com o informado, sem
+    # alertas_fiscais. "Nao se aplica" e um status neutro (nao ha o que
+    # reter), nao uma divergencia — mas o allowlist de status "ok" nao
+    # reconhecia essa string e tratava como divergente por padrao.
+    nota = Nota(
+        empresa_id=1,
+        chave="NFSE-16446",
+        alertas_fiscais=None,
+        status_irrf="Nao se aplica",
+        status_csrf="Nao se aplica",
+        status_inss="Nao se aplica",
+        status_iss="ok",
+        status_valor_liquido="OK",
+    )
+    assert calcular_status_fila(nota) == "correta"
+
+    # Uma divergencia real em qualquer um desses campos continua detectada.
+    nota_divergente = Nota(
+        empresa_id=1,
+        chave="NFSE-DIVERGENTE",
+        alertas_fiscais=None,
+        status_irrf="Divergente",
+        status_csrf="Nao se aplica",
+        status_inss="Nao se aplica",
+    )
+    assert calcular_status_fila(nota_divergente) == "divergente"
+
+
 def test_patch_responsavel_e_get_notas_campos_operacionais():
     _reset_db()
     empresa_id = _empresa()
@@ -221,3 +252,259 @@ def test_patch_responsavel_e_get_notas_campos_operacionais():
         assert item["prioridade_fila"] == "media"
         assert item["entrada_fila"] is not None
         assert item["sla"]["tone"] == "ok"
+
+
+def test_consulta_simples_api_preenchida_a_partir_do_cache_cnpj():
+    _reset_db()
+    empresa_id = _empresa()
+    with SessionLocal() as db:
+        empresa = db.get(Empresa, empresa_id)
+        db.add(
+            CnpjCache(
+                cnpj="22222222000182",
+                fonte="Invertexto",
+                consulta_simples_api="Optante S.N",
+                status_consulta="OK",
+                data_consulta=datetime.now(timezone.utc).date(),
+                data_expiracao=datetime.now(timezone.utc).date() + timedelta(days=10),
+            )
+        )
+        nota = notas_repo.create_nota(
+            db,
+            {
+                "empresa_id": empresa_id,
+                "chave": "CHAVE-CONSULTA-SIMPLES",
+                "numero_nfse": "20",
+                "prestador_cnpj": empresa.cnpj,
+                "tomador_cnpj": "22222222000182",
+                "valor_servico": 100,
+            },
+        )
+        nota_id = int(nota.id)
+        db.commit()
+
+    with TestClient(app) as client:
+        detalhe = client.get(f"/notas/{nota_id}")
+        assert detalhe.status_code == 200
+        assert detalhe.json()["consulta_simples_api"] == "Optante S.N"
+
+        listagem = client.get("/notas", params={"busca": "CHAVE-CONSULTA-SIMPLES"})
+        assert listagem.status_code == 200
+        assert listagem.json()[0]["consulta_simples_api"] == "Optante S.N"
+
+
+def test_consulta_simples_api_sem_cache_fica_none():
+    _reset_db()
+    empresa_id = _empresa()
+    with SessionLocal() as db:
+        empresa = db.get(Empresa, empresa_id)
+        nota = notas_repo.create_nota(
+            db,
+            {
+                "empresa_id": empresa_id,
+                "chave": "CHAVE-SEM-CACHE",
+                "numero_nfse": "21",
+                "prestador_cnpj": empresa.cnpj,
+                "tomador_cnpj": "33333333000199",
+                "valor_servico": 100,
+            },
+        )
+        nota_id = int(nota.id)
+        db.commit()
+
+    with TestClient(app) as client:
+        detalhe = client.get(f"/notas/{nota_id}")
+        assert detalhe.status_code == 200
+        assert detalhe.json()["consulta_simples_api"] is None
+
+
+def test_conferencia_ok_tira_nota_do_status_divergente():
+    _reset_db()
+    empresa_id = _empresa()
+    with SessionLocal() as db:
+        nota = notas_repo.create_nota(
+            db,
+            {
+                "empresa_id": empresa_id,
+                "chave": "CHAVE-CONFERENCIA-OK",
+                "numero_nfse": "30",
+                "prestador_cnpj": "00111222000133",
+                "tomador_cnpj": "11222333000181",
+                "valor_servico": 100,
+                "status_irrf": "divergente",
+            },
+        )
+        nota_id = int(nota.id)
+        db.commit()
+
+    with TestClient(app) as client:
+        antes = client.get(f"/notas/{nota_id}")
+        assert antes.status_code == 200
+        assert antes.json()["status_fila_final"] == "divergente"
+        assert antes.json()["divergencia_fila_final"] is True
+
+        patch = client.patch(
+            f"/notas/{nota_id}/conferencia",
+            headers={"X-Usuario-Nome": "Luana Assis"},
+            json={"conferencia_status": "ok"},
+        )
+        assert patch.status_code == 200
+        assert patch.json()["status_fila_final"] == "correta"
+        assert patch.json()["divergencia_fila_final"] is False
+        assert patch.json()["divergencia_fila_label"] == "Sem divergência"
+
+        depois = client.get(f"/notas/{nota_id}")
+        assert depois.status_code == 200
+        assert depois.json()["status_fila_final"] == "correta"
+        assert depois.json()["divergencia_fila_final"] is False
+
+
+def test_conferencia_ok_muda_status_mesmo_com_alertas_fiscais_presentes():
+    """A conferencia manual e a decisao final do revisor: marcar "ok" tem
+    que tirar a nota de "divergente" imediatamente, em qualquer lugar que
+    mostre o status (dashboard, conferencia S/Tomados, S/Prestados) — mesmo
+    que `alertas_fiscais` (somente leitura, preenchido so pelo sistema)
+    ainda tenha texto de uma analise anterior."""
+    _reset_db()
+    empresa_id = _empresa()
+    with SessionLocal() as db:
+        nota = notas_repo.create_nota(
+            db,
+            {
+                "empresa_id": empresa_id,
+                "chave": "CHAVE-ALERTA-PERSISTENTE",
+                "numero_nfse": "32",
+                "prestador_cnpj": "00111222000133",
+                "tomador_cnpj": "11222333000181",
+                "valor_servico": 320,
+                "alertas_fiscais": "IRRF esperado R$ 10.00, informado R$ 0.00.",
+            },
+        )
+        nota_id = int(nota.id)
+        db.commit()
+
+    with TestClient(app) as client:
+        patch = client.patch(
+            f"/notas/{nota_id}/conferencia",
+            headers={"X-Usuario-Nome": "Luana Assis"},
+            json={"conferencia_status": "ok"},
+        )
+        assert patch.status_code == 200
+        assert patch.json()["status_fila_final"] == "correta"
+        assert patch.json()["divergencia_fila_final"] is False
+
+        depois = client.get(f"/notas/{nota_id}")
+        assert depois.json()["status_fila_final"] == "correta"
+        assert depois.json()["divergencia_fila_final"] is False
+
+
+def test_alertas_fiscais_e_observacao_interna_ignoram_payload_do_usuario():
+    """`alertas_fiscais` e `observacao_interna` sao somente leitura: mesmo
+    que o payload de conferencia tente definir esses campos, o valor
+    existente (calculado pelo sistema) nao pode ser sobrescrito."""
+    _reset_db()
+    empresa_id = _empresa()
+    with SessionLocal() as db:
+        nota = notas_repo.create_nota(
+            db,
+            {
+                "empresa_id": empresa_id,
+                "chave": "CHAVE-CAMPOS-SOMENTE-SISTEMA",
+                "numero_nfse": "33",
+                "prestador_cnpj": "00111222000133",
+                "tomador_cnpj": "11222333000181",
+                "valor_servico": 320,
+                "alertas_fiscais": "IRRF esperado R$ 10.00, informado R$ 0.00.",
+            },
+        )
+        nota_id = int(nota.id)
+        db.commit()
+
+    with TestClient(app) as client:
+        patch = client.patch(
+            f"/notas/{nota_id}/conferencia",
+            headers={"X-Usuario-Nome": "Luana Assis"},
+            json={
+                "conferencia_status": "ok",
+                "alertas_fiscais": "Texto forjado pelo usuario",
+                "observacao_interna": "Nota interna forjada pelo usuario",
+            },
+        )
+        assert patch.status_code == 422
+        detalhe_bloqueado = client.get(f"/notas/{nota_id}")
+        assert detalhe_bloqueado.status_code == 200
+        assert detalhe_bloqueado.json()["alertas_fiscais"] == "IRRF esperado R$ 10.00, informado R$ 0.00."
+        assert detalhe_bloqueado.json()["observacao_interna"] is None
+        assert detalhe_bloqueado.json()["conferencia_observacao"] is None
+
+        apagar = client.patch(
+            f"/notas/{nota_id}/conferencia",
+            headers={"X-Usuario-Nome": "Luana Assis"},
+            json={
+                "conferencia_status": "ok",
+                "alertas_fiscais": "",
+                "observacao_interna": None,
+            },
+        )
+        assert apagar.status_code == 422
+
+        observacao = client.patch(
+            f"/notas/{nota_id}/conferencia",
+            headers={"X-Usuario-Nome": "Luana Assis"},
+            json={
+                "conferencia_status": "observacao",
+                "observacao": "Comentario do revisor",
+            },
+        )
+        assert observacao.status_code == 200
+        assert observacao.json()["conferencia_observacao"] == "Comentario do revisor"
+        assert observacao.json()["observacao_interna"] is None
+
+        compat = client.put(
+            f"/nfse/{nota_id}",
+            json={
+                "conferencia_status": "observacao",
+                "observacao_interna": "Texto interno via compat",
+            },
+        )
+        assert compat.status_code == 200
+        detalhe = client.get(f"/notas/{nota_id}")
+        assert detalhe.status_code == 200
+        assert detalhe.json()["conferencia_observacao"] == "Comentario do revisor"
+        assert detalhe.json()["observacao_interna"] is None
+
+
+def test_conferencia_pendente_reabre_status_calculado_automaticamente():
+    _reset_db()
+    empresa_id = _empresa()
+    with SessionLocal() as db:
+        nota = notas_repo.create_nota(
+            db,
+            {
+                "empresa_id": empresa_id,
+                "chave": "CHAVE-CONFERENCIA-REABRE",
+                "numero_nfse": "31",
+                "prestador_cnpj": "00111222000133",
+                "tomador_cnpj": "11222333000181",
+                "valor_servico": 100,
+                "status_irrf": "divergente",
+                "alertas_fiscais": "IRRF esperado R$ 10.00, informado R$ 0.00.",
+            },
+        )
+        nota_id = int(nota.id)
+        db.commit()
+
+    with TestClient(app) as client:
+        client.patch(
+            f"/notas/{nota_id}/conferencia",
+            headers={"X-Usuario-Nome": "Luana Assis"},
+            json={"conferencia_status": "ok"},
+        )
+        reaberta = client.patch(
+            f"/notas/{nota_id}/conferencia",
+            headers={"X-Usuario-Nome": "Luana Assis"},
+            json={"conferencia_status": "pendente"},
+        )
+        assert reaberta.status_code == 200
+        assert reaberta.json()["status_fila_final"] == "divergente"
+        assert reaberta.json()["divergencia_fila_final"] is True

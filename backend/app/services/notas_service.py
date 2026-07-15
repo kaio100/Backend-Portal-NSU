@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.config import settings
 from backend.app.db.models import Arquivo, Empresa, Nota
 from backend.app.repositories import arquivos_repo, empresas_repo, notas_repo
+from backend.app.services import cnpj_cache_service
 from backend.app.services.operational_fields_service import aplicar_campos_operacionais
 
 
@@ -184,7 +185,47 @@ def _selecionar_arquivos_visiveis(arquivos: list[Arquivo]) -> list[Arquivo]:
     return selecionados
 
 
-def _anotar_detalhe_frontend(nota: Nota) -> Nota:
+def _cnpj_contraparte(nota: Nota, direcao_nota: str) -> str | None:
+    """CNPJ da outra parte na transacao (nao o CNPJ da propria empresa),
+    usado para consultar o cache de Simples Nacional dessa contraparte."""
+    if direcao_nota == "emitida":
+        return _only_digits(nota.tomador_cnpj) or None
+    if direcao_nota == "recebida":
+        return _only_digits(nota.prestador_cnpj) or None
+    return _only_digits(nota.prestador_cnpj) or _only_digits(nota.tomador_cnpj) or None
+
+
+def _consultas_simples_api_lote(db: Session, notas: list[Nota]) -> dict[int, str | None]:
+    """Resolve consulta_simples_api por nota a partir do cache de CNPJ ja
+    consultado (sem chamada externa), em lote para evitar N+1."""
+    empresa_cnpj_cache: dict[int | None, str] = {}
+    cnpj_por_nota: dict[int, str] = {}
+    for nota in notas:
+        empresa_id = getattr(nota, "empresa_id", None)
+        if empresa_id not in empresa_cnpj_cache:
+            empresa_cnpj_cache[empresa_id] = _empresa_cnpj_nota(nota)
+        direcao = classificar_direcao_nota(nota, empresa_cnpj_cache[empresa_id])
+        cnpj = _cnpj_contraparte(nota, direcao)
+        if cnpj:
+            cnpj_por_nota[int(nota.id)] = cnpj
+
+    cnpjs = set(cnpj_por_nota.values())
+    if not cnpjs:
+        return {}
+    caches = cnpj_cache_service.get_caches_validos(db, cnpjs)
+
+    resultado: dict[int, str | None] = {}
+    for nota_id, cnpj in cnpj_por_nota.items():
+        cache = caches.get(cnpj)
+        if not cache:
+            continue
+        valor = cache.get("consulta_simples_api")
+        if valor and valor != "Não disponível":
+            resultado[nota_id] = valor
+    return resultado
+
+
+def _anotar_detalhe_frontend(nota: Nota, consulta_simples_api: str | None = None) -> Nota:
     empresa = getattr(nota, "empresa", None)
     if empresa is not None:
         setattr(nota, "empresa_nome", empresa.nome)
@@ -196,7 +237,6 @@ def _anotar_detalhe_frontend(nota: Nota) -> Nota:
     setattr(nota, "direcao_nota", direcao_nota)
     setattr(nota, "tipo_nota", tipo_nota)
     setattr(nota, "status_nota", nota.status_documento)
-    setattr(nota, "observacao_interna", nota.conferencia_observacao)
     setattr(nota, "simples_nacional_api", nota.status_simples_nacional)
     missing: list[str] = []
     for field, label in (
@@ -218,7 +258,7 @@ def _anotar_detalhe_frontend(nota: Nota) -> Nota:
         alertas.append("Campos obrigatorios ausentes no XML")
     if not getattr(nota, "alertas_fiscais", None):
         setattr(nota, "alertas_fiscais", "\n".join(alertas) or None)
-    return aplicar_campos_operacionais(nota)
+    return aplicar_campos_operacionais(nota, consulta_simples_api=consulta_simples_api)
 
 
 def listar_notas(
@@ -291,7 +331,8 @@ def listar_notas(
         offset=repo_offset,
         sort=sort,
     )
-    anotadas = [_anotar_detalhe_frontend(nota) for nota in notas]
+    mapa_consulta_simples = _consultas_simples_api_lote(db, notas)
+    anotadas = [_anotar_detalhe_frontend(nota, mapa_consulta_simples.get(int(nota.id))) for nota in notas]
     if classificar:
         anotadas = [
             nota for nota in anotadas
@@ -564,14 +605,16 @@ def obter_nota(db: Session, nota_id: int) -> Nota:
     nota = notas_repo.get_nota(db, nota_id)
     if nota is None:
         raise NotaServiceError("Nota nao encontrada.")
-    return _anotar_detalhe_frontend(nota)
+    consulta_simples_api = _consultas_simples_api_lote(db, [nota]).get(int(nota.id))
+    return _anotar_detalhe_frontend(nota, consulta_simples_api)
 
 
 def obter_nota_por_chave(db: Session, chave: str, empresa_id: int | None = None) -> Nota:
     nota = notas_repo.get_nota_by_chave_optional_empresa(db, chave, empresa_id=empresa_id)
     if nota is None:
         raise NotaServiceError("Nota nao encontrada.")
-    return _anotar_detalhe_frontend(nota)
+    consulta_simples_api = _consultas_simples_api_lote(db, [nota]).get(int(nota.id))
+    return _anotar_detalhe_frontend(nota, consulta_simples_api)
 
 
 def atualizar_conferencia(db: Session, nota_id: int, payload) -> Nota:
@@ -593,8 +636,20 @@ def atualizar_conferencia(db: Session, nota_id: int, payload) -> Nota:
         data["prioridade"] = prioridade
     if payload.prioridade_manual:
         data["prioridade_manual"] = payload.prioridade_manual
-    if getattr(payload, "status_fila_manual", None):
-        data["status_fila_manual"] = payload.status_fila_manual
+    # `calcular_status_fila` prioriza `status_fila_manual` sobre o recalculo
+    # automatico (baseado em alertas_fiscais/status_*). Sem isto, marcar uma
+    # nota como conferida ("ok") nao tirava ela do status "divergente" na
+    # fila, mesmo com a conferencia humana dizendo que estava correta.
+    status_fila_manual_explicito = getattr(payload, "status_fila_manual", None)
+    status_fila_da_conferencia = {"ok": "correta", "corrigir": "divergente"}.get(payload.conferencia_status)
+    if status_fila_manual_explicito:
+        data["status_fila_manual"] = status_fila_manual_explicito
+    elif status_fila_da_conferencia:
+        data["status_fila_manual"] = status_fila_da_conferencia
+    elif payload.conferencia_status == "pendente":
+        # Reabre a nota: volta a deixar o status da fila ser recalculado
+        # automaticamente em vez de manter uma decisao manual anterior.
+        data["status_fila_manual"] = None
     if payload.divergencia:
         data["divergencia"] = payload.divergencia
     if payload.valor_liquido_correto is not None:
@@ -605,9 +660,14 @@ def atualizar_conferencia(db: Session, nota_id: int, payload) -> Nota:
             data["status_valor_liquido"] = "ok" if liquido is not None and abs(liquido - correto) < 0.01 else "divergente"
         except Exception:
             data["status_valor_liquido"] = None
-    if payload.alertas_fiscais:
-        data["alertas_fiscais"] = payload.alertas_fiscais
-    return notas_repo.update_nota(db, nota, data)
+    # `alertas_fiscais` nunca vem do payload de conferencia — e sempre
+    # recalculado pela analise fiscal automatica, nunca editado por usuario.
+    notas_repo.update_nota(db, nota, data)
+    # Os campos derivados (status_fila_final, divergencia_fila_final, sla, etc.)
+    # foram calculados em `obter_nota` acima, ANTES desta atualizacao. Sem
+    # reanotar aqui, a resposta do PATCH devolvia o status antigo (ex.:
+    # "divergente") mesmo depois da conferencia humana marcar a nota como OK.
+    return obter_nota(db, nota_id)
 
 
 def listar_arquivos_nota(db: Session, nota_id: int) -> list[Arquivo]:
