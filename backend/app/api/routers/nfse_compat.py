@@ -161,6 +161,13 @@ def get_nfse_compat(nota_id: int, db: Session = Depends(get_db)):
 @router.put("/{nota_id}")
 async def update_nfse_compat(nota_id: int, request: Request, db: Session = Depends(get_db)):
     payload = await request.json()
+    campos_somente_sistema = {"observacao_interna", "alertas_fiscais"}
+    campos_bloqueados = sorted(campo for campo in campos_somente_sistema if campo in payload)
+    if campos_bloqueados:
+        raise HTTPException(
+            status_code=422,
+            detail="observacao_interna e alertas_fiscais sao campos somente leitura, preenchidos apenas pelo sistema.",
+        )
     status = str(payload.get("conferencia_status") or payload.get("status_fila_manual") or payload.get("status") or "pendente")
     try:
         nota_atual = notas_service.obter_nota(db, nota_id)

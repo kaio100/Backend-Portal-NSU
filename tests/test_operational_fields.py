@@ -467,11 +467,45 @@ def test_alertas_fiscais_e_observacao_interna_ignoram_payload_do_usuario():
                 "observacao_interna": "Texto interno via compat",
             },
         )
-        assert compat.status_code == 200
+        assert compat.status_code == 422
         detalhe = client.get(f"/notas/{nota_id}")
         assert detalhe.status_code == 200
         assert detalhe.json()["conferencia_observacao"] == "Comentario do revisor"
         assert detalhe.json()["observacao_interna"] is None
+
+
+def test_nfse_compat_bloqueia_alertas_fiscais_e_observacao_interna():
+    init_db()
+    with TestClient(app) as client:
+        empresa = client.post("/empresas", json={"nome": "Empresa Compat", "cnpj": "11222333000191"}).json()
+        with SessionLocal() as db:
+            nota = Nota(
+                empresa_id=int(empresa["id"]),
+                chave="CHAVE-COMPAT-READONLY",
+                numero_nfse="11",
+                prestador_cnpj="99888777000166",
+                tomador_cnpj="11222333000191",
+                valor_servico=100,
+                status_documento="Autorizada",
+                alertas_fiscais="Alerta gerado pelo sistema",
+            )
+            db.add(nota)
+            db.commit()
+            nota_id = nota.id
+
+        response = client.put(
+            f"/nfse/{nota_id}",
+            json={
+                "conferencia_status": "ok",
+                "alertas_fiscais": "Texto forjado",
+                "observacao_interna": "Interna forjada",
+            },
+        )
+
+        assert response.status_code == 422
+        detalhe = client.get(f"/notas/{nota_id}").json()
+        assert detalhe["alertas_fiscais"] == "Alerta gerado pelo sistema"
+        assert detalhe["observacao_interna"] is None
 
 
 def test_conferencia_pendente_reabre_status_calculado_automaticamente():
