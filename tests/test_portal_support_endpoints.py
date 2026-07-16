@@ -172,14 +172,14 @@ def _base_data():
         return int(empresa.id), int(processo.id), int(nota.id)
 
 
-def test_detalhe_documentos_eventos_e_comparativo_da_nota():
+def test_detalhe_documentos_eventos_e_comparativo_da_nota():
     _reset_db()
     _, _, nota_id = _base_data()
     with TestClient(app) as client:
         detalhe = client.get(f"/notas/{nota_id}")
         assert detalhe.status_code == 200
         assert detalhe.json()["empresa_nome"] == "Guardia Teste LTDA"
-        assert detalhe.json()["status_nota"] == "autorizada"
+        assert detalhe.json()["status_nota"] == "autorizada"
 
         arquivos_antigo = client.get(f"/notas/{nota_id}/arquivos")
         assert arquivos_antigo.status_code == 200
@@ -253,7 +253,46 @@ def test_comparativo_tributos_usa_calculado_correto_e_esconde_observacao_ok():
         assert items["IRRF"]["observacao"] == "IRRF esperado diferente do informado"
 
 
-def test_eventos_globais_conferencia_e_busca_avancada():
+def test_nota_substituida_sem_evento_explicito_exibe_evento_e_observacao_interna():
+
+    _reset_db()
+
+    _, _, nota_id = _base_data()
+
+    with SessionLocal() as db:
+
+        db.query(Evento).delete()
+
+        nota = db.get(Nota, nota_id)
+
+        nota.status_documento = "substituida"
+
+        nota.status_rotulo = "Substituida"
+
+        db.commit()
+
+    with TestClient(app) as client:
+
+        detalhe = client.get(f"/notas/{nota_id}")
+
+        assert detalhe.status_code == 200
+
+        assert "substituida" in detalhe.json()["observacao_interna"].lower()
+
+        eventos = client.get(f"/notas/{nota_id}/eventos")
+
+        assert eventos.status_code == 200
+
+        assert eventos.json()["total"] == 1
+
+        assert eventos.json()["items"][0]["status"] == "substituida"
+
+        assert "substituida" in eventos.json()["items"][0]["descricao"].lower()
+
+
+
+
+def test_eventos_globais_conferencia_e_busca_avancada():
     _reset_db()
     _, _, nota_id = _base_data()
     with TestClient(app) as client:

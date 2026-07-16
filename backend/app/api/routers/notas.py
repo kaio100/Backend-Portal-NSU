@@ -501,7 +501,32 @@ def get_nota(nota_id: int, db: Session = Depends(get_db)):
 @router.get("/{nota_id}/eventos")
 def list_eventos_nota(nota_id: int, db: Session = Depends(get_db)):
     try:
-        return portal_support_service.listar_eventos_nota(db, nota_id)
+        resultado = portal_support_service.listar_eventos_nota(db, nota_id)
+        if resultado.get("items"):
+            return resultado
+
+        nota = notas_service.obter_nota(db, nota_id)
+        status = (nota.status_documento or "").strip().lower()
+        if status not in {"cancelada", "substituida"}:
+            return resultado
+
+        rotulo = nota.status_rotulo or status.capitalize()
+        evento = {
+            "id": f"status-{nota.id}",
+            "tipo_evento": status,
+            "tipo": status,
+            "codigo_evento": status,
+            "codigo": status,
+            "descricao": f"Nota {rotulo.lower()}, conforme status identificado automaticamente no XML.",
+            "data_evento": nota.updated_at or nota.created_at,
+            "data": nota.updated_at or nota.created_at,
+            "protocolo": None,
+            "chave_afetada": nota.chave,
+            "status": status,
+            "arquivo_id": None,
+            "nsu": nota.ultimo_nsu,
+        }
+        return {"nota_id": nota_id, "items": [evento], "total": 1}
     except NotaServiceError as exc:
         _handle_error(exc)
 

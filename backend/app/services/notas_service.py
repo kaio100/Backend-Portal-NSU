@@ -237,6 +237,10 @@ def _anotar_detalhe_frontend(nota: Nota, consulta_simples_api: str | None = None
     setattr(nota, "direcao_nota", direcao_nota)
     setattr(nota, "tipo_nota", tipo_nota)
     setattr(nota, "status_nota", nota.status_documento)
+    status_documento = (nota.status_documento or "").strip().lower()
+    if status_documento in {"cancelada", "substituida"}:
+        rotulo = nota.status_rotulo or status_documento.capitalize()
+        setattr(nota, "observacao_interna", f"Nota {rotulo.lower()}, conforme status identificado automaticamente no XML.")
     setattr(nota, "simples_nacional_api", nota.status_simples_nacional)
     missing: list[str] = []
     for field, label in (
