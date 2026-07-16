@@ -40,6 +40,15 @@ def test_codigo_servico_seis_digitos_110101():
     assert "Subitem LC116 nao identificado" not in resumo["alertas_fiscais"]
 
 
+def test_cstat_100_nao_vira_substituida_por_texto_da_descricao():
+    xml = _xml_com_ctribnac(
+        "110101",
+        "<cStat>100</cStat><xDesc>Servico sujeito a substituicao tributaria</xDesc>",
+    )
+    resumo = parse_xml_resumo_bytes(xml)
+    assert resumo["status_documento"] == "autorizada"
+
+
 # ---------------------------------------------------------------------------
 # Teste 2 - Codigo de servico 170101
 # ---------------------------------------------------------------------------

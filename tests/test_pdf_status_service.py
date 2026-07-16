@@ -40,3 +40,16 @@ def test_status_do_pdf_prevalece_e_preenche_observacao():
     assert nota.status_documento == "cancelada"
     assert nota.status_rotulo == "Cancelada"
     assert "pdf oficial" in nota.conferencia_observacao.lower()
+
+
+def test_pdf_sem_carimbo_e_xml_autorizado_desfaz_falso_positivo():
+    nota = SimpleNamespace(
+        status_documento="substituida",
+        status_rotulo="Substituida",
+        conferencia_observacao="Nota substituida, conforme carimbo identificado automaticamente no PDF oficial.",
+    )
+    status = aplicar_status_pdf_oficial(nota, _pdf_com_carimbo(None), "autorizada")
+    assert status == "autorizada"
+    assert nota.status_documento == "autorizada"
+    assert nota.status_rotulo == "Autorizada"
+    assert nota.conferencia_observacao is None

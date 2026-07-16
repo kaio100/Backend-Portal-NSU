@@ -337,12 +337,15 @@ def _status_from_xml(root: ElementTree.Element) -> tuple[str | None, str | None]
     motivo = _find_text(root, "xMotivo", "motivo", "descEvento", "xEvento", "xDesc")
     text_blob = " ".join((element.text or "") for element in root.iter()).lower()
 
+    # cStat 100/107 identifica uma NFS-e autorizada. Ele deve prevalecer sobre
+    # palavras soltas na descricao do servico (por exemplo, "substituicao" ou
+    # "cancelamento" em texto fiscal), que antes geravam falso positivo.
+    if cstat in {"100", "107"}:
+        return "autorizada", "Autorizada"
     if _xml_contains_text(root, "cancel") or "cancelamento" in text_blob:
         return "cancelada", "Cancelada"
     if _xml_contains_text(root, "subst") or "substitu" in text_blob:
         return "substituida", "Substituida"
-    if cstat in {"100", "107"}:
-        return "autorizada", "Autorizada"
     if cstat == "101" or "erro" in motivo.lower():
         return "erro_emissao", "Erro na emissao"
     if cstat:
@@ -873,7 +876,7 @@ def ingerir_saida_legado(
             if pdf_path is not None and pdf_storage_key is not None:
                 pdf_bytes = pdf_path.read_bytes()
                 if pdf_tipo == "pdf_oficial":
-                    aplicar_status_pdf_oficial(nota, pdf_bytes)
+                    aplicar_status_pdf_oficial(nota, pdf_bytes, xml_resumo.get("status_documento"))
                 meta, imported = _put_file_if_needed(storage, pdf_storage_key, pdf_path, "application/pdf")
                 counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
                 if _registrar_arquivo(
@@ -1042,7 +1045,7 @@ def _ingerir_por_varredura(
 
             if pdf_path is not None and pdf_storage_key is not None:
                 pdf_bytes = pdf_path.read_bytes()
-                aplicar_status_pdf_oficial(nota, pdf_bytes)
+                aplicar_status_pdf_oficial(nota, pdf_bytes, resumo.get("status_documento"))
                 meta, imported = _put_file_if_needed(storage, pdf_storage_key, pdf_path, "application/pdf")
                 counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
                 if _registrar_arquivo(

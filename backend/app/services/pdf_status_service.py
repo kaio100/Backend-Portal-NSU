@@ -54,8 +54,21 @@ def detectar_status_pdf_oficial(pdf_bytes: bytes) -> str | None:
     return None
 
 
-def aplicar_status_pdf_oficial(nota, pdf_bytes: bytes) -> str | None:
+def aplicar_status_pdf_oficial(
+    nota,
+    pdf_bytes: bytes,
+    status_xml: str | None = None,
+) -> str | None:
     status = detectar_status_pdf_oficial(pdf_bytes)
+    # PDF oficial sem carimbo + XML autorizado desfaz falsos positivos antigos.
+    # Nao reverte quando o XML nao foi revalidado ou quando existe carimbo.
+    if status is None and (status_xml or "").strip().lower() == "autorizada":
+        nota.status_documento = "autorizada"
+        nota.status_rotulo = "Autorizada"
+        observacao = (nota.conferencia_observacao or "").lower()
+        if "carimbo identificado automaticamente no pdf oficial" in observacao:
+            nota.conferencia_observacao = None
+        return "autorizada"
     if status is None:
         return None
 

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from backend.app.db.models import Nota
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.services.pdf_status_service import aplicar_status_pdf_oficial
+from backend.app.services.legacy_ingestion_service import parse_xml_resumo_bytes
 from backend.app.services.storage_service import get_storage_service
 
 
@@ -52,13 +53,22 @@ def executar(empresa_id: int | None, dry_run: bool, batch_size: int = 200) -> Re
                     if not storage.exists(key):
                         relatorio.pdf_indisponivel += 1
                         continue
+                    status_xml = None
+                    if nota.xml_storage_key and storage.exists(nota.xml_storage_key):
+                        resumo_xml = parse_xml_resumo_bytes(
+                            storage.get_bytes(nota.xml_storage_key),
+                            filename=nota.xml_storage_key,
+                        )
+                        status_xml = resumo_xml.get("status_documento")
                     status_anterior = nota.status_documento
-                    status = aplicar_status_pdf_oficial(nota, storage.get_bytes(key))
+                    status = aplicar_status_pdf_oficial(nota, storage.get_bytes(key), status_xml)
                 except Exception:
                     relatorio.erros += 1
                     continue
-                if status is None:
+                if status is None or status == "autorizada":
                     relatorio.sem_carimbo += 1
+                    if status_anterior != status and status == "autorizada":
+                        relatorio.alteradas += 1
                     continue
                 if status == "cancelada":
                     relatorio.canceladas += 1
