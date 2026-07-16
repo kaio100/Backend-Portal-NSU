@@ -16,6 +16,7 @@ from backend.app.core.config import settings
 from backend.app.db.models import Evento, Nota, Processo
 from backend.app.repositories import arquivos_repo, notas_repo
 from backend.app.services.nfse_pdf_service import NfsePdfService, friendly_pdf_filename
+from backend.app.services.pdf_status_service import aplicar_status_pdf_oficial
 from backend.app.services.nfse_xml_parser import extrair_dados_nfse
 from backend.app.services.operational_fields_service import (
     calcular_status_simples_nacional_xml,
@@ -871,6 +872,8 @@ def ingerir_saida_legado(
 
             if pdf_path is not None and pdf_storage_key is not None:
                 pdf_bytes = pdf_path.read_bytes()
+                if pdf_tipo == "pdf_oficial":
+                    aplicar_status_pdf_oficial(nota, pdf_bytes)
                 meta, imported = _put_file_if_needed(storage, pdf_storage_key, pdf_path, "application/pdf")
                 counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
                 if _registrar_arquivo(
@@ -1039,6 +1042,7 @@ def _ingerir_por_varredura(
 
             if pdf_path is not None and pdf_storage_key is not None:
                 pdf_bytes = pdf_path.read_bytes()
+                aplicar_status_pdf_oficial(nota, pdf_bytes)
                 meta, imported = _put_file_if_needed(storage, pdf_storage_key, pdf_path, "application/pdf")
                 counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
                 if _registrar_arquivo(

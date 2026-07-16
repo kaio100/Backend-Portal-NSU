@@ -9,5 +9,6 @@ psycopg[binary]
 alembic
 python-multipart
 reportlab
+pypdf
 openpyxl
 boto3

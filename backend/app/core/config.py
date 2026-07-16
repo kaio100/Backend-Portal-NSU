@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     consultas_default_pausa: float = 0.0
     notas_recebidas_dia_corte_mes_anterior: int = 3
     download_lote_max_notas: int = 1000
+    pdf_status_revalidation_enabled: bool = True
+    pdf_status_revalidation_batch_size: int = 200
     secrets_key: str | None = None
     cors_origins: str = "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
     invertexto_enabled: bool = False

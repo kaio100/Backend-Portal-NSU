@@ -31,6 +31,7 @@ from backend.app.core.config import settings
 from backend.app.db.models import Job, LockProcessamento, Processo
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.services import consultas_service
+from backend.app.scripts.revalidar_status_pdfs import executar as revalidar_status_pdfs
 from backend.app.worker.worker import processar_proximo_job
 
 
@@ -100,11 +101,29 @@ def _enqueue_consultas_automaticas() -> dict:
         return consultas_service.enqueue_consultas_pendentes(db)
 
 
+async def _revalidar_status_pdfs_salvos() -> None:
+    try:
+        relatorio = await asyncio.to_thread(
+            revalidar_status_pdfs,
+            None,
+            False,
+            max(1, int(settings.pdf_status_revalidation_batch_size)),
+        )
+        print(f"Revalidacao de status por PDF oficial finalizada: {relatorio}")
+    except Exception as exc:
+        # A API continua disponivel mesmo se um storage externo estiver
+        # temporariamente indisponivel; a proxima inicializacao tenta de novo.
+        print(f"Revalidacao de status por PDF oficial falhou: {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     worker_tasks: list[asyncio.Task] = []
     scheduler_task: asyncio.Task | None = None
+    pdf_revalidation_task: asyncio.Task | None = None
+    if settings.api_worker_enabled and settings.pdf_status_revalidation_enabled:
+        pdf_revalidation_task = asyncio.create_task(_revalidar_status_pdfs_salvos())
     if settings.api_worker_enabled:
         worker_count = max(1, int(settings.api_worker_concurrency))
         worker_ids = _build_api_worker_ids(worker_count)
@@ -129,6 +148,10 @@ async def lifespan(app: FastAPI):
         for worker_task in worker_tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await worker_task
+        if pdf_revalidation_task is not None and not pdf_revalidation_task.done():
+            pdf_revalidation_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pdf_revalidation_task
 
 
 app = FastAPI(
