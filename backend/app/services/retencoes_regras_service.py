@@ -10,7 +10,18 @@ from typing import Any
 from openpyxl import load_workbook
 
 
-REGRAS_XLSX_PATH = Path(__file__).resolve().parents[3] / "data" / "RETENCOES_REGRAS.xlsx"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+REGRAS_XLSX_PATH = next(
+    (
+        path
+        for path in (
+            PROJECT_ROOT / "data" / "RETENCOES_REGRAS.xlsx",
+            PROJECT_ROOT / "RETENCOES_REGRAS.xlsx",
+        )
+        if path.exists()
+    ),
+    PROJECT_ROOT / "data" / "RETENCOES_REGRAS.xlsx",
+)
 
 
 def _sem_acentos(value: str) -> str:
