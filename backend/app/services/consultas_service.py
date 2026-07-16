@@ -261,6 +261,12 @@ def iniciar_consultas_automaticas(
     options: ConsultaIniciarRequest | None = None,
 ) -> dict[str, Any]:
     options = options or ConsultaIniciarRequest()
+    # Um NSU informado manualmente representa um novo ponto de partida. Nao
+    # pode concorrer com jobs antigos, pois o worker poderia reservar primeiro
+    # uma consulta criada com o estado anterior.
+    if options.nsu_inicio is not None:
+        desativar_consultas_automaticas(db)
+
     config = get_monitoramento_config(db)
     config.automatico_ativo = bool(options.automatico)
     config.intervalo_minutos = int(options.intervalo_minutos)
@@ -269,7 +275,16 @@ def iniciar_consultas_automaticas(
     db.add(config)
     db.flush()
 
-    return enqueue_consultas_pendentes(db, options=options, respeitar_ciclo=False)
+    resultado = enqueue_consultas_pendentes(db, options=options, respeitar_ciclo=False)
+
+    # O NSU inicial e o modo forcar valem apenas para esta partida. Ciclos
+    # automaticos posteriores devem continuar do NSU central ja alcancado e
+    # nao recriar a mesma faixa indefinidamente.
+    filtros_ciclos = options.model_copy(update={"nsu_inicio": None, "forcar": False})
+    config.filtros_json = filtros_ciclos.model_dump()
+    db.add(config)
+    db.commit()
+    return resultado
 
 
 def desativar_consultas_automaticas(

@@ -21,7 +21,7 @@ from backend.app.core.config import settings  # noqa: E402
 from backend.app.db.models import Certificado, Empresa, Job, Nota, NsuControle, Processo  # noqa: E402
 from backend.app.db.session import SessionLocal, engine, init_db  # noqa: E402
 from backend.app.main import app  # noqa: E402
-from backend.app.services import certificado_metadata_service, certificados_service, legacy_ingestion_service, legacy_processing_service, secrets_service  # noqa: E402
+from backend.app.services import certificado_metadata_service, certificados_service, consultas_service, legacy_ingestion_service, legacy_processing_service, secrets_service  # noqa: E402
 from backend.app.services.certificado_metadata_service import CertificadoMetadata, CertificadoMetadataError  # noqa: E402
 from backend.app.services.storage_service import get_storage_service  # noqa: E402
 from backend.app.worker.worker import processar_proximo_job  # noqa: E402
@@ -239,6 +239,52 @@ def test_consultas_nao_duplicam_sem_forcar_e_permitem_com_forcar():
         assert forced.status_code == 200
         assert forced.json()["totais"]["rodando"] == 1
         assert forced.json()["totais"]["pendentes"] == 1
+
+
+def test_nsu_inicial_cancela_fila_antiga_e_e_usado_apenas_na_nova_partida():
+    with TestClient(app) as client:
+        empresa = criar_empresa(client, cnpj="11222333000195", payload_nome="nome")
+        certificado_id = criar_certificado_elegivel(int(empresa["id"]))
+        base = {
+            "automatico": True,
+            "intervalo_minutos": 15,
+            "empresa_ids": [empresa["id"]],
+            "certificado_ids": [certificado_id],
+            "limite": 100,
+        }
+
+        primeira = client.post("/consultas/iniciar", json=base)
+        assert primeira.status_code == 200
+
+        with SessionLocal() as db:
+            antigo = db.query(Processo).filter(Processo.certificado_id == certificado_id).one()
+            antigo.status = "rodando"
+            job_antigo = db.query(Job).filter(Job.processo_id == antigo.id).one()
+            job_antigo.status = "rodando"
+            db.commit()
+
+        reinicio = client.post(
+            "/consultas/iniciar",
+            json={**base, "nsu_inicio": 4321, "forcar": True},
+        )
+        assert reinicio.status_code == 200
+        assert reinicio.json()["totais"]["rodando"] == 0
+        assert reinicio.json()["totais"]["pendentes"] == 1
+
+        with SessionLocal() as db:
+            processos = (
+                db.query(Processo)
+                .filter(Processo.certificado_id == certificado_id)
+                .order_by(Processo.id.asc())
+                .all()
+            )
+            assert [processo.status for processo in processos] == ["cancelado", "pendente"]
+            assert processos[-1].nsu_inicio == 4321
+            novo_job = db.query(Job).filter(Job.processo_id == processos[-1].id).one()
+            assert novo_job.payload_json["nsu_inicio"] == 4321
+            config = consultas_service.get_monitoramento_config(db)
+            assert config.filtros_json["nsu_inicio"] is None
+            assert config.filtros_json["forcar"] is False
 
 
 def test_desativar_consultas_cancela_pendentes_e_rodando_mesmo_com_payload_false():
