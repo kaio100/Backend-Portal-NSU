@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import io
+import os
 import re
+import tempfile
 import time
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -624,19 +629,28 @@ def _xml_resumos_por_nota(db: Session, notas: list[Nota]) -> dict[int, dict[str,
         if _canonical_tipo_arquivo(arquivo.tipo) == "XML" and arquivo.nota_id is not None:
             arquivos_por_nota.setdefault(int(arquivo.nota_id), arquivo)
 
-    resumos: dict[int, dict[str, str]] = {}
-    for nota in notas_pendentes:
-        arquivo = arquivos_por_nota.get(int(nota.id))
-        storage_key = arquivo.storage_key if arquivo is not None else getattr(nota, "xml_storage_key", None)
-        if not storage_key:
-            continue
-        filename = _nome_arquivo(arquivo) if arquivo is not None else storage_key.rsplit("/", 1)[-1]
-        try:
-            resumo = legacy_ingestion_service.parse_xml_resumo_bytes(storage.get_bytes(storage_key), filename)
-        except Exception:
-            continue
-        if resumo.get("tipo_xml") != "evento":
-            resumos[int(nota.id)] = resumo
+    tarefas: list[tuple[int, str, str]] = []
+    for nota in notas_pendentes:
+        arquivo = arquivos_por_nota.get(int(nota.id))
+        storage_key = arquivo.storage_key if arquivo is not None else getattr(nota, "xml_storage_key", None)
+        if storage_key:
+            filename = _nome_arquivo(arquivo) if arquivo is not None else storage_key.rsplit("/", 1)[-1]
+            tarefas.append((int(nota.id), storage_key, filename))
+
+    def carregar_xml(tarefa: tuple[int, str, str]):
+        nota_id, storage_key, filename = tarefa
+        try:
+            resumo = legacy_ingestion_service.parse_xml_resumo_bytes(storage.get_bytes(storage_key), filename)
+            return nota_id, resumo
+        except Exception:
+            return nota_id, None
+
+    resumos: dict[int, dict[str, str]] = {}
+    workers = max(1, min(16, int(settings.download_storage_workers or 16)))
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="relatorio-xml") as executor:
+        for nota_id, resumo in executor.map(carregar_xml, tarefas):
+            if resumo and resumo.get("tipo_xml") != "evento":
+                resumos[nota_id] = resumo
     return resumos
 
 
@@ -1063,6 +1077,22 @@ def _consultar_invertexto_cnpjs(db: Session, cnpjs: set[str]) -> dict[str, dict]
     return results
 
 
+def _invertexto_cache_cnpjs(db: Session, cnpjs: set[str]) -> dict[str, dict]:
+    """Le somente o cache; gerar relatorio nunca deve aguardar API externa."""
+    normalizados = {cnpj_cache_service.only_digits(cnpj) for cnpj in cnpjs if cnpj_cache_service.only_digits(cnpj)}
+    caches = cnpj_cache_service.get_caches_validos(db, normalizados)
+    return {
+        cnpj: _invertexto_result(
+            caches[cnpj].get("consulta_simples_api") or "Não disponível",
+            caches[cnpj].get("codigo_cnae"),
+            caches[cnpj].get("descricao_cnae"),
+        )
+        if cnpj in caches
+        else _invertexto_result("Não consultado")
+        for cnpj in normalizados
+    }
+
+
 def _relatorio_status_simples(simples_xml: str, consulta_api: str) -> str:
     if consulta_api == "Não consultado":
         return "Não comparado"
@@ -1165,7 +1195,6 @@ def _add_relatorio_sheet(wb: Workbook, title: str, rows: list[list], table_name:
     for row in rows:
         ws.append(row)
     header_fill = PatternFill("solid", fgColor="1F4E78")
-    even_fill = PatternFill("solid", fgColor="F7FBFF")
     status_ok_fill = PatternFill("solid", fgColor="E2F0D9")
     status_warn_fill = PatternFill("solid", fgColor="FCE4D6")
     thin_border = Border(left=Side(style="thin", color="D9E2F3"), right=Side(style="thin", color="D9E2F3"), top=Side(style="thin", color="D9E2F3"), bottom=Side(style="thin", color="D9E2F3"))
@@ -1178,13 +1207,14 @@ def _add_relatorio_sheet(wb: Workbook, title: str, rows: list[list], table_name:
         cell.border = thin_border
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     header_by_col = {index + 1: header for index, header in enumerate(RELATORIO_XLSX_HEADERS)}
+    wrap_alignment = Alignment(vertical="top", wrap_text=True)
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
         for cell in row:
             header = header_by_col[cell.column]
-            cell.border = thin_border
-            cell.alignment = Alignment(vertical="top", wrap_text=header in _RELATORIO_WRAP_HEADERS)
-            if cell.row % 2 == 0:
-                cell.fill = even_fill
+            # Estilos por celula sao a parte mais cara do openpyxl em relatorios
+            # grandes. Mantemos apenas formatos que carregam informacao fiscal.
+            if header in _RELATORIO_WRAP_HEADERS:
+                cell.alignment = wrap_alignment
             if header in _RELATORIO_MONEY_HEADERS:
                 cell.number_format = '#,##0.00'
             elif header in _RELATORIO_DATE_HEADERS and cell.value:
@@ -1207,12 +1237,12 @@ def _add_relatorio_sheet(wb: Workbook, title: str, rows: list[list], table_name:
     # Keep worksheet AutoFilter and styling without adding an XLSX table.
 
 
-def exportar_conferencia_xlsx(db: Session, filtros: NotasDownloadFiltros) -> tuple[bytes, str]:
+def exportar_conferencia_xlsx(db: Session, filtros: NotasDownloadFiltros) -> tuple[Path, str]:
     notas = [aplicar_campos_operacionais(nota) for nota in _buscar_notas_relatorio(db, filtros)]
     xml_resumos = _xml_resumos_por_nota(db, notas)
     empresa_cnpjs = _relatorio_empresa_cnpjs(db, notas)
     cnpjs_consulta = {cnpj for nota in notas for cnpj, _nome, _tipo in [_relatorio_party(nota, empresa_cnpjs.get(int(nota.empresa_id), ""))] if cnpj}
-    api_data = _consultar_invertexto_cnpjs(db, cnpjs_consulta)
+    api_data = _invertexto_cache_cnpjs(db, cnpjs_consulta)
     gerado_em = datetime.now().date()
     rows = [
         _relatorio_row(nota, xml_resumos.get(int(nota.id)), empresa_cnpjs.get(int(nota.empresa_id), ""), api_data, gerado_em)
@@ -1225,7 +1255,13 @@ def exportar_conferencia_xlsx(db: Session, filtros: NotasDownloadFiltros) -> tup
     _add_relatorio_sheet(wb, "Todas as Notas", rows, "TabelaTodasNotas")
     _add_relatorio_sheet(wb, "Notas Divergentes", divergentes, "TabelaNotasDivergentes")
     _add_relatorio_sheet(wb, "Notas Corretas", corretas, "TabelaNotasCorretas")
-    output = io.BytesIO()
-    wb.save(output)
     filename = f"relatorio_conferencia_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return output.getvalue(), filename
+    descriptor, temp_name = tempfile.mkstemp(prefix="relatorio_conferencia_", suffix=".xlsx")
+    os.close(descriptor)
+    temp_path = Path(temp_name)
+    try:
+        wb.save(temp_path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    return temp_path, filename

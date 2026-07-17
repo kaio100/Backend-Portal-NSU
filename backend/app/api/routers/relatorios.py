@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from backend.app.api.deps import get_db
 from backend.app.schemas.notas import NotasDownloadFiltros
@@ -25,9 +27,10 @@ class RelatorioConferenciaRequest(BaseModel):
 
 @router.post("/conferencia")
 def exportar_conferencia(payload: RelatorioConferenciaRequest, db: Session = Depends(get_db)):
-    data, filename = portal_support_service.exportar_conferencia_xlsx(db, payload.filtros)
-    return Response(
-        content=data,
+    path, filename = portal_support_service.exportar_conferencia_xlsx(db, payload.filtros)
+    return FileResponse(
+        path=path,
+        filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        background=BackgroundTask(path.unlink, missing_ok=True),
     )

@@ -363,7 +363,7 @@ def test_relatorio_conferencia_csv(monkeypatch):
     monkeypatch.setattr(
         portal_support_service,
         "_consultar_invertexto_cnpjs",
-        lambda db, cnpjs: {cnpj: {"consulta": "Não consultado", "cnae": "", "descricao_cnae": ""} for cnpj in cnpjs},
+        lambda db, cnpjs: (_ for _ in ()).throw(AssertionError("relatorio nao deve chamar API externa")),
     )
     with SessionLocal() as db:
         empresa = db.get(Empresa, empresa_id)
