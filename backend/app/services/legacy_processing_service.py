@@ -278,7 +278,7 @@ def _executar_baixa_empresa_compat(
                 )
                 session.commit()
     vazios = 0
-    max_vazios = 8
+    max_vazios = max(1, int(settings.nsu_max_vazios_consecutivos or 5))
     xmls_baixados = 0
     pdfs_gerados = 0
     ultimo_nsu = nsu_atual
@@ -516,6 +516,8 @@ def executar_consulta_nfse_legado(
         }
         config = _build_legacy_config(legacy, empresa_item)
         nsu_inicio_efetivo = nsu_inicio
+        reconciliacao_profunda = False
+        janela_reconciliacao = None
         if nsu_inicio_efetivo is not None:
             nsu_inicio_efetivo = int(nsu_inicio_efetivo)
             processo.nsu_inicio = nsu_inicio_efetivo
@@ -539,11 +541,16 @@ def executar_consulta_nfse_legado(
             )
             db.commit()
         else:
-            nsu_inicio_efetivo = nsu_control_service.obter_ultimo_nsu(
+            plano_nsu = nsu_control_service.planejar_inicio_consulta(
                 db,
                 empresa_id=int(empresa.id),
                 certificado_id=int(certificado.id),
             )
+            nsu_inicio_efetivo = int(plano_nsu["nsu_inicio"])
+            reconciliacao_profunda = bool(plano_nsu["reconciliacao_profunda"])
+            janela_reconciliacao = plano_nsu["janela_reconciliacao"]
+            processo.nsu_inicio = nsu_inicio_efetivo
+            db.add(processo)
             legacy.salvar_estado(config.cnpj, int(nsu_inicio_efetivo or 0))
             nsu_control_service.atualizar_ultimo_nsu(
                 db,
@@ -552,6 +559,20 @@ def executar_consulta_nfse_legado(
                 cnpj=str(empresa.cnpj),
                 ultimo_nsu=int(nsu_inicio_efetivo or 0),
                 origem="inicio_consulta",
+            )
+            logs_service.registrar_log(
+                db,
+                processo.id,
+                empresa.id,
+                "info",
+                "Janela de sobreposicao NSU aplicada",
+                {
+                    "nsu_confirmado": plano_nsu["nsu_confirmado"],
+                    "nsu_inicio": nsu_inicio_efetivo,
+                    "recuo": plano_nsu["recuo"],
+                    "reconciliacao_profunda": reconciliacao_profunda,
+                    "janela_reconciliacao": str(janela_reconciliacao) if janela_reconciliacao else None,
+                },
             )
             db.commit()
         pasta_saida_incremental = str(getattr(legacy, "ROOT_OUT", "") or "")
@@ -703,6 +724,21 @@ def executar_consulta_nfse_legado(
                 "info",
                 "NSU central atualizado ao final do processo",
                 {"ultimo_nsu": ultimo_nsu_final},
+            )
+        if reconciliacao_profunda and janela_reconciliacao is not None:
+            nsu_control_service.marcar_reconciliacao_concluida(
+                db,
+                empresa_id=int(empresa.id),
+                certificado_id=int(certificado.id),
+                janela=janela_reconciliacao,
+            )
+            logs_service.registrar_log(
+                db,
+                processo.id,
+                empresa.id,
+                "info",
+                "Reconciliacao profunda de NSU concluida",
+                {"janela_reconciliacao": str(janela_reconciliacao)},
             )
         db.commit()
         try:

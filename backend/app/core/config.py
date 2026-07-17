@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     consultas_scheduler_sleep: float = 1
     consultas_default_limite: int = 1000
     consultas_default_pausa: float = 0.0
+    nsu_lookback_normal: int = 50
+    nsu_lookback_reconciliacao: int = 1000
+    nsu_reconciliacao_hora_inicio: int = 18
+    nsu_reconciliacao_hora_fim: int = 5
+    nsu_reconciliacao_timezone: str = "America/Sao_Paulo"
+    nsu_max_vazios_consecutivos: int = 5
     notas_recebidas_dia_corte_mes_anterior: int = 3
     download_lote_max_notas: int = 10000
     download_storage_workers: int = 16

@@ -913,7 +913,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--inicio", type=int, default=None, help="NSU inicial. Se omitido, usa estado salvo")
     p.add_argument("--limite", type=int, default=500, help="Máximo de consultas")
     p.add_argument("--pausa", type=float, default=8, help="Pausa entre consultas em segundos")
-    p.add_argument("--vazios", type=int, default=8, help="Parar após N respostas vazias seguidas")
+    p.add_argument("--vazios", type=int, default=5, help="Parar após N respostas vazias seguidas")
     p.add_argument("--lote", action="store_true", help="Usa lote=true. Por padrão usa lote=false")
     p.set_defaults(func=cmd_baixar)
 

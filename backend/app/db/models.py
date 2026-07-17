@@ -176,6 +176,7 @@ class NsuControle(TimestampMixin, Base):
     cnpj: Mapped[str] = mapped_column(String(14), nullable=False, index=True)
     ultimo_nsu: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     origem: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    ultima_reconciliacao_em: Mapped[Date | None] = mapped_column(Date, nullable=True)
 
 
 class Nota(TimestampMixin, Base):

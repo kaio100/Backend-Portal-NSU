@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from cryptography.fernet import Fernet
 
@@ -290,6 +291,53 @@ def test_nsu_controle_nao_regride_e_considera_notas():
         )
         db.commit()
         assert nsu_control_service.obter_ultimo_nsu(db, empresa_id, certificado_id=1) == 250
+
+
+def test_planejamento_nsu_aplica_recuo_normal_fora_da_janela_noturna():
+    _reset_db()
+    empresa_id = _empresa()
+    with SessionLocal() as db:
+        nsu_control_service.atualizar_ultimo_nsu(
+            db, empresa_id, 1, "11222333000181", 10000, origem="teste"
+        )
+        db.commit()
+        plano = nsu_control_service.planejar_inicio_consulta(
+            db,
+            empresa_id,
+            1,
+            now=datetime(2026, 7, 17, 12, tzinfo=ZoneInfo("America/Sao_Paulo")),
+        )
+
+    assert plano["nsu_confirmado"] == 10000
+    assert plano["nsu_inicio"] == 9950
+    assert plano["recuo"] == 50
+    assert plano["reconciliacao_profunda"] is False
+
+
+def test_reconciliacao_nsu_acontece_uma_vez_na_mesma_janela_noturna():
+    _reset_db()
+    empresa_id = _empresa()
+    noite = datetime(2026, 7, 17, 19, tzinfo=ZoneInfo("America/Sao_Paulo"))
+    madrugada = datetime(2026, 7, 18, 2, tzinfo=ZoneInfo("America/Sao_Paulo"))
+    with SessionLocal() as db:
+        nsu_control_service.atualizar_ultimo_nsu(
+            db, empresa_id, 1, "11222333000181", 10000, origem="teste"
+        )
+        db.commit()
+        primeiro = nsu_control_service.planejar_inicio_consulta(db, empresa_id, 1, now=noite)
+        assert primeiro["janela_reconciliacao"] == date(2026, 7, 17)
+        nsu_control_service.marcar_reconciliacao_concluida(
+            db, empresa_id, 1, primeiro["janela_reconciliacao"]
+        )
+        db.commit()
+        segundo = nsu_control_service.planejar_inicio_consulta(db, empresa_id, 1, now=madrugada)
+
+    assert primeiro["nsu_inicio"] == 9000
+    assert primeiro["recuo"] == 1000
+    assert primeiro["reconciliacao_profunda"] is True
+    assert segundo["nsu_inicio"] == 9950
+    assert segundo["recuo"] == 50
+    assert segundo["reconciliacao_profunda"] is False
 
 
 def test_notas_recebidas_usa_cnpj_empresa_e_competencia_operacional():

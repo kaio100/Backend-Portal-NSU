@@ -160,6 +160,11 @@ def _ensure_runtime_columns() -> None:
         statements.append("UPDATE cnpj_cache SET json_resposta = COALESCE(json_resposta, json_completo)")
         statements.append("UPDATE cnpj_cache SET created_at = COALESCE(created_at, updated_at)")
 
+    if "nsu_controle" in table_names:
+        nsu_columns = {column["name"] for column in inspector.get_columns("nsu_controle")}
+        if "ultima_reconciliacao_em" not in nsu_columns:
+            statements.append("ALTER TABLE nsu_controle ADD COLUMN ultima_reconciliacao_em DATE")
+
     if not statements:
         return
 
