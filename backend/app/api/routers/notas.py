@@ -4,7 +4,9 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from backend.app.api.deps import get_db
 from backend.app.api.deps import get_storage
@@ -34,16 +36,17 @@ def _handle_error(exc: NotaServiceError) -> None:
     raise HTTPException(status_code=status_code, detail=message)
 
 
-def _zip_response(result: notas_download_service.DownloadLoteResult) -> Response:
-    return Response(
-        content=result.data,
+def _zip_response(result: notas_download_service.DownloadLoteResult) -> FileResponse:
+    return FileResponse(
+        path=result.path,
+        filename=result.filename,
         media_type="application/zip",
         headers={
-            "Content-Disposition": f'attachment; filename="{result.filename}"',
             "X-Notas-Count": str(result.notas_count),
             "X-Arquivos-Count": str(result.arquivos_count),
             "X-Arquivos-Ausentes": str(result.ausentes_count),
         },
+        background=BackgroundTask(result.path.unlink, missing_ok=True),
     )
 
 

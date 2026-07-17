@@ -32,7 +32,9 @@ class Settings(BaseSettings):
     consultas_default_limite: int = 1000
     consultas_default_pausa: float = 0.0
     notas_recebidas_dia_corte_mes_anterior: int = 3
-    download_lote_max_notas: int = 1000
+    download_lote_max_notas: int = 10000
+    download_storage_workers: int = 16
+    download_temp_max_age_hours: int = 24
     pdf_status_revalidation_enabled: bool = True
     pdf_status_revalidation_batch_size: int = 200
     secrets_key: str | None = None

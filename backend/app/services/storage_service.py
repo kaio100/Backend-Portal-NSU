@@ -139,7 +139,13 @@ class R2StorageService(StorageService):
                 aws_access_key_id=access_key_id,
                 aws_secret_access_key=secret_access_key,
                 region_name=self.region_name,
-                config=Config(signature_version="s3v4"),
+                config=Config(
+                    signature_version="s3v4",
+                    max_pool_connections=max(20, int(settings.download_storage_workers) * 2),
+                    connect_timeout=5,
+                    read_timeout=60,
+                    retries={"max_attempts": 3, "mode": "adaptive"},
+                ),
             )
 
     def put_bytes(self, key: str, data: bytes, content_type: Optional[str] = None) -> dict:

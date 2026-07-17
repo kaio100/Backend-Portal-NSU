@@ -105,8 +105,22 @@ def calcular_status_simples_nacional_xml(simples_xml: str | None) -> str:
 
 
 def calcular_status_simples_nacional(simples_xml: str | None, consulta_simples_api: str | None = None) -> str:
-    """Compatibility wrapper; consulta_simples_api is ignored by design."""
-    return calcular_status_simples_nacional_xml(simples_xml)
+    xml = normalizar_simples_xml(simples_xml)
+    api_raw = (consulta_simples_api or "").strip()
+    api = normalizar_simples_xml(api_raw)
+
+    if not api_raw or api_raw in {"Não consultado", "Não disponível"}:
+        return "Pendente"
+    if api_raw == "Erro na consulta":
+        return "Erro"
+    if not xml:
+        return "Não informado no XML"
+    if not api:
+        return "Pendente"
+
+    grupos_optantes = {"Optante S.N", "Simples Nacional"}
+    conferem = xml == api or (xml in grupos_optantes and api in grupos_optantes)
+    return "Correto" if conferem else "Divergente"
 
 
 def normalizar_status_fila(value: str | None) -> str | None:
@@ -234,7 +248,7 @@ def montar_campos_operacionais(nota, consulta_simples_api: str | None = None) ->
     simples_xml = normalizar_simples_xml(
         getattr(nota, "simples_xml", None) or getattr(nota, "simples_nacional_xml", None)
     )
-    status_simples = calcular_status_simples_nacional_xml(simples_xml)
+    status_simples = calcular_status_simples_nacional(simples_xml, consulta_simples_api)
     status_fila = calcular_status_fila(nota)
     divergente = status_fila in {"divergente", "cancelada", "substituida"}
     prioridade = calcular_prioridade_fila(nota, status_fila)

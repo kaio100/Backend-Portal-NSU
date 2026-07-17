@@ -67,7 +67,12 @@ def test_status_simples_nacional():
     assert calcular_status_simples_nacional_xml("Não optante") == "Informado no XML"
     assert calcular_status_simples_nacional_xml(None) == "Não informado no XML"
     assert calcular_status_simples_nacional_xml("valor estranho") == "Indefinido no XML"
-    assert calcular_status_simples_nacional("MEI", "Não optante") == "Informado no XML"
+    assert calcular_status_simples_nacional("MEI", "Não optante") == "Divergente"
+    assert calcular_status_simples_nacional("MEI", "MEI") == "Correto"
+    assert calcular_status_simples_nacional("Simples Nacional", "Optante S.N") == "Correto"
+    assert calcular_status_simples_nacional(None, "Não optante") == "Não informado no XML"
+    assert calcular_status_simples_nacional("MEI", None) == "Pendente"
+    assert calcular_status_simples_nacional("MEI", "Erro na consulta") == "Erro"
 
 
 def test_xml_extrai_incidencia_e_simples(tmp_path: Path):
@@ -245,7 +250,7 @@ def test_patch_responsavel_e_get_notas_campos_operacionais():
         assert item["simples_xml"] == "MEI"
         assert item["simples_nacional"] == "MEI"
         assert item["consulta_simples_api"] is None
-        assert item["status_simples_nacional"] == "Informado no XML"
+        assert item["status_simples_nacional"] == "Pendente"
         assert item["status_fila_final"] == "divergente"
         assert item["divergencia_fila_final"] is True
         assert item["divergencia_fila_label"] == "Com divergência"
@@ -287,10 +292,12 @@ def test_consulta_simples_api_preenchida_a_partir_do_cache_cnpj():
         detalhe = client.get(f"/notas/{nota_id}")
         assert detalhe.status_code == 200
         assert detalhe.json()["consulta_simples_api"] == "Optante S.N"
+        assert detalhe.json()["status_simples_nacional"] == "Não informado no XML"
 
         listagem = client.get("/notas", params={"busca": "CHAVE-CONSULTA-SIMPLES"})
         assert listagem.status_code == 200
         assert listagem.json()[0]["consulta_simples_api"] == "Optante S.N"
+        assert listagem.json()[0]["status_simples_nacional"] == "Não informado no XML"
 
 
 def test_consulta_simples_api_sem_cache_fica_none():

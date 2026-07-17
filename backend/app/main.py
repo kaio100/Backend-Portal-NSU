@@ -31,6 +31,7 @@ from backend.app.core.config import settings
 from backend.app.db.models import Job, LockProcessamento, Processo
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.services import consultas_service
+from backend.app.services.notas_download_service import limpar_zips_temporarios
 from backend.app.scripts.revalidar_status_pdfs import executar as revalidar_status_pdfs
 from backend.app.worker.worker import processar_proximo_job
 
@@ -119,6 +120,9 @@ async def _revalidar_status_pdfs_salvos() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    zips_removidos = limpar_zips_temporarios()
+    if zips_removidos:
+        print(f"Limpeza de downloads temporarios: {zips_removidos} ZIP(s) removido(s)")
     worker_tasks: list[asyncio.Task] = []
     scheduler_task: asyncio.Task | None = None
     pdf_revalidation_task: asyncio.Task | None = None

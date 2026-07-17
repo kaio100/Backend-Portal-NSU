@@ -1,0 +1,25 @@
+# Segredos e configuracoes locais
+.env
+.env.*
+!.env.example
+!.env.docker
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Dados gerados em execucao
+data/*.db
+data/*.log
+data/tmp_*/
+storage/
+saida_adn_nfse/
+
+# Temporarios e sistema operacional
+*.tmp
+*.zip
+.DS_Store
+Thumbs.db

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-import io
 import logging
+import os
+import tempfile
+import time
 import zipfile
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Iterable
 
 from sqlalchemy.orm import Session
@@ -22,6 +25,12 @@ from backend.app.services.storage_service import StorageService
 
 logger = logging.getLogger(__name__)
 
+# R2 has a non-trivial round-trip time. Fetching every object serially makes a
+# medium-sized ZIP exceed the HTTP timeout even though each individual object
+# is available. Keep concurrency bounded so downloads get faster without
+# exhausting the API worker or the storage connection pool.
+_TEMP_ZIP_PREFIX = "notas_nfse_"
+
 
 class NotasDownloadLoteError(RuntimeError):
     pass
@@ -30,7 +39,7 @@ class NotasDownloadLoteError(RuntimeError):
 @dataclass(frozen=True)
 class DownloadLoteResult:
     filename: str
-    data: bytes
+    path: Path
     notas_count: int
     arquivos_count: int
     ausentes_count: int
@@ -112,6 +121,29 @@ def _select_arquivos(
     return selected
 
 
+def _get_storage_bytes(storage: StorageService, arquivo: Arquivo) -> tuple[Arquivo, bytes | None, Exception | None]:
+    try:
+        return arquivo, storage.get_bytes(arquivo.storage_key), None
+    except Exception as exc:
+        return arquivo, None, exc
+
+
+def limpar_zips_temporarios(max_age_hours: int | None = None) -> int:
+    """Remove ZIPs abandonados por reinicios durante a geracao/download."""
+    horas = max(1, int(max_age_hours or settings.download_temp_max_age_hours or 24))
+    limite = time.time() - (horas * 3600)
+    removidos = 0
+    temp_root = Path(tempfile.gettempdir())
+    for path in temp_root.glob(f"{_TEMP_ZIP_PREFIX}*.zip"):
+        try:
+            if path.is_file() and path.stat().st_mtime < limite:
+                path.unlink()
+                removidos += 1
+        except OSError:
+            logger.warning("Nao foi possivel limpar ZIP temporario: %s", path)
+    return removidos
+
+
 def _buscar_notas(db: Session, payload: NotasDownloadLoteRequest, max_notas: int) -> list[Nota]:
     if payload.nota_ids:
         if len(payload.nota_ids) > max_notas:
@@ -167,14 +199,13 @@ def gerar_zip_notas(
     if not payload.incluir_xml and not payload.incluir_pdf:
         raise NotasDownloadLoteError("Selecione XML, PDF ou ambos para gerar o ZIP.")
 
-    max_notas = max(1, int(settings.download_lote_max_notas or 1000))
+    max_notas = max(1, int(settings.download_lote_max_notas or 10000))
     logger.info("Download lote iniciado: filtros=%s nota_ids=%s", payload.filtros, payload.nota_ids)
     notas = _buscar_notas(db, payload, max_notas)
     logger.info("Download lote: %s notas encontradas", len(notas))
     if not notas:
         raise NotasDownloadLoteError("Nenhuma nota encontrada para os filtros informados.")
 
-    zip_buffer = io.BytesIO()
     used_paths: set[str] = set()
     arquivos_adicionados = 0
     erros: list[str] = []
@@ -186,51 +217,87 @@ def gerar_zip_notas(
         if arquivo.nota_id is not None:
             arquivos_por_nota[int(arquivo.nota_id)].append(arquivo)
 
-    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as zip_file:
-        for nota in notas:
-            arquivos = arquivos_por_nota.get(int(nota.id), [])
-            selecionados = _select_arquivos(
-                arquivos,
-                incluir_xml=payload.incluir_xml,
-                incluir_pdf=payload.incluir_pdf,
-                preferir_pdf_original=payload.preferir_pdf_original,
-            )
-            registros_disponiveis += len(selecionados)
+    arquivos_selecionados: list[tuple[Nota, Arquivo]] = []
+    for nota in notas:
+        selecionados = _select_arquivos(
+            arquivos_por_nota.get(int(nota.id), []),
+            incluir_xml=payload.incluir_xml,
+            incluir_pdf=payload.incluir_pdf,
+            preferir_pdf_original=payload.preferir_pdf_original,
+        )
+        arquivos_selecionados.extend((nota, arquivo) for arquivo in selecionados)
 
-            for arquivo in selecionados:
-                tipo = _canonical_tipo(arquivo.tipo)
-                filename = _friendly_xml_filename(nota) if tipo == "XML" else _friendly_pdf_filename(nota)
-                folder = _zip_folder_for_arquivo(nota, tipo)
-                zip_path = _dedupe_path(f"{folder}/{filename}", used_paths)
-                try:
-                    zip_file.writestr(zip_path, storage.get_bytes(arquivo.storage_key))
-                    arquivos_adicionados += 1
-                except Exception as exc:
-                    logger.warning(
-                        "Arquivo ausente no storage durante download lote: arquivo_id=%s storage_key=%s erro=%s",
-                        arquivo.id,
-                        arquivo.storage_key,
-                        exc,
-                    )
-                    erros.append(
-                        f"Nota {nota.id} ({nota.chave}) - arquivo {arquivo.id} {tipo} indisponivel no storage."
-                    )
+    registros_disponiveis = len(arquivos_selecionados)
+    if registros_disponiveis == 0:
+        raise NotasDownloadLoteError("Nenhum arquivo disponivel para as notas filtradas.")
 
-        if registros_disponiveis == 0:
-            raise NotasDownloadLoteError("Nenhum arquivo disponivel para as notas filtradas.")
+    worker_count = max(1, min(32, int(settings.download_storage_workers or 16)))
+    descriptor, temp_name = tempfile.mkstemp(prefix=_TEMP_ZIP_PREFIX, suffix=".zip")
+    os.close(descriptor)
+    temp_path = Path(temp_name)
+    try:
+        with (
+            zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_STORED) as zip_file,
+            ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="zip-storage") as executor,
+        ):
+            # Processa blocos limitados para que resultados prontos nao mantenham
+            # milhares de PDFs simultaneamente na memoria enquanto o ZIP e gravado.
+            batch_size = worker_count * 4
+            for start in range(0, len(arquivos_selecionados), batch_size):
+                batch = arquivos_selecionados[start : start + batch_size]
+                resultados = executor.map(
+                    lambda item: _get_storage_bytes(storage, item[1]),
+                    batch,
+                )
+                for (nota, _), (arquivo, content, error) in zip(batch, resultados):
+                    tipo = _canonical_tipo(arquivo.tipo)
+                    filename = _friendly_xml_filename(nota) if tipo == "XML" else _friendly_pdf_filename(nota)
+                    folder = _zip_folder_for_arquivo(nota, tipo)
+                    zip_path = _dedupe_path(f"{folder}/{filename}", used_paths)
+                    if error is None and content is not None:
+                        # PDF normalmente ja e comprimido; tentar comprimi-lo de
+                        # novo gasta CPU sem reduzir tamanho de forma relevante.
+                        if tipo == "XML":
+                            zip_file.writestr(
+                                zip_path,
+                                content,
+                                compress_type=zipfile.ZIP_DEFLATED,
+                                compresslevel=1,
+                            )
+                        else:
+                            zip_file.writestr(zip_path, content, compress_type=zipfile.ZIP_STORED)
+                        arquivos_adicionados += 1
+                    else:
+                        logger.warning(
+                            "Arquivo ausente no storage durante download lote: arquivo_id=%s storage_key=%s erro=%s",
+                            arquivo.id,
+                            arquivo.storage_key,
+                            error,
+                        )
+                        erros.append(
+                            f"Nota {nota.id} ({nota.chave}) - arquivo {arquivo.id} {tipo} indisponivel no storage."
+                        )
 
-        if erros:
-            report = [
-                "RELATORIO DE ARQUIVOS AUSENTES",
-                "",
-                "Alguns arquivos vinculados no banco nao foram encontrados no storage.",
-                "",
-                *erros,
-            ]
-            zip_file.writestr(_dedupe_path("notas_nfse/RELATORIO_ERROS.txt", used_paths), "\n".join(report))
+            if erros:
+                report = [
+                    "RELATORIO DE ARQUIVOS AUSENTES",
+                    "",
+                    "Alguns arquivos vinculados no banco nao foram encontrados no storage.",
+                    "",
+                    *erros,
+                ]
+                zip_file.writestr(
+                    _dedupe_path("notas_nfse/RELATORIO_ERROS.txt", used_paths),
+                    "\n".join(report),
+                    compress_type=zipfile.ZIP_DEFLATED,
+                    compresslevel=1,
+                )
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
 
-    data = zip_buffer.getvalue()
     if arquivos_adicionados == 0 and not erros:
+        temp_path.unlink(missing_ok=True)
         raise NotasDownloadLoteError("Nenhum arquivo disponivel para as notas filtradas.")
 
     filename = f"notas_nfse_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
@@ -239,11 +306,11 @@ def gerar_zip_notas(
         len(notas),
         arquivos_adicionados,
         len(erros),
-        len(data),
+        temp_path.stat().st_size,
     )
     return DownloadLoteResult(
         filename=filename,
-        data=data,
+        path=temp_path,
         notas_count=len(notas),
         arquivos_count=arquivos_adicionados,
         ausentes_count=len(erros),
