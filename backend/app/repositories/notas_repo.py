@@ -152,7 +152,13 @@ def create_nota(db: Session, data: dict) -> Nota:
 
 def update_nota(db: Session, nota: Nota, data: dict) -> Nota:
     now = datetime.now(timezone.utc)
-    data.setdefault("importado_em", now)
+    data = dict(data)
+    importado_em_recebido = data.pop("importado_em", None)
+    # A data de importacao define a ordem estavel do dashboard. Reprocessar a
+    # janela de NSU nao transforma uma nota antiga em nota nova; alterar este
+    # campo durante a paginacao faz o mesmo ID aparecer em offsets diferentes.
+    if nota.importado_em is None:
+        data["importado_em"] = importado_em_recebido or now
     data.setdefault("updated_at", now)
     for key, value in data.items():
         setattr(nota, key, value)

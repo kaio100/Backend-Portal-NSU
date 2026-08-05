@@ -143,12 +143,45 @@ class NfsePdfService:
         y = self._draw_tributacao_federal(c, y, dados)
         y = self._draw_valor_total(c, y, dados)
         y = self._draw_totais_aproximados(c, y, dados)
-        self._draw_informacoes_complementares(c, y, dados)
+        self._draw_informacoes_complementares(c, y, dados)
+        self._draw_status_stamp(c, dados)
 
         c.save()
         return output_path
 
-    def _draw_header(self, c, y, dados):
+    def _draw_status_stamp(self, c, dados):
+
+        status = str(dados.get("status_documento") or "").strip().lower()
+
+        if status not in {"cancelada", "cancelado"}:
+
+            return
+
+        c.saveState()
+
+        try:
+
+            c.setFillAlpha(0.22)
+
+        except (AttributeError, TypeError):
+
+            pass
+
+        c.setFillColorRGB(0.82, 0.05, 0.08)
+
+        c.setFont("Helvetica-Bold", 58)
+
+        c.translate(PAGE_W / 2, PAGE_H / 2)
+
+        c.rotate(35)
+
+        c.drawCentredString(0, 0, "CANCELADA")
+
+        c.restoreState()
+
+
+
+    def _draw_header(self, c, y, dados):
         top = y
         c.setFont("Helvetica-Bold", 16)
         c.drawString(MARGIN_X, top - 6 * mm, "NFSe")

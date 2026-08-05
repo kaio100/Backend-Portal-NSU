@@ -567,6 +567,10 @@ def upsert_indexes(row_unico: Dict[str, str], ocorrencia: Dict[str, str]) -> Non
 
     existente = index_rows.get(chave)
     if existente:
+        tipo_novo = str(row_unico.get("tipo_documento") or "").strip().upper()
+        tipo_existente = str(existente.get("tipo_documento") or "").strip().upper()
+        novo_e_evento = tipo_novo in {"EVENTO", "EVENT"}
+        existente_e_nfse = tipo_existente in {"NFSE", "NFS-E"}
         # Mantém a nota como única por chave, mas atualiza último NSU e contador.
         existente_qtd = int(existente.get("qtd_ocorrencias") or "1")
         existente["ultimo_nsu"] = row_unico.get("ultimo_nsu", existente.get("ultimo_nsu", ""))
@@ -591,7 +595,8 @@ def upsert_indexes(row_unico: Dict[str, str], ocorrencia: Dict[str, str]) -> Non
             "xml_path",
         }
         for k, v in row_unico.items():
-            if v and (k in campos_atualizaveis or not existente.get(k)):
+            pode_atualizar_resumo = not (novo_e_evento and existente_e_nfse)
+            if v and ((k in campos_atualizaveis and pode_atualizar_resumo) or not existente.get(k)):
                 existente[k] = v
         index_rows[chave] = existente
     else:

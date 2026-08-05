@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     worker_real_max_limite: int = 1000
     worker_real_max_pausa: float = 0.0
     worker_consulta_lote_tamanho: int = 1000
+    worker_adn_lote: bool = True
     worker_temp_dir: str = "data/tmp_worker"
     api_worker_enabled: bool = True
     api_worker_sleep: float = 0.2

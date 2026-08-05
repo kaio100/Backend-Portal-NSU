@@ -118,11 +118,17 @@ def _canonical_tipo(tipo: str) -> str:
     return tipo
 
 
-def _gerar_pdf_espelho_path(xml_path: Path, row: dict[str, str], filename: str) -> Path:
+def _gerar_pdf_espelho_path(
+    xml_path: Path,
+    row: dict[str, str],
+    filename: str,
+    status_documento: str | None = None,
+) -> Path:
     output_dir = Path(settings.worker_temp_dir) / "pdf_espelho"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / filename
     dados = extrair_dados_nfse(xml_path, prefeitura_info=None)
+    dados["status_documento"] = status_documento or row.get("status_documento") or dados.get("status_documento")
     return NfsePdfService().gerar_danfse_espelho(dados, output_path)
 
 
@@ -710,6 +716,8 @@ def ingerir_saida_legado(
     pasta_saida: str | Path,
     max_rows: int | None = None,
     updated_after: datetime | None = None,
+    only_chaves: set[str] | None = None,
+    commit_every: int | None = None,
 ) -> dict[str, Any]:
     base_dir = Path(pasta_saida)
     index_path = base_dir / "index_nfse.csv"
@@ -725,11 +733,15 @@ def ingerir_saida_legado(
         "arquivos_registrados": 0,
         "arquivos_ausentes": 0,
         "erros": 0,
+        "avisos_pdf": 0,
+        "erros_detalhes": [],
     }
     if not index_path.exists():
         return _ingerir_por_varredura(db, storage, processo, base_dir, counters, updated_after=updated_after)
 
     rows = _read_index_rows(index_path)
+    if only_chaves is not None:
+        rows = [row for row in rows if (row.get("chave") or "").strip() in only_chaves]
     if updated_after is not None:
         rows = [
             row
@@ -742,6 +754,7 @@ def ingerir_saida_legado(
     counters["linhas_index"] = len(rows)
     empresa_cnpj = str(processo.empresa.cnpj if processo.empresa else processo.empresa_id)
 
+    linhas_processadas = 0
     for row in rows:
         try:
             chave = (row.get("chave") or "").strip()
@@ -793,11 +806,34 @@ def ingerir_saida_legado(
             status_rotulo = row.get("status_rotulo") or xml_resumo.get("status_rotulo") or None
             pdf_espelho_path = None
             if pdf_storage_key is None:
-                pdf_tipo = "pdf_espelho"
-                dados_pdf = extrair_dados_nfse(xml_path, prefeitura_info=None)
-                pdf_filename = friendly_pdf_filename(dados_pdf)
-                pdf_storage_key = build_pdf_espelho_key(empresa_cnpj, ano, mes, pdf_filename)
-                pdf_espelho_path = _gerar_pdf_espelho_path(xml_path, row, pdf_filename)
+                try:
+                    pdf_tipo = "pdf_espelho"
+                    dados_pdf = extrair_dados_nfse(xml_path, prefeitura_info=None)
+                    pdf_filename = friendly_pdf_filename(dados_pdf)
+                    pdf_storage_key = build_pdf_espelho_key(empresa_cnpj, ano, mes, pdf_filename)
+                    pdf_espelho_path = _gerar_pdf_espelho_path(
+                        xml_path,
+                        row,
+                        pdf_filename,
+                        status_documento=status_documento,
+                    )
+                except Exception as exc:
+                    # Falha ao montar o PDF nao pode impedir que a nota e o
+                    # XML, que sao os documentos fiscais de origem, entrem
+                    # no banco e aparecam no portal.
+                    pdf_tipo = ""
+                    pdf_storage_key = None
+                    pdf_espelho_path = None
+                    counters["avisos_pdf"] += 1
+                    if len(counters["erros_detalhes"]) < 20:
+                        counters["erros_detalhes"].append(
+                            {
+                                "chave": chave,
+                                "nsu": row.get("ultimo_nsu") or row.get("primeiro_nsu"),
+                                "etapa": "pdf_espelho",
+                                "erro": str(exc)[:500],
+                            }
+                        )
 
             valor_liquido_planilha = _parse_decimal(row.get("valor_liquido", ""))
             valor_liquido_xml = _parse_decimal(xml_resumo.get("valor_liquido", ""))
@@ -921,8 +957,23 @@ def ingerir_saida_legado(
                     counters["arquivos_registrados"] += 1
             elif row.get("pdf_path"):
                 counters["arquivos_ausentes"] += 1
-        except Exception:
+            linhas_processadas += 1
+            if commit_every and linhas_processadas % max(1, commit_every) == 0:
+                db.commit()
+        except Exception as exc:
             counters["erros"] += 1
+            if len(counters["erros_detalhes"]) < 20:
+                counters["erros_detalhes"].append(
+                    {
+                        "chave": (row.get("chave") or "").strip(),
+                        "nsu": row.get("ultimo_nsu") or row.get("primeiro_nsu"),
+                        "etapa": "ingestao",
+                        "erro": str(exc)[:500],
+                    }
+                )
+
+    if commit_every and linhas_processadas % max(1, commit_every) != 0:
+        db.commit()
 
     return counters
 
@@ -982,7 +1033,12 @@ def _ingerir_por_varredura(
                 dados_pdf = extrair_dados_nfse(xml_path, prefeitura_info=None)
                 pdf_filename = friendly_pdf_filename(dados_pdf)
                 pdf_storage_key = build_pdf_espelho_key(empresa_cnpj, ano, mes, pdf_filename)
-                pdf_espelho_path = _gerar_pdf_espelho_path(xml_path, resumo, pdf_filename)
+                pdf_espelho_path = _gerar_pdf_espelho_path(
+                    xml_path,
+                    resumo,
+                    pdf_filename,
+                    status_documento=resumo.get("status_documento"),
+                )
 
             nota_data = {
                 "empresa_id": processo.empresa_id,

@@ -296,7 +296,7 @@ def _executar_baixa_empresa_compat(
             if processo_id is not None and _processo_cancelado(processo_id):
                 parar = True
                 break
-            resultado = legacy.consultar_dfe(config, nsu_atual, lote=False)
+            resultado = legacy.consultar_dfe(config, nsu_atual, lote=bool(settings.worker_adn_lote))
             consultas_realizadas += 1
             raw_path = legacy.DIR_RAW / (
                 f"dfe_consulta_nsu_{nsu_atual}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -459,6 +459,7 @@ def executar_consulta_nfse_legado(
                 "limite_efetivo": limite,
                 "pausa": pausa,
                 "consulta_lote_tamanho": consulta_lote_tamanho,
+                "adn_lote": bool(settings.worker_adn_lote),
                 "gerar_pdf_espelho": gerar_pdf_espelho,
                 "baixar_pdf_oficial": baixar_pdf_oficial,
             },

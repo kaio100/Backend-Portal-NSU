@@ -140,7 +140,7 @@ def test_get_notas_todas_retorna_lista_completa_filtrada():
         assert {item["status_documento"] for item in payload["items"]} == {"autorizada"}
 
 
-def test_upsert_nota_existente_atualiza_importado_em_e_updated_at():
+def test_upsert_nota_existente_preserva_importado_em_e_atualiza_updated_at():
     _reset_db()
     empresa_id = _empresa()
     old = datetime.now(timezone.utc) - timedelta(days=4)
@@ -176,7 +176,8 @@ def test_upsert_nota_existente_atualiza_importado_em_e_updated_at():
         assert created is False
         assert nota.importado_em is not None
         assert nota.updated_at is not None
-        assert nota.importado_em > original_importado
+        assert nota.importado_em == original_importado
+        assert nota.updated_at > original_importado
         db.commit()
 
 

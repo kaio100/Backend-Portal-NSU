@@ -102,8 +102,25 @@ def _require(path: Path) -> Path:
     return path
 
 
-def _pdf_text(path: Path) -> str:
-    return "\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
+def _pdf_text(path: Path) -> str:
+    return "\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
+
+
+def test_pdf_espelho_cancelado_recebe_carimbo(tmp_path: Path):
+
+    xml_path = tmp_path / "cancelada.xml"
+
+    xml_path.write_text(_xml_minimo(), encoding="utf-8")
+
+    dados = extrair_dados_nfse(xml_path)
+
+    dados["status_documento"] = "cancelada"
+
+    output_path = tmp_path / "cancelada.pdf"
+
+    NfsePdfService().gerar_danfse_espelho(dados, output_path)
+
+    assert "CANCELADA" in _pdf_text(output_path)
 
 
 def test_pdf_service_gera_danfse_v1_compacto(tmp_path: Path):
