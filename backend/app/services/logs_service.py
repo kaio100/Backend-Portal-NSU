@@ -32,6 +32,7 @@ def listar_logs(
     empresa_id: int | None = None,
     limit: int = 100,
     offset: int = 0,
+    grupo: str | None = None,
 ) -> list[LogProcesso]:
     return logs_repo.list_logs(
         db,
@@ -39,4 +40,5 @@ def listar_logs(
         empresa_id=empresa_id,
         limit=limit,
         offset=offset,
+        grupo=grupo,
     )

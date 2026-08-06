@@ -5,8 +5,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db
-from backend.app.db.models import Certificado, Empresa, NsuControle, Processo
+from backend.app.api.deps import get_current_usuario, get_db, require_empresa_grupo
+from backend.app.db.models import Certificado, Empresa, NsuControle, Processo, Usuario
 from backend.app.services import nsu_control_service
 
 
@@ -63,7 +63,9 @@ def get_empresa_nsu(
     empresa_id: int,
     certificado_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
+    require_empresa_grupo(db, empresa_id, usuario)
     return _nsu_payload(db, empresa_id=empresa_id, certificado_id=certificado_id)
 
 
@@ -72,12 +74,14 @@ def get_nsu_status(
     empresa_id: int | None = Query(default=None),
     certificado_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     if empresa_id is not None:
+        require_empresa_grupo(db, empresa_id, usuario)
         payload = _nsu_payload(db, empresa_id=empresa_id, certificado_id=certificado_id)
         return {**payload, "items": [payload], "total": 1}
 
-    empresas = db.query(Empresa).order_by(Empresa.id.asc()).all()
+    empresas = db.query(Empresa).filter(Empresa.grupo == usuario.grupo).order_by(Empresa.id.asc()).all()
     items = [_nsu_payload(db, empresa_id=int(empresa.id), certificado_id=None) for empresa in empresas]
     ultimo_nsu = max((int(item.get("ultimo_nsu") or 0) for item in items), default=0)
     return {

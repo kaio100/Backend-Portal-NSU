@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db, get_storage
+from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_arquivo_grupo
+from backend.app.db.models import Usuario
 from backend.app.services import arquivos_service
 from backend.app.services.arquivos_service import ArquivoServiceError
 from backend.app.services.storage_service import StorageService
@@ -39,8 +40,10 @@ def download_arquivo(
     inline: bool = False,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        require_arquivo_grupo(db, arquivo_id, usuario)
         prepared = arquivos_service.preparar_download_arquivo(db, storage, arquivo_id)
     except ArquivoServiceError as exc:
         message = str(exc)
@@ -56,8 +59,10 @@ def visualizar_arquivo(
     arquivo_id: int,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        require_arquivo_grupo(db, arquivo_id, usuario)
         prepared = arquivos_service.preparar_download_arquivo(db, storage, arquivo_id)
     except ArquivoServiceError as exc:
         message = str(exc)

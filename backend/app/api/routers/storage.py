@@ -1,6 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
+from backend.app.api.deps import get_current_usuario, get_db
 from backend.app.core.config import settings
+from backend.app.db.models import Empresa, Usuario
 from backend.app.services.storage_service import get_storage_service
 
 
@@ -22,18 +25,20 @@ def storage_health():
 
 
 @router.post("/test-write")
-def storage_test_write():
+def storage_test_write(usuario: Usuario = Depends(get_current_usuario)):
     storage = get_storage_service()
-    return storage.put_bytes(TEST_KEY, TEST_CONTENT, content_type="text/plain")
+    key = f"health/{usuario.grupo}/storage-test.txt"
+    return storage.put_bytes(key, TEST_CONTENT, content_type="text/plain")
 
 
 @router.get("/test-read")
-def storage_test_read():
+def storage_test_read(usuario: Usuario = Depends(get_current_usuario)):
     storage = get_storage_service()
-    data = storage.get_bytes(TEST_KEY)
+    key = f"health/{usuario.grupo}/storage-test.txt"
+    data = storage.get_bytes(key)
     response = {
         "backend": storage.backend,
-        "key": TEST_KEY,
+        "key": key,
         "size": len(data),
         "content": data.decode("utf-8"),
     }
@@ -43,10 +48,12 @@ def storage_test_read():
 
 
 @router.get("/list")
-def storage_list(prefix: str = ""):
+def storage_list(prefix: str = "", db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     storage = get_storage_service()
+    cnpjs = {str(cnpj) for (cnpj,) in db.query(Empresa.cnpj).filter(Empresa.grupo == usuario.grupo).all()}
+    keys = [key for key in storage.list_keys(prefix=prefix) if any(cnpj in key for cnpj in cnpjs) or f"/{usuario.grupo}/" in key]
     return {
         "backend": storage.backend,
         "prefix": prefix,
-        "keys": storage.list_keys(prefix=prefix),
+        "keys": keys,
     }

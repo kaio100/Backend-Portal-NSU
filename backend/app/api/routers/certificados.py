@@ -5,8 +5,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
-from backend.app.api.deps import get_db, get_storage
-from backend.app.db.models import Certificado
+from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_empresa_grupo
+from backend.app.core.rate_limit import RateLimiter
+from backend.app.db.models import Certificado, Usuario
 from backend.app.schemas.certificados import (
     CertificadoAutocadastroResponse,
     CertificadoRead,
@@ -22,11 +23,31 @@ from backend.app.services.storage_service import StorageService
 router = APIRouter(prefix="/certificados", tags=["certificados"])
 empresa_router = APIRouter(prefix="/empresas/{empresa_id}/certificados", tags=["certificados"])
 
+# Freio contra tentativas repetidas de adivinhar a senha de um certificado:
+# no maximo 5 tentativas a cada 5 minutos, por IP + certificado.
+_senha_rate_limiter = RateLimiter(max_attempts=5, window_seconds=300)
+
+
+def _limitar_tentativas_senha(certificado_id: int, request: Request) -> None:
+    client_host = request.client.host if request.client else "unknown"
+    if not _senha_rate_limiter.allow(f"{client_host}:{certificado_id}"):
+        raise HTTPException(
+            status_code=429,
+            detail="Muitas tentativas de senha para este certificado. Tente novamente em alguns minutos.",
+        )
+
 
 def _handle_error(exc: CertificadoServiceError) -> None:
     message = str(exc)
     status_code = 404 if "nao encontrad" in message else 400
     raise HTTPException(status_code=status_code, detail=message)
+
+
+def _garantir_certificado_do_grupo(db: Session, certificado_id: int, usuario: Usuario) -> Certificado:
+    try:
+        return certificados_service.obter_certificado_no_grupo(db, certificado_id, usuario.grupo)
+    except CertificadoServiceError as exc:
+        _handle_error(exc)
 
 
 def _form_bool(value: object, default: bool = False) -> bool:
@@ -89,6 +110,7 @@ async def create_certificado_compat(
     request: Request,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     """Compatibilidade com o portal antigo: POST /certificados com alias/password/file."""
     form = await request.form()
@@ -122,6 +144,7 @@ async def create_certificado_compat(
             limite=limite,
             nsu_inicio=nsu_inicio,
             forcar=forcar,
+            grupo=usuario.grupo,
         )
         certificado = result["certificado"]
         empresa = result["empresa"]
@@ -165,6 +188,7 @@ async def upload_certificado(
     senha_teste: str | None = Form(default=None),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
         pfx_bytes = await arquivo_pfx.read()
@@ -178,8 +202,10 @@ async def upload_certificado(
                 pfx_bytes=pfx_bytes,
                 senha=senha_teste,
                 auto_iniciar=False,
+                grupo=usuario.grupo,
             )
             return result["certificado"]
+        require_empresa_grupo(db, empresa_id, usuario)
         return certificados_service.criar_certificado_com_upload(
             db=db,
             storage=storage,
@@ -207,6 +233,7 @@ async def autocadastrar_certificado(
     forcar: bool = Form(default=False),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
         pfx_bytes = await arquivo.read()
@@ -230,6 +257,7 @@ async def autocadastrar_certificado(
             limite=limite,
             nsu_inicio=nsu_inicial,
             forcar=forcar,
+            grupo=usuario.grupo,
         )
     except CertificadoServiceError as exc:
         _handle_error(exc)
@@ -244,8 +272,10 @@ async def create_certificado_empresa(
     ativo: bool = Form(default=True),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        require_empresa_grupo(db, empresa_id, usuario)
         pfx_bytes = await arquivo_pfx.read()
         return certificados_service.criar_certificado_com_upload_e_senha(
             db=db,
@@ -266,8 +296,9 @@ def list_certificados_empresa(
     empresa_id: int,
     ativo: bool | None = Query(default=None),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
-    return certificados_service.listar_certificados(db, empresa_id=empresa_id, ativo=ativo)
+    return certificados_service.listar_certificados(db, empresa_id=empresa_id, ativo=ativo, grupo=usuario.grupo)
 
 
 @router.get("", response_model=list[CertificadoRead])
@@ -275,8 +306,9 @@ def list_certificados(
     empresa_id: int | None = Query(default=None),
     ativo: bool | None = Query(default=True),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
-    return certificados_service.listar_certificados(db, empresa_id=empresa_id, ativo=ativo)
+    return certificados_service.listar_certificados(db, empresa_id=empresa_id, ativo=ativo, grupo=usuario.grupo)
 
 
 @router.put("/{certificado_ref}", response_model=CertificadoRead)
@@ -285,8 +317,10 @@ async def update_certificado_compat(
     request: Request,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     certificado = _resolve_certificado_ref(db, certificado_ref)
+    _garantir_certificado_do_grupo(db, certificado.id, usuario)
     try:
         payload = await request.json()
     except Exception:
@@ -318,21 +352,27 @@ async def update_certificado_compat(
 
 
 @router.get("/{certificado_id}", response_model=CertificadoRead)
-def get_certificado(certificado_id: int, db: Session = Depends(get_db)):
+def get_certificado(certificado_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
-        return certificados_service.obter_certificado(db, certificado_id)
+        return _garantir_certificado_do_grupo(db, certificado_id, usuario)
     except CertificadoServiceError as exc:
         _handle_error(exc)
 
 
-@router.post("/{certificado_id}/testar", response_model=CertificadoTestResult)
+@router.post(
+    "/{certificado_id}/testar",
+    response_model=CertificadoTestResult,
+    dependencies=[Depends(_limitar_tentativas_senha)],
+)
 def testar_certificado(
     certificado_id: int,
     payload: CertificadoTestRequest,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        _garantir_certificado_do_grupo(db, certificado_id, usuario)
         return certificados_service.testar_certificado_salvo(db, storage, certificado_id, payload.senha)
     except CertificadoServiceError as exc:
         _handle_error(exc)
@@ -347,8 +387,10 @@ async def update_certificado(
     ativo: bool | None = Form(default=None),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        _garantir_certificado_do_grupo(db, certificado_id, usuario)
         pfx_bytes = await arquivo_pfx.read() if arquivo_pfx is not None else None
         return certificados_service.atualizar_certificado_com_upload_ou_senha(
             db=db,
@@ -370,8 +412,10 @@ def salvar_senha_certificado(
     payload: SecretSetRequest,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        _garantir_certificado_do_grupo(db, certificado_id, usuario)
         return certificados_service.salvar_senha_certificado(
             db=db,
             storage=storage,
@@ -384,37 +428,46 @@ def salvar_senha_certificado(
 
 
 @router.get("/{certificado_id}/senha/status", response_model=SecretStatusResponse)
-def status_senha_certificado(certificado_id: int, db: Session = Depends(get_db)):
+def status_senha_certificado(certificado_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        _garantir_certificado_do_grupo(db, certificado_id, usuario)
         return certificados_service.status_senha_certificado(db, certificado_id)
     except CertificadoServiceError as exc:
         _handle_error(exc)
 
 
 @router.delete("/{certificado_id}/senha", response_model=SecretStatusResponse)
-def remover_senha_certificado(certificado_id: int, db: Session = Depends(get_db)):
+def remover_senha_certificado(certificado_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        _garantir_certificado_do_grupo(db, certificado_id, usuario)
         return certificados_service.remover_senha_certificado(db, certificado_id)
     except CertificadoServiceError as exc:
         _handle_error(exc)
 
 
-@router.post("/{certificado_id}/testar-senha-salva", response_model=CertificadoTestResult)
+@router.post(
+    "/{certificado_id}/testar-senha-salva",
+    response_model=CertificadoTestResult,
+    dependencies=[Depends(_limitar_tentativas_senha)],
+)
 def testar_senha_salva(
     certificado_id: int,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        _garantir_certificado_do_grupo(db, certificado_id, usuario)
         return certificados_service.testar_certificado_com_senha_salva(db, storage, certificado_id)
     except CertificadoServiceError as exc:
         _handle_error(exc)
 
 
 @router.delete("/{certificado_ref}", response_model=CertificadoRead)
-def delete_certificado(certificado_ref: str, db: Session = Depends(get_db)):
+def delete_certificado(certificado_ref: str, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
         certificado = _resolve_certificado_ref(db, certificado_ref)
+        _garantir_certificado_do_grupo(db, certificado.id, usuario)
         return certificados_service.desativar_certificado(db, certificado.id)
     except CertificadoServiceError as exc:
         _handle_error(exc)

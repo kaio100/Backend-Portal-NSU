@@ -144,17 +144,21 @@ def limpar_zips_temporarios(max_age_hours: int | None = None) -> int:
     return removidos
 
 
-def _buscar_notas(db: Session, payload: NotasDownloadLoteRequest, max_notas: int) -> list[Nota]:
+def _buscar_notas(db: Session, payload: NotasDownloadLoteRequest, max_notas: int, grupo: str | None = None) -> list[Nota]:
     if payload.nota_ids:
         if len(payload.nota_ids) > max_notas:
             raise NotasDownloadLoteError(
                 f"Limite de {max_notas} notas por ZIP excedido. Selecione menos notas ou refine os filtros."
             )
-        return notas_repo.list_notas_by_ids(db, payload.nota_ids)
+        notas = notas_repo.list_notas_by_ids(db, payload.nota_ids)
+        if grupo is not None:
+            notas = [nota for nota in notas if nota.empresa is not None and nota.empresa.grupo == grupo]
+        return notas
 
     filtros: NotasDownloadFiltros = payload.filtros or NotasDownloadFiltros()
     notas = notas_service.listar_notas(
         db,
+        grupo=grupo,
         empresa_id=filtros.empresa_id,
         certificado_id=filtros.certificado_id,
         processo_id=filtros.processo_id,
@@ -195,13 +199,14 @@ def gerar_zip_notas(
     db: Session,
     storage: StorageService,
     payload: NotasDownloadLoteRequest,
+    grupo: str | None = None,
 ) -> DownloadLoteResult:
     if not payload.incluir_xml and not payload.incluir_pdf:
         raise NotasDownloadLoteError("Selecione XML, PDF ou ambos para gerar o ZIP.")
 
     max_notas = max(1, int(settings.download_lote_max_notas or 10000))
     logger.info("Download lote iniciado: filtros=%s nota_ids=%s", payload.filtros, payload.nota_ids)
-    notas = _buscar_notas(db, payload, max_notas)
+    notas = _buscar_notas(db, payload, max_notas, grupo=grupo)
     logger.info("Download lote: %s notas encontradas", len(notas))
     if not notas:
         raise NotasDownloadLoteError("Nenhuma nota encontrada para os filtros informados.")

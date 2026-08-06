@@ -5,7 +5,8 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db
+from backend.app.api.deps import get_current_usuario, get_db, require_empresa_grupo
+from backend.app.db.models import Usuario
 from backend.app.schemas.empresas import EmpresaCreate, EmpresaRead, EmpresaUpdate
 from backend.app.services import empresas_service
 from backend.app.services import portal_support_service
@@ -22,9 +23,9 @@ def _handle_error(exc: EmpresaServiceError) -> None:
 
 
 @router.post("", response_model=EmpresaRead)
-def create_empresa(payload: EmpresaCreate, db: Session = Depends(get_db)):
+def create_empresa(payload: EmpresaCreate, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
-        return empresas_service.criar_empresa(db, payload)
+        return empresas_service.criar_empresa(db, payload, grupo=usuario.grupo)
     except EmpresaServiceError as exc:
         _handle_error(exc)
 
@@ -33,8 +34,9 @@ def create_empresa(payload: EmpresaCreate, db: Session = Depends(get_db)):
 def list_empresas(
     ativo: bool | None = Query(default=None),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
-    return empresas_service.listar_empresas(db, ativo=ativo)
+    return empresas_service.listar_empresas(db, ativo=ativo, grupo=usuario.grupo)
 
 
 @router.get("/resumo-operacional")
@@ -46,6 +48,7 @@ def resumo_operacional_empresas(
     status: str | None = Query(default=None),
     conferencia_status: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     return portal_support_service.resumo_operacional_empresas(
         db,
@@ -55,28 +58,32 @@ def resumo_operacional_empresas(
         competencia_fim=competencia_fim,
         status=status,
         conferencia_status=conferencia_status,
+        grupo=usuario.grupo,
     )
 
 
 @router.get("/{empresa_id}", response_model=EmpresaRead)
-def get_empresa(empresa_id: int, db: Session = Depends(get_db)):
+def get_empresa(empresa_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        require_empresa_grupo(db, empresa_id, usuario)
         return empresas_service.obter_empresa(db, empresa_id)
     except EmpresaServiceError as exc:
         _handle_error(exc)
 
 
 @router.patch("/{empresa_id}", response_model=EmpresaRead)
-def update_empresa(empresa_id: int, payload: EmpresaUpdate, db: Session = Depends(get_db)):
+def update_empresa(empresa_id: int, payload: EmpresaUpdate, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        require_empresa_grupo(db, empresa_id, usuario)
         return empresas_service.atualizar_empresa(db, empresa_id, payload)
     except EmpresaServiceError as exc:
         _handle_error(exc)
 
 
 @router.delete("/{empresa_id}", response_model=EmpresaRead)
-def delete_empresa(empresa_id: int, db: Session = Depends(get_db)):
+def delete_empresa(empresa_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        require_empresa_grupo(db, empresa_id, usuario)
         return empresas_service.desativar_empresa(db, empresa_id)
     except EmpresaServiceError as exc:
         _handle_error(exc)

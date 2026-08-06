@@ -267,6 +267,7 @@ def _anotar_detalhe_frontend(nota: Nota, consulta_simples_api: str | None = None
 
 def listar_notas(
     db: Session,
+    grupo: str | None = None,
     empresa_id: int | None = None,
     certificado_id: int | None = None,
     processo_id: int | None = None,
@@ -307,6 +308,7 @@ def listar_notas(
 
     notas = notas_repo.list_notas(
         db,
+        grupo=grupo,
         empresa_id=empresa_id,
         certificado_id=certificado_id,
         processo_id=processo_id,
@@ -351,6 +353,7 @@ def listar_notas(
 
 def listar_todas_notas(
     db: Session,
+    grupo: str | None = None,
     empresa_id: int | None = None,
     certificado_id: int | None = None,
     processo_id: int | None = None,
@@ -393,6 +396,7 @@ def listar_todas_notas(
     while True:
         batch = listar_notas(
             db,
+            grupo=grupo,
             empresa_id=empresa_id,
             certificado_id=certificado_id,
             processo_id=processo_id,
@@ -471,9 +475,11 @@ def resumo_notas_operacional(
     competencia_fim: date | None = None,
     tipo_nota: str | None = None,
     direcao_nota: str | None = None,
+    grupo: str | None = None,
 ) -> dict:
     notas = listar_notas(
         db,
+        grupo=grupo,
         empresa_id=empresa_id,
         processo_id=processo_id,
         data_inicio=data_inicio,

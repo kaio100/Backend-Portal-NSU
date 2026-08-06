@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import Nota, Processo
+from backend.app.db.models import Empresa, Nota, Processo
 
 
 def get_nota(db: Session, nota_id: int) -> Nota | None:
@@ -34,6 +34,7 @@ def get_nota_by_chave_optional_empresa(
 
 def list_notas(
     db: Session,
+    grupo: str | None = None,
     empresa_id: int | None = None,
     certificado_id: int | None = None,
     processo_id: int | None = None,
@@ -63,6 +64,8 @@ def list_notas(
     sort: str = "recentes",
 ) -> list[Nota]:
     query = db.query(Nota)
+    if grupo is not None:
+        query = query.join(Empresa, Empresa.id == Nota.empresa_id).filter(Empresa.grupo == grupo)
     if empresa_id is not None:
         query = query.filter(Nota.empresa_id == empresa_id)
     if certificado_id is not None:

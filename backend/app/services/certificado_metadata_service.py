@@ -27,14 +27,47 @@ def _digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
 
 
-def _extract_cnpj(*values: str | None) -> str | None:
+def cnpj_valido(value: str) -> bool:
+    digits = _digits(value)
+    if len(digits) != 14 or digits == digits[0] * 14:
+        return False
+
+    def digito(base: str, pesos: list[int]) -> str:
+        total = sum(int(numero) * peso for numero, peso in zip(base, pesos))
+        resto = total % 11
+        return str(0 if resto < 2 else 11 - resto)
+
+    primeiro = digito(digits[:12], [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+    segundo = digito(digits[:12] + primeiro, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+    return digits[-2:] == primeiro + segundo
+
+
+def extrair_cnpj_texto(*values: str | None) -> str | None:
+    for value in values:
+        texto = value or ""
+        candidatos = re.findall(r"(?<!\d)\d{14}(?!\d)", texto)
+        candidatos.extend(
+            match.group(0)
+            for match in re.finditer(r"\d{2}\D?\d{3}\D?\d{3}\D?\d{4}\D?\d{2}", texto)
+        )
+        for candidate in candidatos:
+            digits = _digits(candidate)
+            if cnpj_valido(digits):
+                return digits
+
+    # Compatibilidade com subjects sem separador: avalia todas as janelas,
+    # mas nunca aceita apenas os primeiros 14 algarismos concatenados.
     for value in values:
         digits = _digits(value or "")
         for index in range(0, max(len(digits) - 13, 0)):
             candidate = digits[index : index + 14]
-            if len(candidate) == 14:
+            if cnpj_valido(candidate):
                 return candidate
     return None
+
+
+def _extract_cnpj(*values: str | None) -> str | None:
+    return extrair_cnpj_texto(*values)
 
 
 def _first_attr(cert, oid) -> str | None:

@@ -5,7 +5,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db
+from backend.app.api.deps import get_current_usuario, get_db
 from backend.app.api.deps import get_storage
 from backend.app.schemas.jobs import JobRead
 from backend.app.schemas.processos import ProcessoCancelResponse, ProcessoCreate, ProcessoRead
@@ -14,6 +14,7 @@ from backend.app.services import portal_support_service
 from backend.app.services.portal_support_service import PortalSupportError
 from backend.app.services.processos_service import ProcessoServiceError
 from backend.app.services.storage_service import StorageService
+from backend.app.db.models import Usuario
 
 
 router = APIRouter(prefix="/processos", tags=["processos"])
@@ -32,9 +33,9 @@ def _handle_portal_error(exc: PortalSupportError) -> None:
 
 
 @router.post("", response_model=ProcessoRead)
-def create_processo(payload: ProcessoCreate, db: Session = Depends(get_db)):
+def create_processo(payload: ProcessoCreate, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
-        return processos_service.criar_processo_com_job(db, payload)
+        return processos_service.criar_processo_com_job(db, payload, grupo=usuario.grupo)
     except ProcessoServiceError as exc:
         _handle_error(exc)
 
@@ -48,6 +49,7 @@ def list_processos(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
         effective_limit = page_size or limit
@@ -58,15 +60,16 @@ def list_processos(
             status=status,
             limit=effective_limit,
             offset=effective_offset,
+            grupo=usuario.grupo,
         )
     except ProcessoServiceError as exc:
         _handle_error(exc)
 
 
 @router.get("/{processo_id}", response_model=ProcessoRead)
-def get_processo(processo_id: int, db: Session = Depends(get_db)):
+def get_processo(processo_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
-        return processos_service.obter_processo(db, processo_id)
+        return processos_service.obter_processo_no_grupo(db, processo_id, usuario.grupo)
     except ProcessoServiceError as exc:
         _handle_error(exc)
 
@@ -77,8 +80,10 @@ def list_arquivos_processo(
     tipo: str | None = Query(default=None),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        processos_service.obter_processo_no_grupo(db, processo_id, usuario.grupo)
         return portal_support_service.listar_arquivos_processo(db, processo_id, tipo=tipo, storage=storage)
     except PortalSupportError as exc:
         _handle_portal_error(exc)
@@ -98,8 +103,10 @@ def list_notas_processo(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        processos_service.obter_processo_no_grupo(db, processo_id, usuario.grupo)
         return portal_support_service.listar_notas_processo(
             db,
             processo_id,
@@ -119,16 +126,18 @@ def list_notas_processo(
 
 
 @router.get("/{processo_id}/summary")
-def get_summary_processo(processo_id: int, db: Session = Depends(get_db)):
+def get_summary_processo(processo_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        processos_service.obter_processo_no_grupo(db, processo_id, usuario.grupo)
         return portal_support_service.resumo_processo(db, processo_id)
     except PortalSupportError as exc:
         _handle_portal_error(exc)
 
 
 @router.post("/{processo_id}/cancelar", response_model=ProcessoCancelResponse)
-def cancelar_processo(processo_id: int, db: Session = Depends(get_db)):
+def cancelar_processo(processo_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        processos_service.obter_processo_no_grupo(db, processo_id, usuario.grupo)
         processo, message = processos_service.cancelar_processo(db, processo_id)
         return {
             "status": processo.status,
@@ -140,8 +149,9 @@ def cancelar_processo(processo_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{processo_id}/jobs", response_model=list[JobRead])
-def list_jobs_processo(processo_id: int, db: Session = Depends(get_db)):
+def list_jobs_processo(processo_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        processos_service.obter_processo_no_grupo(db, processo_id, usuario.grupo)
         return processos_service.listar_jobs_processo(db, processo_id)
     except ProcessoServiceError as exc:
         _handle_error(exc)

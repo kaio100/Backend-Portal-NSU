@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import Job
+from backend.app.db.models import Empresa, Job
 
 
 def create_job(db: Session, data: dict) -> Job:
@@ -58,16 +58,16 @@ def get_next_pending_job(db: Session) -> Job | None:
     )
 
 
-def claim_next_pending_job(db: Session, locked_by: str) -> Job | None:
+def claim_next_pending_job(db: Session, locked_by: str, grupo: str | None = None) -> Job | None:
     now = datetime.now(timezone.utc)
-    candidate_id = (
+    candidate_query = (
         db.query(Job.id)
         .filter(Job.status == "pendente")
         .filter(or_(Job.available_at.is_(None), Job.available_at <= now))
-        .order_by(Job.available_at.asc().nullsfirst(), Job.id.asc())
-        .limit(1)
-        .scalar_subquery()
     )
+    if grupo is not None:
+        candidate_query = candidate_query.join(Empresa, Empresa.id == Job.empresa_id).filter(Empresa.grupo == grupo)
+    candidate_id = candidate_query.order_by(Job.available_at.asc().nullsfirst(), Job.id.asc()).limit(1).scalar_subquery()
     result = db.execute(
         update(Job)
         .where(Job.id == candidate_id)

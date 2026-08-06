@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db
+from backend.app.api.deps import get_current_usuario, get_db, require_empresa_grupo, require_nota_grupo
+from backend.app.db.models import Usuario
 from backend.app.services import portal_support_service
 
 
@@ -23,7 +24,14 @@ def list_eventos(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
+    if empresa_id is not None:
+        require_empresa_grupo(db, empresa_id, usuario)
+    if nota_id is not None:
+        require_nota_grupo(db, nota_id, usuario)
+    if empresa_id is None and nota_id is None:
+        raise HTTPException(status_code=400, detail="Informe uma empresa ou nota do seu grupo.")
     return portal_support_service.listar_eventos(
         db,
         empresa_id=empresa_id,

@@ -26,6 +26,7 @@ IMPORTANT_TABLES = [
     "logs_processos",
     "nsu_controle",
     "monitoramento_config",
+    "usuarios",
 ]
 
 

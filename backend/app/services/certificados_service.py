@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from cryptography.hazmat.primitives import hashes
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
@@ -51,9 +52,7 @@ def _normalizar_ambiente(value: str) -> str:
 
 
 def _cnpj_from_text(value: str) -> str:
-    for match in re.findall(r"\d{14}", value or ""):
-        return match
-    return ""
+    return certificado_metadata_service.extrair_cnpj_texto(value) or ""
 
 
 def testar_certificado_pfx_bytes(pfx_bytes: bytes, senha: str) -> dict[str, Any]:
@@ -203,6 +202,7 @@ def autocadastrar_certificado(
     limite: int | None = None,
     nsu_inicio: int | None = None,
     forcar: bool = False,
+    grupo: str = "planning_hub",
 ) -> dict[str, Any]:
     if not pfx_bytes:
         raise CertificadoServiceError("Arquivo PFX/P12 e obrigatorio.")
@@ -238,10 +238,13 @@ def autocadastrar_certificado(
                 "cnpj": metadata.cnpj,
                 "ambiente": ambiente_normalizado,
                 "ativo": True,
+                "grupo": grupo,
             },
         )
         logger.info("Empresa criada automaticamente: empresa_id=%s cnpj=%s", empresa.id, empresa.cnpj)
     else:
+        if empresa.grupo != grupo:
+            raise CertificadoServiceError("Esta empresa pertence a outro grupo.")
         updates: dict[str, Any] = {}
         if not empresa.nome and (metadata.nome or metadata.subject_cn):
             updates["nome"] = metadata.nome or metadata.subject_cn
@@ -263,6 +266,27 @@ def autocadastrar_certificado(
             .order_by(Certificado.id.desc())
             .first()
         )
+
+    # Certificados renovados normalmente recebem um novo thumbprint. Nesse
+    # caso, reutiliza o cadastro ativo da mesma empresa/identidade para que a
+    # renovacao substitua o arquivo anterior em vez de duplicar a listagem.
+    if certificado is None:
+        ativos_query = (
+            db.query(Certificado)
+            .filter(Certificado.empresa_id == empresa.id)
+            .filter(Certificado.ativo.is_(True))
+        )
+        if metadata.subject_cn:
+            certificado = (
+                ativos_query
+                .filter(func.lower(Certificado.subject_cn) == metadata.subject_cn.strip().lower())
+                .order_by(Certificado.id.desc())
+                .first()
+            )
+        if certificado is None:
+            ativos = ativos_query.order_by(Certificado.id.desc()).limit(2).all()
+            if len(ativos) == 1:
+                certificado = ativos[0]
 
     certificado_existente = certificado is not None
     if certificado is None:
@@ -328,7 +352,7 @@ def autocadastrar_certificado(
             pausa=settings.consultas_default_pausa,
             forcar=forcar,
         )
-        result = consultas_service.iniciar_consultas_automaticas(db, options=options)
+        result = consultas_service.iniciar_consultas_automaticas(db, options=options, grupo=grupo)
         processo = (result.get("processos_criados") or [None])[0]
         if processo is None:
             logger.info("Job ignorado no autocadastro: ja existe pendente/rodando para certificado_id=%s", certificado.id)
@@ -339,7 +363,7 @@ def autocadastrar_certificado(
         "empresa": empresa,
         "certificado": certificado,
         "processo": processo,
-        "consulta_status": consultas_service.montar_status(db),
+        "consulta_status": consultas_service.montar_status(db, grupo=grupo),
     }
 
 
@@ -410,8 +434,16 @@ def listar_certificados(
     db: Session,
     empresa_id: int | None = None,
     ativo: bool | None = None,
+    grupo: str | None = None,
 ) -> list[Certificado]:
-    return certificados_repo.list_certificados(db, empresa_id=empresa_id, ativo=ativo)
+    return certificados_repo.list_certificados(db, empresa_id=empresa_id, ativo=ativo, grupo=grupo)
+
+
+def obter_certificado_no_grupo(db: Session, certificado_id: int, grupo: str) -> Certificado:
+    certificado = certificados_repo.get_certificado_no_grupo(db, certificado_id, grupo)
+    if certificado is None:
+        raise CertificadoServiceError("Certificado nao encontrado.")
+    return certificado
 
 
 def obter_certificado(db: Session, certificado_id: int) -> Certificado:

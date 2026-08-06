@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db
+from backend.app.api.deps import get_current_usuario, get_db, require_empresa_grupo, require_processo_grupo
+from backend.app.db.models import Usuario
 from backend.app.services import logs_service
 
 
@@ -32,13 +33,19 @@ def list_logs(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
+    if empresa_id is not None:
+        require_empresa_grupo(db, empresa_id, usuario)
+    if processo_id is not None:
+        require_processo_grupo(db, processo_id, usuario)
     return logs_service.listar_logs(
         db,
         processo_id=processo_id,
         empresa_id=empresa_id,
         limit=limit,
         offset=offset,
+        grupo=usuario.grupo,
     )
 
 
@@ -48,10 +55,13 @@ def list_logs_processo(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
+    require_processo_grupo(db, processo_id, usuario)
     return logs_service.listar_logs(
         db,
         processo_id=processo_id,
         limit=limit,
         offset=offset,
+        grupo=usuario.grupo,
     )

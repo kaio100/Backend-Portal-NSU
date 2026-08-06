@@ -21,10 +21,12 @@ def get_empresa_by_cnpj(db: Session, cnpj: str) -> Empresa | None:
     return db.query(Empresa).filter(Empresa.cnpj == cnpj).first()
 
 
-def list_empresas(db: Session, ativo: bool | None = None) -> list[Empresa]:
+def list_empresas(db: Session, ativo: bool | None = None, grupo: str | None = None) -> list[Empresa]:
     query = db.query(Empresa).order_by(Empresa.nome.asc())
     if ativo is not None:
         query = query.filter(Empresa.ativo == ativo)
+    if grupo is not None:
+        query = query.filter(Empresa.grupo == grupo)
     return list(query.all())
 
 

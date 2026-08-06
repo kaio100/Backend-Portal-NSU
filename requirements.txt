@@ -12,3 +12,4 @@ reportlab
 pypdf
 openpyxl
 boto3
+pyjwt>=2.8

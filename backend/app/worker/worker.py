@@ -7,7 +7,7 @@ import uuid
 
 from backend.app.core.config import settings
 from backend.app.db.session import SessionLocal, init_db
-from backend.app.repositories import jobs_repo, processos_repo
+from backend.app.repositories import empresas_repo, jobs_repo, processos_repo
 from backend.app.services import consultas_service
 from backend.app.worker.jobs import processar_job
 
@@ -17,15 +17,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--once", action="store_true", help="Processa no maximo um job e encerra")
     parser.add_argument("--sleep", type=float, default=5, help="Pausa entre buscas por jobs")
     parser.add_argument("--worker-id", default="", help="Identificador do worker")
+    parser.add_argument("--grupo", default="", help="Processa somente a fila deste grupo")
     return parser
 
 
-def processar_proximo_job(worker_id: str) -> dict:
+def processar_proximo_job(worker_id: str, grupo_worker: str | None = None) -> dict:
     with SessionLocal() as db:
-        job = jobs_repo.claim_next_pending_job(db, worker_id)
+        job = jobs_repo.claim_next_pending_job(db, worker_id, grupo=grupo_worker)
         if job is None:
             return {"ok": False, "motivo": "sem_job"}
-        if job.tipo == "consulta_nfse" and not consultas_service.is_enabled(db):
+        empresa = empresas_repo.get_empresa(db, int(job.empresa_id))
+        grupo = empresa.grupo if empresa is not None else "planning_hub"
+        if grupo_worker is not None and grupo != grupo_worker:
+            jobs_repo.mark_job_pending(db, job)
+            db.commit()
+            return {"ok": False, "job_id": job.id, "motivo": "grupo_incorreto"}
+        if job.tipo == "consulta_nfse" and not consultas_service.is_enabled(db, grupo=grupo):
             jobs_repo.mark_job_cancelado(db, job, "Consultas desativadas.")
             processo = processos_repo.get_processo(db, int(job.processo_id))
             if processo is not None:
@@ -54,7 +61,7 @@ def main() -> None:
 
     try:
         while True:
-            result = processar_proximo_job(worker_id)
+            result = processar_proximo_job(worker_id, grupo_worker=args.grupo or None)
             print(result)
             if args.once:
                 return

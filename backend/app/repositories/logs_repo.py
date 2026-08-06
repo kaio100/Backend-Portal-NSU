@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import LogProcesso
+from backend.app.db.models import Empresa, LogProcesso
 
 
 def create_log(db: Session, data: dict) -> LogProcesso:
@@ -19,8 +19,11 @@ def list_logs(
     empresa_id: int | None = None,
     limit: int = 100,
     offset: int = 0,
+    grupo: str | None = None,
 ) -> list[LogProcesso]:
     query = db.query(LogProcesso).order_by(LogProcesso.id.desc())
+    if grupo is not None:
+        query = query.join(Empresa, Empresa.id == LogProcesso.empresa_id).filter(Empresa.grupo == grupo)
     if processo_id is not None:
         query = query.filter(LogProcesso.processo_id == processo_id)
     if empresa_id is not None:

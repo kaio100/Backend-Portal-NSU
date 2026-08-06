@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import Processo
+from backend.app.db.models import Empresa, Processo
 
 
 def create_processo(db: Session, data: dict) -> Processo:
@@ -25,13 +25,20 @@ def list_processos(
     status: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    grupo: str | None = None,
 ) -> list[Processo]:
     query = db.query(Processo).order_by(Processo.id.desc())
+    if grupo is not None:
+        query = query.join(Empresa, Empresa.id == Processo.empresa_id).filter(Empresa.grupo == grupo)
     if empresa_id is not None:
         query = query.filter(Processo.empresa_id == empresa_id)
     if status is not None:
         query = query.filter(Processo.status == status)
     return list(query.offset(offset).limit(limit).all())
+
+
+def get_processo_no_grupo(db: Session, processo_id: int, grupo: str) -> Processo | None:
+    return db.query(Processo).join(Empresa, Empresa.id == Processo.empresa_id).filter(Processo.id == processo_id, Empresa.grupo == grupo).first()
 
 
 def update_processo(db: Session, processo: Processo, data: dict) -> Processo:

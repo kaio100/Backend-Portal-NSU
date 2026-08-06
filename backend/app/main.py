@@ -12,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api.routers import (
     arquivos,
+    admin,
+    auth,
     certificados,
     consultas,
     db_health,
@@ -28,7 +30,7 @@ from backend.app.api.routers import (
     storage,
 )
 from backend.app.core.config import settings
-from backend.app.db.models import Job, LockProcessamento, Processo
+from backend.app.db.models import Empresa, Job, LockProcessamento, MonitoramentoConfig, Processo
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.services import consultas_service
 from backend.app.services.notas_download_service import limpar_zips_temporarios
@@ -36,9 +38,20 @@ from backend.app.scripts.revalidar_status_pdfs import executar as revalidar_stat
 from backend.app.worker.worker import processar_proximo_job
 
 
-def _build_api_worker_ids(worker_count: int) -> list[str]:
+def _worker_groups() -> list[str]:
+    with SessionLocal() as db:
+        grupos = {str(grupo) for (grupo,) in db.query(Empresa.grupo).distinct().all() if grupo}
+        grupos.update(str(grupo) for (grupo,) in db.query(MonitoramentoConfig.grupo).distinct().all() if grupo)
+    return sorted(grupos or {"planning_hub"})
+
+
+def _build_api_workers(groups: list[str], workers_per_group: int) -> list[tuple[str, str]]:
     hostname = socket.gethostname()
-    return [f"api-{slot}-{hostname}-{uuid.uuid4().hex[:8]}" for slot in range(1, worker_count + 1)]
+    return [
+        (grupo, f"api-{grupo}-{slot}-{hostname}-{uuid.uuid4().hex[:8]}")
+        for grupo in groups
+        for slot in range(1, workers_per_group + 1)
+    ]
 
 
 def _recover_stale_api_jobs(active_worker_ids: list[str]) -> int:
@@ -75,15 +88,22 @@ def _recover_stale_api_jobs(active_worker_ids: list[str]) -> int:
         return len(stale_jobs)
 
 
-async def _run_api_worker(slot: int, worker_id: str) -> None:
-    print(f"API worker iniciado: {worker_id} | dry_run={settings.worker_dry_run}")
+async def _run_api_worker(slot: int, worker_id: str, grupo: str) -> None:
+    print(f"API worker iniciado: {worker_id} | grupo={grupo} | dry_run={settings.worker_dry_run}")
 
     while True:
-        result = await asyncio.to_thread(processar_proximo_job, worker_id)
+        try:
+            result = await asyncio.to_thread(processar_proximo_job, worker_id, grupo)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"API worker {slot} ({grupo}) falhou e continuara ativo: {exc}")
+            await asyncio.sleep(max(1.0, float(settings.api_worker_sleep)))
+            continue
         if result.get("motivo") == "sem_job":
             await asyncio.sleep(settings.api_worker_sleep)
         else:
-            print(f"API worker {slot}: {result}")
+            print(f"API worker {slot} ({grupo}): {result}")
 
 
 async def _run_consultas_scheduler() -> None:
@@ -99,7 +119,15 @@ async def _run_consultas_scheduler() -> None:
 
 def _enqueue_consultas_automaticas() -> dict:
     with SessionLocal() as db:
-        return consultas_service.enqueue_consultas_pendentes(db)
+        resultados = [
+            consultas_service.enqueue_consultas_pendentes(db, grupo=grupo)
+            for grupo in consultas_service.listar_grupos_automaticos_ativos(db)
+        ]
+        return {
+            "certificados_enfileirados": sum(int(item.get("certificados_enfileirados", 0)) for item in resultados),
+            "certificados_ignorados": sum(int(item.get("certificados_ignorados", 0)) for item in resultados),
+            "grupos_processados": len(resultados),
+        }
 
 
 async def _revalidar_status_pdfs_salvos() -> None:
@@ -129,14 +157,15 @@ async def lifespan(app: FastAPI):
     if settings.api_worker_enabled and settings.pdf_status_revalidation_enabled:
         pdf_revalidation_task = asyncio.create_task(_revalidar_status_pdfs_salvos())
     if settings.api_worker_enabled:
-        worker_count = max(1, int(settings.api_worker_concurrency))
-        worker_ids = _build_api_worker_ids(worker_count)
+        workers_per_group = max(1, int(settings.api_worker_concurrency))
+        api_workers = _build_api_workers(_worker_groups(), workers_per_group)
+        worker_ids = [worker_id for _grupo, worker_id in api_workers]
         recovered = _recover_stale_api_jobs(worker_ids)
         if recovered:
             print(f"API worker recuperou jobs presos de execucoes antigas: {recovered}")
         worker_tasks = [
-            asyncio.create_task(_run_api_worker(slot, worker_id))
-            for slot, worker_id in enumerate(worker_ids, start=1)
+            asyncio.create_task(_run_api_worker(slot, worker_id, grupo))
+            for slot, (grupo, worker_id) in enumerate(api_workers, start=1)
         ]
         scheduler_task = asyncio.create_task(_run_consultas_scheduler())
 
@@ -203,9 +232,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# /health e /db/health ficam sem API key: sao usados por health checks de
+# infraestrutura (Docker, load balancer) que nao enviam headers customizados.
 app.include_router(health.router)
-app.include_router(storage.router)
 app.include_router(db_health.router)
+# /auth tem sua propria protecao por endpoint: login/criar-conta publicos,
+# /me exige JWT e a criacao interna de usuario exige API key.
+app.include_router(auth.router)
+app.include_router(admin.router)
+
+# Os endpoints do portal fazem a autorizacao por JWT dentro de cada router.
+# API_KEY fica reservada a operacoes internas servidor-servidor, nunca ao browser.
+app.include_router(storage.router)
 app.include_router(empresas.router)
 app.include_router(nsu.router)
 app.include_router(certificados.router)

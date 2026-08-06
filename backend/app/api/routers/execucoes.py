@@ -5,8 +5,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db
-from backend.app.db.models import Empresa, Job, Processo
+from backend.app.api.deps import get_current_usuario, get_db, require_empresa_grupo
+from backend.app.db.models import Empresa, Job, Processo, Usuario
 
 
 router = APIRouter(prefix="/execucoes", tags=["execucoes"])
@@ -68,11 +68,15 @@ def list_execucoes(
     empresa_id: int | None = Query(default=None),
     status: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
+    if empresa_id is not None:
+        require_empresa_grupo(db, empresa_id, usuario)
     query = (
         db.query(Processo, Job)
         .outerjoin(Job, Job.processo_id == Processo.id)
         .outerjoin(Empresa, Empresa.id == Processo.empresa_id)
+        .filter(Empresa.grupo == usuario.grupo)
     )
     if empresa_id is not None:
         query = query.filter(Processo.empresa_id == empresa_id)

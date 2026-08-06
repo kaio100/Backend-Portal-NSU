@@ -54,6 +54,12 @@ def _ensure_runtime_columns() -> None:
     statements: list[str] = []
     is_sqlite = settings.database_url.startswith("sqlite")
 
+    if "grupos" in table_names:
+        statements.extend([
+            "INSERT INTO grupos (codigo, nome, ativo) SELECT 'planning_hub', 'Planning/Hub', TRUE WHERE NOT EXISTS (SELECT 1 FROM grupos WHERE codigo = 'planning_hub')",
+            "INSERT INTO grupos (codigo, nome, ativo) SELECT 'planning_ma', 'Planning/MA', TRUE WHERE NOT EXISTS (SELECT 1 FROM grupos WHERE codigo = 'planning_ma')",
+        ])
+
     if "notas" in table_names:
         nota_columns = {column["name"] for column in inspector.get_columns("notas")}
         if "importado_em" not in nota_columns:
@@ -133,6 +139,21 @@ def _ensure_runtime_columns() -> None:
             if name not in nota_columns:
                 statements.append(f"ALTER TABLE notas ADD COLUMN {name} {column_type}")
         statements.append("UPDATE notas SET importado_em = COALESCE(updated_at, created_at) WHERE importado_em IS NULL")
+
+    for table_name in ("empresas", "usuarios"):
+        if table_name in table_names:
+            columns = {column["name"] for column in inspector.get_columns(table_name)}
+            if "grupo" not in columns:
+                statements.append(f"ALTER TABLE {table_name} ADD COLUMN grupo VARCHAR(40)")
+            statements.append(f"UPDATE {table_name} SET grupo = 'planning_hub' WHERE grupo IS NULL OR TRIM(grupo) = ''")
+            if table_name == "usuarios" and "is_admin" not in columns:
+                statements.append("ALTER TABLE usuarios ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE")
+
+    if "monitoramento_config" in table_names:
+        columns = {column["name"] for column in inspector.get_columns("monitoramento_config")}
+        if "grupo" not in columns:
+            statements.append("ALTER TABLE monitoramento_config ADD COLUMN grupo VARCHAR(40)")
+        statements.append("UPDATE monitoramento_config SET grupo = 'planning_hub' WHERE grupo IS NULL OR TRIM(grupo) = ''")
 
     if "arquivos" in table_names:
         arquivo_columns = {column["name"] for column in inspector.get_columns("arquivos")}

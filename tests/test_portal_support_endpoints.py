@@ -296,7 +296,10 @@ def test_eventos_globais_conferencia_e_busca_avancada():
     _reset_db()
     _, _, nota_id = _base_data()
     with TestClient(app) as client:
-        eventos = client.get("/eventos", params={"tipo_evento": "cancelamento"})
+        eventos = client.get(
+            "/eventos",
+            params={"nota_id": nota_id, "tipo_evento": "cancelamento"},
+        )
         assert eventos.status_code == 200
         assert eventos.json()["total"] == 1
 

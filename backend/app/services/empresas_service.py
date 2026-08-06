@@ -11,16 +11,17 @@ class EmpresaServiceError(ValueError):
     pass
 
 
-def criar_empresa(db: Session, data: EmpresaCreate) -> Empresa:
+def criar_empresa(db: Session, data: EmpresaCreate, grupo: str = "planning_hub") -> Empresa:
     payload = data.model_dump()
+    payload["grupo"] = grupo
     existente = empresas_repo.get_empresa_by_cnpj(db, payload["cnpj"])
     if existente:
         raise EmpresaServiceError("Empresa com este CNPJ ja existe.")
     return empresas_repo.create_empresa(db, payload)
 
 
-def listar_empresas(db: Session, ativo: bool | None = None) -> list[Empresa]:
-    return empresas_repo.list_empresas(db, ativo=ativo)
+def listar_empresas(db: Session, ativo: bool | None = None, grupo: str | None = None) -> list[Empresa]:
+    return empresas_repo.list_empresas(db, ativo=ativo, grupo=grupo)
 
 
 def obter_empresa(db: Session, empresa_id: int) -> Empresa:

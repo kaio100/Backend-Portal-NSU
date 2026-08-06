@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
-from backend.app.api.deps import get_db
+from backend.app.api.deps import get_current_usuario, get_db, require_empresa_grupo, require_nota_grupo
 from backend.app.api.deps import get_storage
 from backend.app.schemas.arquivos import ArquivoRead
 from backend.app.schemas.notas import (
@@ -25,6 +25,7 @@ from backend.app.services import portal_support_service
 from backend.app.services.notas_download_service import NotasDownloadLoteError
 from backend.app.services.notas_service import NotaServiceError
 from backend.app.services.storage_service import StorageService
+from backend.app.db.models import Usuario
 
 
 router = APIRouter(prefix="/notas", tags=["notas"])
@@ -99,10 +100,12 @@ def list_notas(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
         return notas_service.listar_notas(
             db,
+            grupo=usuario.grupo,
             empresa_id=empresa_id,
             certificado_id=certificado_id,
             processo_id=processo_id,
@@ -180,10 +183,12 @@ def list_todas_notas(
     valor_max: Decimal | None = Query(default=None),
     sort: str = Query(default="recentes", pattern="^(recentes|emissao)$"),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
         return notas_service.listar_todas_notas(
             db,
+            grupo=usuario.grupo,
             empresa_id=empresa_id,
             certificado_id=certificado_id,
             processo_id=processo_id,
@@ -295,7 +300,9 @@ def list_notas_emitidas(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
+    require_empresa_grupo(db, empresa_id, usuario)
     return _list_notas_operacionais(
         "emitida",
         empresa_id,
@@ -349,7 +356,9 @@ def list_notas_recebidas(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
+    require_empresa_grupo(db, empresa_id, usuario)
     return _list_notas_operacionais(
         "recebida",
         empresa_id,
@@ -383,9 +392,10 @@ def download_lote_notas(
     payload: NotasDownloadLoteRequest,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
-        result = notas_download_service.gerar_zip_notas(db, storage, payload)
+        result = notas_download_service.gerar_zip_notas(db, storage, payload, grupo=usuario.grupo)
     except NotasDownloadLoteError as exc:
         _handle_download_error(exc)
 
@@ -421,6 +431,7 @@ def download_lote_notas_get(
     sort: str = Query(default="recentes", pattern="^(recentes|emissao)$"),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     payload = NotasDownloadLoteRequest(
         filtros=NotasDownloadFiltros(
@@ -447,7 +458,7 @@ def download_lote_notas_get(
         preferir_pdf_original=preferir_pdf_original,
     )
     try:
-        result = notas_download_service.gerar_zip_notas(db, storage, payload)
+        result = notas_download_service.gerar_zip_notas(db, storage, payload, grupo=usuario.grupo)
     except NotasDownloadLoteError as exc:
         _handle_download_error(exc)
     return _zip_response(result)
@@ -464,6 +475,7 @@ def get_notas_resumo(
     tipo_nota: str | None = Query(default=None),
     direcao_nota: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
         return notas_service.resumo_notas_operacional(
@@ -476,6 +488,7 @@ def get_notas_resumo(
             competencia_fim=competencia_fim,
             tipo_nota=tipo_nota,
             direcao_nota=direcao_nota,
+            grupo=usuario.grupo,
         )
     except NotaServiceError as exc:
         _handle_error(exc)
@@ -486,24 +499,31 @@ def get_nota_por_chave(
     chave: str,
     empresa_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
-        return notas_service.obter_nota_por_chave(db, chave, empresa_id=empresa_id)
+        if empresa_id is not None:
+            require_empresa_grupo(db, empresa_id, usuario)
+        nota = notas_service.obter_nota_por_chave(db, chave, empresa_id=empresa_id)
+        require_nota_grupo(db, int(nota.id), usuario)
+        return nota
     except NotaServiceError as exc:
         _handle_error(exc)
 
 
 @router.get("/{nota_id}", response_model=NotaDetail)
-def get_nota(nota_id: int, db: Session = Depends(get_db)):
+def get_nota(nota_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        require_nota_grupo(db, nota_id, usuario)
         return notas_service.obter_nota(db, nota_id)
     except NotaServiceError as exc:
         _handle_error(exc)
 
 
 @router.get("/{nota_id}/eventos")
-def list_eventos_nota(nota_id: int, db: Session = Depends(get_db)):
+def list_eventos_nota(nota_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        require_nota_grupo(db, nota_id, usuario)
         resultado = portal_support_service.listar_eventos_nota(db, nota_id)
         if resultado.get("items"):
             return resultado
@@ -535,8 +555,9 @@ def list_eventos_nota(nota_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{nota_id}/tributos-comparativo")
-def get_tributos_comparativo(nota_id: int, db: Session = Depends(get_db)):
+def get_tributos_comparativo(nota_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        require_nota_grupo(db, nota_id, usuario)
         return portal_support_service.comparar_tributos_nota(db, nota_id)
     except NotaServiceError as exc:
         _handle_error(exc)
@@ -549,8 +570,10 @@ def patch_conferencia_nota(
     x_usuario_nome: str | None = Header(default=None, alias="X-Usuario-Nome"),
     x_responsavel: str | None = Header(default=None, alias="X-Responsavel"),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        require_nota_grupo(db, nota_id, usuario)
         if not payload.responsavel:
             payload.responsavel = (x_responsavel or x_usuario_nome or "").strip() or None
         nota = notas_service.atualizar_conferencia(db, nota_id, payload)
@@ -569,8 +592,10 @@ def list_arquivos_nota(
     envelope: bool = Query(default=False),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        require_nota_grupo(db, nota_id, usuario)
         if detalhado or envelope:
             return portal_support_service.listar_documentos_nota(db, nota_id, storage)
         return [

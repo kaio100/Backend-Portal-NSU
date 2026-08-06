@@ -6,7 +6,8 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db, get_storage
+from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_empresa_grupo, require_nota_grupo
+from backend.app.db.models import Usuario
 from backend.app.schemas.notas import NotaConferenciaUpdate
 from backend.app.services import notas_service, portal_support_service
 from backend.app.services.notas_service import NotaServiceError
@@ -115,7 +116,10 @@ def list_nfse_compat(
     valor_min: Decimal | None = Query(default=None),
     valor_max: Decimal | None = Query(default=None),
     db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
+    if empresa_id is not None:
+        require_empresa_grupo(db, empresa_id, usuario)
     limit = _as_int(page_size, 50, 1, 500)
     offset = (_as_int(page, 1, 1, 100000) - 1) * limit
     search = busca or cert_alias or municipio or codigo_servico
@@ -124,6 +128,7 @@ def list_nfse_compat(
     try:
         notas = notas_service.listar_notas(
             db,
+            grupo=usuario.grupo,
             empresa_id=empresa_id,
             processo_id=processo_id,
             status_documento=status,
@@ -151,15 +156,17 @@ def list_nfse_compat(
 
 
 @router.get("/{nota_id}")
-def get_nfse_compat(nota_id: int, db: Session = Depends(get_db)):
+def get_nfse_compat(nota_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
+        require_nota_grupo(db, nota_id, usuario)
         return _nota_compat_dict(notas_service.obter_nota(db, nota_id))
     except NotaServiceError as exc:
         _handle_error(exc)
 
 
 @router.put("/{nota_id}")
-async def update_nfse_compat(nota_id: int, request: Request, db: Session = Depends(get_db)):
+async def update_nfse_compat(nota_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
+    require_nota_grupo(db, nota_id, usuario)
     payload = await request.json()
     campos_somente_sistema = {"observacao_interna", "alertas_fiscais"}
     campos_bloqueados = sorted(campo for campo in campos_somente_sistema if campo in payload)
@@ -197,8 +204,10 @@ def get_nfse_documentos_compat(
     nota_id: int,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
+        require_nota_grupo(db, nota_id, usuario)
         return portal_support_service.listar_documentos_nota(db, nota_id, storage)
     except NotaServiceError as exc:
         _handle_error(exc)

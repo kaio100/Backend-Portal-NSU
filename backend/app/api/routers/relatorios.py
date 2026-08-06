@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
-from backend.app.api.deps import get_db
+from backend.app.api.deps import get_current_usuario, get_db
+from backend.app.db.models import Usuario
 from backend.app.schemas.notas import NotasDownloadFiltros
 from backend.app.services import portal_support_service
 
@@ -26,8 +27,8 @@ class RelatorioConferenciaRequest(BaseModel):
 
 
 @router.post("/conferencia")
-def exportar_conferencia(payload: RelatorioConferenciaRequest, db: Session = Depends(get_db)):
-    path, filename = portal_support_service.exportar_conferencia_xlsx(db, payload.filtros)
+def exportar_conferencia(payload: RelatorioConferenciaRequest, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
+    path, filename = portal_support_service.exportar_conferencia_xlsx(db, payload.filtros, grupo=usuario.grupo)
     return FileResponse(
         path=path,
         filename=filename,

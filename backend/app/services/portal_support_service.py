@@ -364,17 +364,21 @@ def resumo_processo(db: Session, processo_id: int) -> dict:
     }
 
 
-def resumo_operacional_empresas(
+def resumo_operacional_empresas(
     db: Session,
     data_inicio: date | None = None,
     data_fim: date | None = None,
     competencia_inicio: date | None = None,
     competencia_fim: date | None = None,
     status: str | None = None,
-    conferencia_status: str | None = None,
-) -> dict:
+    conferencia_status: str | None = None,
+    grupo: str | None = None,
+) -> dict:
     items: list[dict] = []
-    empresas = db.query(Empresa).order_by(Empresa.nome.asc()).all()
+    empresas_query = db.query(Empresa)
+    if grupo is not None:
+        empresas_query = empresas_query.filter(Empresa.grupo == grupo)
+    empresas = empresas_query.order_by(Empresa.nome.asc()).all()
     for empresa in empresas:
         query = db.query(Nota).filter(Nota.empresa_id == empresa.id)
         if data_inicio is not None:
@@ -439,9 +443,10 @@ def _xlsx_value(value):
     return value
 
 
-def _buscar_notas_relatorio(db: Session, filtros: NotasDownloadFiltros) -> list[Nota]:
+def _buscar_notas_relatorio(db: Session, filtros: NotasDownloadFiltros, grupo: str | None = None) -> list[Nota]:
     notas = notas_service.listar_notas(
-        db,
+        db,
+        grupo=grupo,
         empresa_id=filtros.empresa_id,
         certificado_id=filtros.certificado_id,
         processo_id=filtros.processo_id,
@@ -1237,8 +1242,8 @@ def _add_relatorio_sheet(wb: Workbook, title: str, rows: list[list], table_name:
     # Keep worksheet AutoFilter and styling without adding an XLSX table.
 
 
-def exportar_conferencia_xlsx(db: Session, filtros: NotasDownloadFiltros) -> tuple[Path, str]:
-    notas = [aplicar_campos_operacionais(nota) for nota in _buscar_notas_relatorio(db, filtros)]
+def exportar_conferencia_xlsx(db: Session, filtros: NotasDownloadFiltros, grupo: str | None = None) -> tuple[Path, str]:
+    notas = [aplicar_campos_operacionais(nota) for nota in _buscar_notas_relatorio(db, filtros, grupo=grupo)]
     xml_resumos = _xml_resumos_por_nota(db, notas)
     empresa_cnpjs = _relatorio_empresa_cnpjs(db, notas)
     cnpjs_consulta = {cnpj for nota in notas for cnpj, _nome, _tipo in [_relatorio_party(nota, empresa_cnpjs.get(int(nota.empresa_id), ""))] if cnpj}

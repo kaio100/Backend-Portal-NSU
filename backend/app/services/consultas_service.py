@@ -48,16 +48,16 @@ def _status_filter(query, statuses: tuple[str, ...]):
     return query.filter(func.lower(Processo.status).in_(statuses))
 
 
-def get_monitoramento_config(db: Session) -> MonitoramentoConfig:
-    config = db.get(MonitoramentoConfig, 1)
+def get_monitoramento_config(db: Session, grupo: str = "planning_hub") -> MonitoramentoConfig:
+    config = db.query(MonitoramentoConfig).filter(MonitoramentoConfig.grupo == grupo).first()
     if config is not None:
         return config
 
     config = MonitoramentoConfig(
-        id=1,
         automatico_ativo=False,
         intervalo_minutos=15,
         filtros_json=None,
+        grupo=grupo,
     )
     db.add(config)
     db.flush()
@@ -65,27 +65,34 @@ def get_monitoramento_config(db: Session) -> MonitoramentoConfig:
     return config
 
 
-def is_enabled(db: Session | None = None) -> bool:
+def is_enabled(db: Session | None = None, grupo: str | None = None) -> bool:
     if db is not None:
-        return bool(get_monitoramento_config(db).automatico_ativo)
+        if grupo is None:
+            return db.query(MonitoramentoConfig).filter(MonitoramentoConfig.automatico_ativo.is_(True)).first() is not None
+        return bool(get_monitoramento_config(db, grupo).automatico_ativo)
     with SessionLocal() as session:
-        return bool(get_monitoramento_config(session).automatico_ativo)
+        return is_enabled(session, grupo=grupo)
 
 
-def _count_processos(db: Session, statuses: tuple[str, ...]) -> int:
-    query = db.query(func.count(Processo.id)).filter(Processo.tipo == "consulta_nfse")
+def listar_grupos_automaticos_ativos(db: Session) -> list[str]:
+    rows = db.query(MonitoramentoConfig.grupo).filter(MonitoramentoConfig.automatico_ativo.is_(True)).all()
+    return [str(grupo) for (grupo,) in rows if grupo]
+
+
+def _count_processos(db: Session, statuses: tuple[str, ...], grupo: str) -> int:
+    query = db.query(func.count(Processo.id)).join(Empresa, Empresa.id == Processo.empresa_id).filter(Processo.tipo == "consulta_nfse", Empresa.grupo == grupo)
     return int(_status_filter(query, statuses).scalar() or 0)
 
 
-def _list_processos(db: Session, statuses: tuple[str, ...], limit: int) -> list[Processo]:
-    query = db.query(Processo).filter(Processo.tipo == "consulta_nfse")
+def _list_processos(db: Session, statuses: tuple[str, ...], limit: int, grupo: str) -> list[Processo]:
+    query = db.query(Processo).join(Empresa, Empresa.id == Processo.empresa_id).filter(Processo.tipo == "consulta_nfse", Empresa.grupo == grupo)
     return list(_status_filter(query, statuses).order_by(Processo.id.desc()).limit(limit).all())
 
 
-def montar_status(db: Session, limit: int = 10) -> dict[str, Any]:
-    config = get_monitoramento_config(db)
-    processos_rodando = _list_processos(db, RODANDO_STATUSES, limit)
-    processos_pendentes = _list_processos(db, PENDENTE_STATUSES, limit)
+def montar_status(db: Session, limit: int = 10, grupo: str = "planning_hub") -> dict[str, Any]:
+    config = get_monitoramento_config(db, grupo)
+    processos_rodando = _list_processos(db, RODANDO_STATUSES, limit, grupo)
+    processos_pendentes = _list_processos(db, PENDENTE_STATUSES, limit, grupo)
     consultando = bool(processos_rodando)
     automatico_ativo = bool(config.automatico_ativo)
 
@@ -106,11 +113,11 @@ def montar_status(db: Session, limit: int = 10) -> dict[str, Any]:
             "sleep": settings.api_worker_sleep,
         },
         "totais": {
-            "pendentes": _count_processos(db, PENDENTE_STATUSES),
-            "rodando": _count_processos(db, RODANDO_STATUSES),
-            "finalizados": _count_processos(db, FINALIZADO_STATUSES),
-            "erros": _count_processos(db, ERRO_STATUSES),
-            "cancelados": _count_processos(db, CANCELADO_STATUSES),
+            "pendentes": _count_processos(db, PENDENTE_STATUSES, grupo),
+            "rodando": _count_processos(db, RODANDO_STATUSES, grupo),
+            "finalizados": _count_processos(db, FINALIZADO_STATUSES, grupo),
+            "erros": _count_processos(db, ERRO_STATUSES, grupo),
+            "cancelados": _count_processos(db, CANCELADO_STATUSES, grupo),
         },
         "processos_rodando": processos_rodando,
         "processos_pendentes": processos_pendentes,
@@ -142,6 +149,7 @@ def _active_consulta_certificado_ids(db: Session, certificado_ids: list[int]) ->
 def list_certificados_elegiveis(
     db: Session,
     options: ConsultaIniciarRequest | None = None,
+    grupo: str = "planning_hub",
 ) -> list[Certificado]:
     options = options or ConsultaIniciarRequest()
     query = (
@@ -153,6 +161,7 @@ def list_certificados_elegiveis(
         .filter(Certificado.storage_key != "")
         .filter(Certificado.storage_key != "pending")
         .filter(Certificado.senha_secret_ref.isnot(None))
+        .filter(Empresa.grupo == grupo)
     )
     if options.empresa_ids:
         query = query.filter(Certificado.empresa_id.in_(options.empresa_ids))
@@ -216,8 +225,9 @@ def enqueue_consultas_pendentes(
     db: Session,
     options: ConsultaIniciarRequest | None = None,
     respeitar_ciclo: bool = True,
+    grupo: str = "planning_hub",
 ) -> dict[str, Any]:
-    config = get_monitoramento_config(db)
+    config = get_monitoramento_config(db, grupo)
     options = options or ConsultaIniciarRequest(**(config.filtros_json or {}))
     agora = _now()
 
@@ -227,7 +237,7 @@ def enqueue_consultas_pendentes(
 
     processos_criados = []
     certificados_ignorados = 0
-    certificados = list_certificados_elegiveis(db, options=options)
+    certificados = list_certificados_elegiveis(db, options=options, grupo=grupo)
     certificados_ativos = (
         set()
         if options.forcar
@@ -259,15 +269,16 @@ def enqueue_consultas_pendentes(
 def iniciar_consultas_automaticas(
     db: Session,
     options: ConsultaIniciarRequest | None = None,
+    grupo: str = "planning_hub",
 ) -> dict[str, Any]:
     options = options or ConsultaIniciarRequest()
     # Um NSU informado manualmente representa um novo ponto de partida. Nao
     # pode concorrer com jobs antigos, pois o worker poderia reservar primeiro
     # uma consulta criada com o estado anterior.
     if options.nsu_inicio is not None:
-        desativar_consultas_automaticas(db)
+        desativar_consultas_automaticas(db, grupo=grupo)
 
-    config = get_monitoramento_config(db)
+    config = get_monitoramento_config(db, grupo)
     config.automatico_ativo = bool(options.automatico)
     config.intervalo_minutos = int(options.intervalo_minutos)
     config.filtros_json = options.model_dump()
@@ -275,7 +286,7 @@ def iniciar_consultas_automaticas(
     db.add(config)
     db.flush()
 
-    resultado = enqueue_consultas_pendentes(db, options=options, respeitar_ciclo=False)
+    resultado = enqueue_consultas_pendentes(db, options=options, respeitar_ciclo=False, grupo=grupo)
 
     # O NSU inicial e o modo forcar valem apenas para esta partida. Ciclos
     # automaticos posteriores devem continuar do NSU central ja alcancado e
@@ -291,10 +302,11 @@ def desativar_consultas_automaticas(
     db: Session,
     cancelar_pendentes: bool = True,
     cancelar_rodando: bool = True,
+    grupo: str = "planning_hub",
 ) -> dict[str, Any]:
     cancelar_pendentes = True
     cancelar_rodando = True
-    config = get_monitoramento_config(db)
+    config = get_monitoramento_config(db, grupo)
     config.automatico_ativo = False
     config.proximo_ciclo_em = None
     db.add(config)
@@ -302,7 +314,7 @@ def desativar_consultas_automaticas(
     cancelados = 0
     if cancelar_pendentes:
         processos = _status_filter(
-            db.query(Processo).filter(Processo.tipo == "consulta_nfse"),
+            db.query(Processo).join(Empresa, Empresa.id == Processo.empresa_id).filter(Processo.tipo == "consulta_nfse", Empresa.grupo == grupo),
             PENDENTE_STATUSES,
         ).all()
         for processo in processos:
@@ -313,7 +325,7 @@ def desativar_consultas_automaticas(
 
     if cancelar_rodando:
         processos = _status_filter(
-            db.query(Processo).filter(Processo.tipo == "consulta_nfse"),
+            db.query(Processo).join(Empresa, Empresa.id == Processo.empresa_id).filter(Processo.tipo == "consulta_nfse", Empresa.grupo == grupo),
             RODANDO_STATUSES,
         ).all()
         for processo in processos:

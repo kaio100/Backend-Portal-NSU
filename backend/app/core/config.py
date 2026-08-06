@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     pdf_status_revalidation_enabled: bool = True
     pdf_status_revalidation_batch_size: int = 200
     secrets_key: str | None = None
+    api_key: str | None = None
+    jwt_secret: str | None = None
+    jwt_expire_minutes: int = 1440
     cors_origins: str = "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
     invertexto_enabled: bool = False
     invertexto_token: str | None = None

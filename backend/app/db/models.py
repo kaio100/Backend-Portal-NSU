@@ -29,6 +29,15 @@ class TimestampMixin:
     )
 
 
+class Grupo(TimestampMixin, Base):
+    __tablename__ = "grupos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    codigo: Mapped[str] = mapped_column(String(40), nullable=False, unique=True, index=True)
+    nome: Mapped[str] = mapped_column(String(120), nullable=False)
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
 class Empresa(TimestampMixin, Base):
     __tablename__ = "empresas"
 
@@ -37,6 +46,7 @@ class Empresa(TimestampMixin, Base):
     cnpj: Mapped[str] = mapped_column(String(14), nullable=False, unique=True, index=True)
     ambiente: Mapped[str] = mapped_column(String(20), nullable=False, default="producao")
     ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    grupo: Mapped[str] = mapped_column(String(40), nullable=False, default="planning_hub", index=True)
 
     certificados: Mapped[list["Certificado"]] = relationship(back_populates="empresa")
     processos: Mapped[list["Processo"]] = relationship(back_populates="empresa")
@@ -46,6 +56,7 @@ class Empresa(TimestampMixin, Base):
     arquivos: Mapped[list["Arquivo"]] = relationship(back_populates="empresa")
     logs: Mapped[list["LogProcesso"]] = relationship(back_populates="empresa")
     locks: Mapped[list["LockProcessamento"]] = relationship(back_populates="empresa")
+    usuarios: Mapped[list["Usuario"]] = relationship(back_populates="empresa")
 
 
 class Certificado(TimestampMixin, Base):
@@ -162,6 +173,7 @@ class MonitoramentoConfig(TimestampMixin, Base):
     ultimo_ciclo_em: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     proximo_ciclo_em: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     filtros_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    grupo: Mapped[str] = mapped_column(String(40), nullable=False, default="planning_hub", unique=True, index=True)
 
 
 class NsuControle(TimestampMixin, Base):
@@ -381,3 +393,29 @@ class Secret(TimestampMixin, Base):
     ref: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     tipo: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     encrypted_value: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class Usuario(TimestampMixin, Base):
+    __tablename__ = "usuarios"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    senha_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    nome: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    grupo: Mapped[str] = mapped_column(String(40), nullable=False, default="planning_hub", index=True)
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+
+    empresa: Mapped[Empresa] = relationship(back_populates="usuarios")
+
+
+class AcessoUsuario(Base):
+    __tablename__ = "acessos_usuarios"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False, index=True)
+    grupo: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    ip: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

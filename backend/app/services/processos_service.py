@@ -16,12 +16,14 @@ class ProcessoServiceError(ValueError):
     pass
 
 
-def criar_processo_com_job(db: Session, payload: ProcessoCreate) -> Processo:
+def criar_processo_com_job(db: Session, payload: ProcessoCreate, grupo: str | None = None) -> Processo:
     empresa = empresas_repo.get_empresa(db, payload.empresa_id)
     if empresa is None:
         raise ProcessoServiceError("Empresa nao encontrada.")
     if not empresa.ativo:
         raise ProcessoServiceError("Empresa inativa.")
+    if grupo is not None and empresa.grupo != grupo:
+        raise ProcessoServiceError("Empresa nao encontrada.")
 
     certificado = certificados_repo.get_certificado(db, payload.certificado_id)
     if certificado is None:
@@ -74,6 +76,7 @@ def listar_processos(
     status: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    grupo: str | None = None,
 ) -> list[Processo]:
     if status is not None and status not in STATUS_PERMITIDOS:
         raise ProcessoServiceError("Status invalido.")
@@ -83,7 +86,15 @@ def listar_processos(
         status=status,
         limit=limit,
         offset=offset,
+        grupo=grupo,
     )
+
+
+def obter_processo_no_grupo(db: Session, processo_id: int, grupo: str) -> Processo:
+    processo = processos_repo.get_processo_no_grupo(db, processo_id, grupo)
+    if processo is None:
+        raise ProcessoServiceError("Processo nao encontrado.")
+    return processo
 
 
 def obter_processo(db: Session, processo_id: int) -> Processo:
