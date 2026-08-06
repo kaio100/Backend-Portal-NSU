@@ -175,4 +175,13 @@ def upsert_nota_by_chave(db: Session, empresa_id: int, chave: str, data: dict) -
     nota = get_nota_by_chave(db, empresa_id, chave)
     if nota is None:
         return create_nota(db, data), True
+    data = dict(data)
+    # Uma nova leitura do XML pode atualizar os campos fiscais de origem, mas
+    # nao pode desfazer a decisao de um usuario que ja conferiu/corrigiu a
+    # nota. Quando a conferencia for reaberta como "pendente", o valor volta
+    # a ser calculado automaticamente na proxima ingestao.
+    conferencia_status = str(nota.conferencia_status or "").strip().lower()
+    if conferencia_status and conferencia_status != "pendente":
+        data.pop("valor_liquido_correto", None)
+        data.pop("status_valor_liquido", None)
     return update_nota(db, nota, data), False

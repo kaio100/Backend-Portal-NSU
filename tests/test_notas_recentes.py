@@ -181,6 +181,49 @@ def test_upsert_nota_existente_preserva_importado_em_e_atualiza_updated_at():
         db.commit()
 
 
+def test_upsert_reprocessamento_preserva_valor_corrigido_de_nota_conferida():
+    _reset_db()
+    empresa_id = _empresa()
+
+    with SessionLocal() as db:
+        nota, _ = notas_repo.upsert_nota_by_chave(
+            db,
+            empresa_id,
+            "CHAVE_CONFERIDA",
+            {
+                "empresa_id": empresa_id,
+                "chave": "CHAVE_CONFERIDA",
+                "valor_liquido": 900,
+                "valor_liquido_correto": 850,
+                "status_valor_liquido": "divergente",
+                "conferencia_status": "corrigir",
+                "conferencia_observacao": "Valor confirmado pelo usuario",
+            },
+        )
+        db.commit()
+
+        nota, created = notas_repo.upsert_nota_by_chave(
+            db,
+            empresa_id,
+            "CHAVE_CONFERIDA",
+            {
+                "empresa_id": empresa_id,
+                "chave": "CHAVE_CONFERIDA",
+                "valor_liquido": 910,
+                "valor_liquido_correto": 910,
+                "status_valor_liquido": "ok",
+            },
+        )
+
+        assert created is False
+        assert nota.valor_liquido == 910
+        assert nota.valor_liquido_correto == 850
+        assert nota.status_valor_liquido == "divergente"
+        assert nota.conferencia_status == "corrigir"
+        assert nota.conferencia_observacao == "Valor confirmado pelo usuario"
+        db.commit()
+
+
 def test_arquivo_existente_mantem_vinculo_com_nota_e_atualiza_timestamp():
     _reset_db()
     empresa_id = _empresa()
