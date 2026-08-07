@@ -41,14 +41,9 @@ def _sanitize_filename(filename: str) -> str:
 
 
 def _normalizar_ambiente(value: str) -> str:
-    ambiente = (value or "producao").lower().strip()
-    if ambiente in {"homologacao", "homologação"}:
-        return "homologacao"
-    if ambiente in {"restrita", "producao_restrita", "produção_restrita"}:
-        return "restrita"
-    if ambiente == "producao":
-        return "producao"
-    raise CertificadoServiceError("Ambiente deve ser 'producao' ou 'homologacao'.")
+    # Mantem o parametro apenas por compatibilidade com clientes antigos. O
+    # portal consulta exclusivamente o ADN de producao.
+    return "producao"
 
 
 def _cnpj_from_text(value: str) -> str:
@@ -248,7 +243,7 @@ def autocadastrar_certificado(
         updates: dict[str, Any] = {}
         if not empresa.nome and (metadata.nome or metadata.subject_cn):
             updates["nome"] = metadata.nome or metadata.subject_cn
-        if not empresa.ambiente:
+        if empresa.ambiente != "producao":
             updates["ambiente"] = ambiente_normalizado
         if not empresa.ativo:
             updates["ativo"] = True

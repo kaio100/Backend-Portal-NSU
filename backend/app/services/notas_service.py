@@ -303,8 +303,30 @@ def listar_notas(
     if filtro_tipo and filtro_direcao and tipo_para_direcao(filtro_tipo) != filtro_direcao:
         return []
     classificar = bool(filtro_tipo or filtro_direcao)
-    repo_limit = 5000 if classificar else limit
-    repo_offset = 0 if classificar else offset
+    direcao_efetiva = filtro_direcao or tipo_para_direcao(filtro_tipo)
+    filtro_direto = False
+    prestador_cnpj_repo = _only_digits(prestador_cnpj) or None
+    tomador_cnpj_repo = _only_digits(tomador_cnpj) or None
+
+    # Quando a empresa e a direcao estao definidas, o proprio PostgreSQL pode
+    # filtrar tomadas/prestadas pelo CNPJ. Isso evita carregar e classificar
+    # ate 5.000 notas em memoria a cada pagina/atualizacao do portal.
+    if classificar and empresa_id is not None and direcao_efetiva in {"recebida", "emitida"}:
+        empresa = empresas_repo.get_empresa(db, empresa_id)
+        empresa_cnpj = _only_digits(empresa.cnpj if empresa is not None else None)
+        if empresa_cnpj:
+            if direcao_efetiva == "recebida":
+                if tomador_cnpj_repo and tomador_cnpj_repo != empresa_cnpj:
+                    return []
+                tomador_cnpj_repo = empresa_cnpj
+            else:
+                if prestador_cnpj_repo and prestador_cnpj_repo != empresa_cnpj:
+                    return []
+                prestador_cnpj_repo = empresa_cnpj
+            filtro_direto = True
+
+    repo_limit = limit if filtro_direto or not classificar else 5000
+    repo_offset = offset if filtro_direto or not classificar else 0
 
     notas = notas_repo.list_notas(
         db,
@@ -315,8 +337,8 @@ def listar_notas(
         status_documento=status_documento,
         status=status,
         numero=numero,
-        prestador_cnpj=_only_digits(prestador_cnpj) or None,
-        tomador_cnpj=_only_digits(tomador_cnpj) or None,
+        prestador_cnpj=prestador_cnpj_repo,
+        tomador_cnpj=tomador_cnpj_repo,
         chave=chave,
         busca=busca,
         data_inicio=data_inicio,
@@ -345,9 +367,10 @@ def listar_notas(
             if (filtro_tipo is None or getattr(nota, "tipo_nota", None) == filtro_tipo)
             and (filtro_direcao is None or getattr(nota, "direcao_nota", None) == filtro_direcao)
         ]
-        safe_limit = min(max(limit, 1), 5000)
-        safe_offset = max(offset, 0)
-        return anotadas[safe_offset : safe_offset + safe_limit]
+        if not filtro_direto:
+            safe_limit = min(max(limit, 1), 5000)
+            safe_offset = max(offset, 0)
+            return anotadas[safe_offset : safe_offset + safe_limit]
     return anotadas
 
 

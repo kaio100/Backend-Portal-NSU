@@ -1118,7 +1118,7 @@ def _relatorio_empresa_cnpjs(db: Session, notas: list[Nota]) -> dict[int, str]:
 
 def _relatorio_party(nota: Nota, empresa_cnpj: str) -> tuple[str, str, str]:
     tipo = getattr(notas_service, "_classificar_nota")(nota, empresa_cnpj) if empresa_cnpj else "tomada"
-    if tipo == "prestada":
+    if tipo in {"prestada", "emitida"}:
         return _relatorio_digits(getattr(nota, "tomador_cnpj", None)), _relatorio_text(getattr(nota, "tomador_nome", None)), tipo
     return _relatorio_digits(getattr(nota, "prestador_cnpj", None)), _relatorio_text(getattr(nota, "prestador_nome", None)), tipo
 

@@ -585,7 +585,7 @@ def test_autocadastro_cria_empresa_certificado_e_job(monkeypatch):
         assert response.status_code == 200
         payload = response.json()
         assert payload["empresa"]["cnpj"] == "22333444000156"
-        assert payload["empresa"]["ambiente"] == "homologacao"
+        assert payload["empresa"]["ambiente"] == "producao"
         assert payload["certificado"]["empresa_id"] == payload["empresa"]["id"]
         assert payload["processo"] is not None
         assert payload["processo"]["certificado_id"] == payload["certificado"]["id"]
