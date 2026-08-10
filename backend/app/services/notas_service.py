@@ -407,11 +407,27 @@ def listar_todas_notas(
     valor_min: Decimal | None = None,
     valor_max: Decimal | None = None,
     sort: str = "recentes",
+    somente_total: bool = False,
 ) -> dict:
     filtro_tipo = normalizar_tipo_nota(tipo_nota)
     filtro_direcao = normalizar_direcao_nota(direcao_nota)
     if filtro_tipo and filtro_direcao and tipo_para_direcao(filtro_tipo) != filtro_direcao:
         return {"items": [], "total": 0}
+
+    # O dashboard sem filtros precisa apenas do numero do acervo. Antes, ate
+    # `somente_total=true` percorria e anotava todas as notas para depois
+    # descartar os itens, tornando a pagina progressivamente mais pesada.
+    filtros_ativos = any(value is not None and value is not False for value in (
+        empresa_id, certificado_id, processo_id, status_documento, status,
+        numero, prestador_cnpj, tomador_cnpj, chave, busca, data_inicio,
+        data_fim, competencia_inicio, competencia_fim, conferencia_status,
+        prioridade, responsavel, status_nota_pdf, simples_nacional_xml,
+        consulta_simples_api, status_simples_nacional, incidencia_iss,
+        divergencia, sla_status, filtro_tipo, filtro_direcao,
+        somente_divergentes, valor_min, valor_max,
+    ))
+    if somente_total and not filtros_ativos:
+        return {"items": [], "total": notas_repo.count_notas_grupo(db, grupo=grupo)}
 
     batch_size = 5000
     offset = 0

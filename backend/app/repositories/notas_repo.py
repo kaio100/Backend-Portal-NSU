@@ -142,6 +142,14 @@ def list_notas_by_ids(db: Session, nota_ids: list[int]) -> list[Nota]:
     return sorted(notas, key=lambda nota: order.get(int(nota.id), len(order)))
 
 
+def count_notas_grupo(db: Session, grupo: str | None = None) -> int:
+    """Conta o acervo sem materializar milhares de registros em memoria."""
+    query = db.query(Nota.id)
+    if grupo is not None:
+        query = query.join(Empresa, Empresa.id == Nota.empresa_id).filter(Empresa.grupo == grupo)
+    return int(query.count())
+
+
 def create_nota(db: Session, data: dict) -> Nota:
     now = datetime.now(timezone.utc)
     data.setdefault("importado_em", now)

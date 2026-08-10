@@ -181,12 +181,13 @@ def list_todas_notas(
     somente_divergentes: bool = Query(default=False),
     valor_min: Decimal | None = Query(default=None),
     valor_max: Decimal | None = Query(default=None),
+    somente_total: bool = Query(default=False),
     sort: str = Query(default="recentes", pattern="^(recentes|emissao)$"),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
-        return notas_service.listar_todas_notas(
+        resultado = notas_service.listar_todas_notas(
             db,
             grupo=usuario.grupo,
             empresa_id=empresa_id,
@@ -218,7 +219,11 @@ def list_todas_notas(
             valor_min=valor_min,
             valor_max=valor_max,
             sort=sort,
+            somente_total=somente_total,
         )
+        if somente_total:
+            return {"items": [], "total": resultado["total"]}
+        return resultado
     except NotaServiceError as exc:
         _handle_error(exc)
 
