@@ -48,7 +48,8 @@ EXPECTED_RELATORIO_HEADERS = [
     "IRRF",
     "Percentual IRRF",
     "INSS",
-    "ISS",
+    "ISS RET. – SERV. TOMADOS",
+    "ISS RET. – SERV. PRESTADOS",
     "Valor Líquido",
     "Incidência do ISS",
     "Data do pagamento",
@@ -246,13 +247,47 @@ def test_comparativo_tributos_usa_calculado_correto_e_esconde_observacao_ok():
         assert items["INSS"]["status"] == "Correto"
         assert items["INSS"]["observacao"] is None
 
-        assert items["ISS"]["status"] == "Nao Retido"
-        assert items["ISS"]["observacao"] is None
+        assert items["ISS RET. – SERV. TOMADOS"]["status"] == "Não aplicável"
+        assert items["ISS RET. – SERV. TOMADOS"]["observacao"] is None
+        assert "ISS RET. – SERV. PRESTADOS" not in items
 
         assert items["IRRF"]["status"] == "Divergente"
         assert items["IRRF"]["observacao"] == "IRRF esperado diferente do informado"
 
 
+def test_comparativo_separa_iss_retido_por_direcao_da_nota():
+    _reset_db()
+    empresa_id, processo_id, _ = _base_data()
+
+    with SessionLocal() as db:
+        empresa = db.get(Empresa, empresa_id)
+        nota = Nota(
+            empresa_id=empresa.id,
+            processo_id=processo_id,
+            chave="CHAVE-ISS-RETIDO-TOMADO",
+            prestador_cnpj="22222222000182",
+            tomador_cnpj=empresa.cnpj,
+            valor_servico=1000,
+            iss_retido=True,
+            valor_iss_retido=50,
+            iss_calculado=50,
+            status_iss="Correto",
+        )
+        db.add(nota)
+        db.commit()
+        nota_id = int(nota.id)
+
+    with TestClient(app) as client:
+        response = client.get(f"/notas/{nota_id}/tributos-comparativo")
+        assert response.status_code == 200
+        items = {item["tributo"]: item for item in response.json()["items"]}
+
+    assert items["ISS RET. – SERV. TOMADOS"]["informado"] == 50
+    assert items["ISS RET. – SERV. TOMADOS"]["calculado"] == 50
+    assert items["ISS RET. – SERV. TOMADOS"]["status"] == "Correto"
+    assert "ISS RET. – SERV. PRESTADOS" not in items
+
+
 def test_nota_substituida_sem_evento_explicito_exibe_evento_e_observacao_interna():
 
     _reset_db()
@@ -430,11 +465,25 @@ def test_relatorio_conferencia_csv(monkeypatch):
         assert row_by_doc["456"][12] == 0
         assert row_by_doc["456"][13] == 0
         assert row_by_doc["456"][14] == 0
-        assert row_by_doc["456"][17] == "01.05"
-        assert row_by_doc["456"][23] == "Não consultado"
-        assert row_by_doc["456"][24] == "Não comparado"
-        assert row_by_doc["456"][25] == "Não se aplica"
-        assert row_by_doc["456"][27] == "Depende de análise"
+        assert row_by_doc["456"][18] == "01.05"
+        assert row_by_doc["456"][24] == "Não consultado"
+        assert row_by_doc["456"][25] == "Não comparado"
+        assert row_by_doc["456"][26] == "Não se aplica"
+        assert row_by_doc["456"][28] == "Depende de análise"
+
+        for tipo_nota, esperado, ausente in (
+            ("tomada", "ISS RET. – SERV. TOMADOS", "ISS RET. – SERV. PRESTADOS"),
+            ("prestada", "ISS RET. – SERV. PRESTADOS", "ISS RET. – SERV. TOMADOS"),
+        ):
+            filtrado = client.post(
+                "/relatorios/conferencia",
+                json={"filtros": {"empresa_id": empresa_id, "tipo_nota": tipo_nota}},
+            )
+            assert filtrado.status_code == 200
+            wb_filtrado = load_workbook(filename=io.BytesIO(filtrado.content), read_only=True)
+            headers_filtrados = [cell.value for cell in wb_filtrado["Todas as Notas"][1]]
+            assert esperado in headers_filtrados
+            assert ausente not in headers_filtrados
 
 
 def test_relatorio_conferencia_enriquece_campos_vazios_pelo_xml(monkeypatch):
@@ -492,7 +541,8 @@ def test_relatorio_conferencia_enriquece_campos_vazios_pelo_xml(monkeypatch):
         assert row["Código de serviço"] == "17.06"
         assert row["Descrição do Serviço"] == "Descricao detalhada do XML"
         assert row["Valor B/C"] == 1000
-        assert row["ISS"] == 50
+        assert row["ISS RET. – SERV. TOMADOS"] == 0
+        assert row["ISS RET. – SERV. PRESTADOS"] == 0
         assert row["CSRF"] == 6
         assert row["IRRF"] == 10
         assert row["INSS"] == 20

@@ -202,16 +202,43 @@ _STATUS_TRIBUTO_SEM_PROBLEMA = {
 }
 
 
-def comparar_tributos_nota(db: Session, nota_id: int) -> dict:
-    nota = notas_service.obter_nota(db, nota_id)
-    specs = [
-        ("IRRF", "irrf", "irrf_calculado", "status_irrf", "IRRF esperado diferente do informado"),
-        ("CSRF", "csrf", "csrf_calculado", "status_csrf", "CSRF esperado diferente do informado"),
-        ("INSS", "inss", "inss_calculado", "status_inss", "INSS esperado diferente do informado"),
-        ("ISS", "iss", "iss_calculado", "status_iss", "ISS esperado diferente do informado"),
-        ("VALOR_LIQUIDO", "valor_liquido", "valor_liquido_correto", "status_valor_liquido", "Valor liquido esperado diferente do informado"),
-    ]
-    items: list[dict] = []
+def comparar_tributos_nota(db: Session, nota_id: int) -> dict:
+    nota = notas_service.obter_nota(db, nota_id)
+    empresa = db.get(Empresa, nota.empresa_id)
+    direcao = notas_service._classificar_nota(nota, empresa.cnpj if empresa else "")
+    iss_retido = _decimal(getattr(nota, "valor_iss_retido", None) or 0)
+    iss_calculado = _decimal(getattr(nota, "iss_calculado", None) or 0)
+    iss_status = getattr(nota, "status_iss", None) or "Não aplicável"
+    iss_ativo = bool(getattr(nota, "iss_retido", False)) or iss_retido > 0
+    iss_por_direcao = {
+        "ISS RET. – SERV. TOMADOS": direcao in {"tomada", "recebida"},
+        "ISS RET. – SERV. PRESTADOS": direcao in {"prestada", "emitida"},
+    }
+    specs = [
+        ("IRRF", "irrf", "irrf_calculado", "status_irrf", "IRRF esperado diferente do informado"),
+        ("CSRF", "csrf", "csrf_calculado", "status_csrf", "CSRF esperado diferente do informado"),
+        ("INSS", "inss", "inss_calculado", "status_inss", "INSS esperado diferente do informado"),
+        ("VALOR_LIQUIDO", "valor_liquido", "valor_liquido_correto", "status_valor_liquido", "Valor liquido esperado diferente do informado"),
+    ]
+    iss_items: list[dict] = []
+    for tributo, direcao_ativa in iss_por_direcao.items():
+        if not direcao_ativa:
+            continue
+        aplicavel = direcao_ativa and iss_ativo
+        informado_dec = iss_retido if aplicavel else Decimal("0")
+        calculado_dec = iss_calculado if aplicavel else Decimal("0")
+        diferenca = calculado_dec - informado_dec
+        final_status = iss_status if aplicavel else "Não aplicável"
+        sem_problema = final_status.strip().lower() in _STATUS_TRIBUTO_SEM_PROBLEMA or not aplicavel
+        iss_items.append({
+            "tributo": tributo,
+            "informado": float(informado_dec),
+            "calculado": float(calculado_dec),
+            "diferenca": float(diferenca),
+            "status": final_status,
+            "observacao": None if sem_problema else "ISS retido esperado diferente do informado",
+        })
+    items: list[dict] = []
     for tributo, informado_field, calculado_field, status_field, observacao in specs:
         informado = getattr(nota, informado_field, None)
         calculado = getattr(nota, calculado_field, None) if calculado_field else None
@@ -223,7 +250,7 @@ def comparar_tributos_nota(db: Session, nota_id: int) -> dict:
         diferenca = calculado_dec - informado_dec
         final_status = status or ("Correto" if abs(diferenca) < Decimal("0.01") else "Divergente")
         sem_problema = final_status.strip().lower() in _STATUS_TRIBUTO_SEM_PROBLEMA
-        items.append(
+        items.append(
             {
                 "tributo": tributo,
                 "informado": float(informado_dec),
@@ -231,9 +258,10 @@ def comparar_tributos_nota(db: Session, nota_id: int) -> dict:
                 "diferenca": float(diferenca),
                 "status": final_status,
                 "observacao": None if sem_problema else observacao,
-            }
-        )
-    return {"nota_id": nota_id, "items": items}
+            }
+        )
+    items[3:3] = iss_items
+    return {"nota_id": nota_id, "items": items}
 
 
 def listar_arquivos_processo(
@@ -838,12 +866,16 @@ def exportar_conferencia_xlsx(db: Session, filtros: NotasDownloadFiltros) -> tup
 
 RELATORIO_XLSX_HEADERS = [
     "Competência", "Município", "Data de Emissão", "CNPJ/CPF", "Razão Social", "N° Documento",
-    "Valor Total", "Valor B/C", "Retenção CSRF", "CSRF", "IRRF", "Percentual IRRF", "INSS", "ISS",
+    "Valor Total", "Valor B/C", "Retenção CSRF", "CSRF", "IRRF", "Percentual IRRF", "INSS",
+    "ISS RET. – SERV. TOMADOS", "ISS RET. – SERV. PRESTADOS",
     "Valor Líquido", "Incidência do ISS", "Data do pagamento", "Código de serviço", "Descrição do Serviço",
     "Código NBS", "Código CNAE", "Descrição CNAE", "Simples Nacional / XML", "Consulta Simples API",
     "Status Simples Nacional", "Status CSRF", "Status IRRF", "Status INSS", "Alertas Fiscais", "dia processado",
 ]
-_RELATORIO_MONEY_HEADERS = {"Valor Total", "Valor B/C", "CSRF", "IRRF", "Percentual IRRF", "INSS", "ISS", "Valor Líquido"}
+_RELATORIO_MONEY_HEADERS = {
+    "Valor Total", "Valor B/C", "CSRF", "IRRF", "Percentual IRRF", "INSS",
+    "ISS RET. – SERV. TOMADOS", "ISS RET. – SERV. PRESTADOS", "Valor Líquido",
+}
 _RELATORIO_DATE_HEADERS = {"Competência", "Data de Emissão", "Data do pagamento", "dia processado"}
 _RELATORIO_WRAP_HEADERS = {"Descrição do Serviço", "Alertas Fiscais"}
 _RELATORIO_STATUS_HEADERS = {"Status Simples Nacional", "Status CSRF", "Status IRRF", "Status INSS"}
@@ -1125,7 +1157,7 @@ def _relatorio_party(nota: Nota, empresa_cnpj: str) -> tuple[str, str, str]:
 
 def _relatorio_row(nota: Nota, xml_resumo: dict[str, str] | None, empresa_cnpj: str, api_data: dict, gerado_em: date) -> list:
     xml_resumo = xml_resumo or {}
-    cnpj, razao_social, _tipo = _relatorio_party(nota, empresa_cnpj)
+    cnpj, razao_social, tipo = _relatorio_party(nota, empresa_cnpj)
     simples_xml = _relatorio_simples(_nota_field(nota, "simples_nacional_xml", xml_resumo) or _nota_field(nota, "simples_xml", xml_resumo))
     api_result = api_data.get(cnpj) or {"consulta": "Não consultado", "cnae": "", "descricao_cnae": ""}
     consulta_api = api_result.get("consulta") or "Não consultado"
@@ -1138,8 +1170,9 @@ def _relatorio_row(nota: Nota, xml_resumo: dict[str, str] | None, empresa_cnpj: 
     irrf = _relatorio_decimal(_nota_decimal_field(nota, "irrf", xml_resumo, "irrf"))
     inss = _relatorio_decimal(_nota_decimal_field(nota, "inss", xml_resumo, "inss"))
     iss_retido = _relatorio_decimal(_nota_decimal_field(nota, "valor_iss_retido", xml_resumo))
-    iss_apurado = _relatorio_decimal(_nota_decimal_field(nota, "iss", xml_resumo, "iss"))
-    iss = iss_retido if iss_retido > 0 else iss_apurado
+    tem_iss_retido = bool(_nota_field(nota, "iss_retido", xml_resumo)) or iss_retido > 0
+    iss_retido_tomados = iss_retido if tem_iss_retido and tipo in {"tomada", "recebida"} else Decimal("0")
+    iss_retido_prestados = iss_retido if tem_iss_retido and tipo in {"prestada", "emitida"} else Decimal("0")
     liquido = _parse_decimal_optional(_nota_decimal_field(nota, "valor_liquido", xml_resumo, "valor_liquido"))
     if liquido is None:
         liquido = max(Decimal("0"), valor_total - csrf - irrf - inss - iss_retido)
@@ -1167,7 +1200,8 @@ def _relatorio_row(nota: Nota, xml_resumo: dict[str, str] | None, empresa_cnpj: 
         float(irrf.quantize(Decimal("0.01"))),
         _relatorio_money(_nota_decimal_field(nota, "regra_irrf_aliquota", xml_resumo)),
         float(inss.quantize(Decimal("0.01"))),
-        float(iss.quantize(Decimal("0.01"))),
+        float(iss_retido_tomados.quantize(Decimal("0.01"))),
+        float(iss_retido_prestados.quantize(Decimal("0.01"))),
         float(liquido.quantize(Decimal("0.01"))),
         _relatorio_text(_nota_field(nota, "incidencia_iss", xml_resumo)),
         _relatorio_date(xml_resumo.get("data_pagamento") or getattr(nota, "data_pagamento", None)),
@@ -1194,9 +1228,16 @@ def _relatorio_row_divergente(row: list) -> bool:
     return _relatorio_alerta_critico(str(by_header.get("Alertas Fiscais") or ""))
 
 
-def _add_relatorio_sheet(wb: Workbook, title: str, rows: list[list], table_name: str) -> None:
+def _add_relatorio_sheet(
+    wb: Workbook,
+    title: str,
+    rows: list[list],
+    table_name: str,
+    headers: list[str] | None = None,
+) -> None:
     ws = wb.create_sheet(title=title)
-    ws.append(RELATORIO_XLSX_HEADERS)
+    headers = headers or RELATORIO_XLSX_HEADERS
+    ws.append(headers)
     for row in rows:
         ws.append(row)
     header_fill = PatternFill("solid", fgColor="1F4E78")
@@ -1255,11 +1296,24 @@ def exportar_conferencia_xlsx(db: Session, filtros: NotasDownloadFiltros, grupo:
     ]
     divergentes = [row for row in rows if _relatorio_row_divergente(row)]
     corretas = [row for row in rows if not _relatorio_row_divergente(row)]
+    tipo_exportacao = notas_service.normalizar_tipo_nota(filtros.tipo_nota or filtros.direcao_nota)
+    headers = list(RELATORIO_XLSX_HEADERS)
+    coluna_remover = None
+    if tipo_exportacao == "tomada":
+        coluna_remover = "ISS RET. – SERV. PRESTADOS"
+    elif tipo_exportacao == "prestada":
+        coluna_remover = "ISS RET. – SERV. TOMADOS"
+    if coluna_remover:
+        indice_remover = headers.index(coluna_remover)
+        headers.pop(indice_remover)
+        rows = [row[:indice_remover] + row[indice_remover + 1:] for row in rows]
+        divergentes = [row[:indice_remover] + row[indice_remover + 1:] for row in divergentes]
+        corretas = [row[:indice_remover] + row[indice_remover + 1:] for row in corretas]
     wb = Workbook()
     wb.remove(wb.active)
-    _add_relatorio_sheet(wb, "Todas as Notas", rows, "TabelaTodasNotas")
-    _add_relatorio_sheet(wb, "Notas Divergentes", divergentes, "TabelaNotasDivergentes")
-    _add_relatorio_sheet(wb, "Notas Corretas", corretas, "TabelaNotasCorretas")
+    _add_relatorio_sheet(wb, "Todas as Notas", rows, "TabelaTodasNotas", headers)
+    _add_relatorio_sheet(wb, "Notas Divergentes", divergentes, "TabelaNotasDivergentes", headers)
+    _add_relatorio_sheet(wb, "Notas Corretas", corretas, "TabelaNotasCorretas", headers)
     filename = f"relatorio_conferencia_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     descriptor, temp_name = tempfile.mkstemp(prefix="relatorio_conferencia_", suffix=".xlsx")
     os.close(descriptor)
