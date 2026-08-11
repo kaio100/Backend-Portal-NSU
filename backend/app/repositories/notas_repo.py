@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timezone
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend.app.db.models import Empresa, Nota, Processo
+
+
+def _incidencia_search_term(value: str) -> str:
+    text = re.sub(r"[,/\-]+", " ", value.strip())
+    # O XML normalmente armazena apenas o municipio ("Imperatriz"),
+    # enquanto o usuario naturalmente pesquisa "Imperatriz/MA".
+    return re.sub(r"\s+[A-Za-z]{2}$", "", text).strip()
 
 
 def get_nota(db: Session, nota_id: int) -> Nota | None:
@@ -93,6 +101,8 @@ def list_notas(
                 Nota.prestador_cnpj.ilike(term),
                 Nota.tomador_nome.ilike(term),
                 Nota.tomador_cnpj.ilike(term),
+                Nota.incidencia_iss.ilike(term),
+                Nota.municipio.ilike(term),
             )
         )
     if data_inicio is not None:
@@ -118,7 +128,9 @@ def list_notas(
     if status_simples_nacional:
         query = query.filter(Nota.status_simples_nacional == status_simples_nacional)
     if incidencia_iss:
-        query = query.filter(Nota.incidencia_iss == incidencia_iss)
+        term = _incidencia_search_term(incidencia_iss)
+        if term:
+            query = query.filter(Nota.incidencia_iss.ilike(f"%{term}%"))
     if divergencia:
         query = query.filter(Nota.divergencia == divergencia)
     if sla_status:
