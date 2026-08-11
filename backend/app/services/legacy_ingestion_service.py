@@ -740,6 +740,27 @@ def ingerir_saida_legado(
         return _ingerir_por_varredura(db, storage, processo, base_dir, counters, updated_after=updated_after)
 
     rows = _read_index_rows(index_path)
+    # Eventos de cancelamento/substituicao podem aparecer depois da linha da
+    # nota no indice. Levantamos os estados antes de gerar qualquer espelho
+    # para que a ordem das linhas nao produza um PDF autorizado sem carimbo.
+    status_evento_por_chave: dict[str, tuple[str, str | None]] = {}
+    for event_row in rows:
+        event_xml_path = _resolve_path(event_row.get("xml_path", ""), Path.cwd())
+        if event_xml_path is None:
+            continue
+        try:
+            event_resumo = _parse_xml_resumo(event_xml_path)
+        except Exception:
+            # A leitura principal abaixo continua responsavel por registrar
+            # XMLs invalidos nos contadores normais da ingestao.
+            continue
+        event_status = str(event_resumo.get("status_documento") or "").strip().lower()
+        chave_afetada = str(event_resumo.get("chave_afetada") or "").strip()
+        if event_resumo.get("tipo_xml") == "evento" and chave_afetada and event_status in {"cancelada", "substituida"}:
+            status_evento_por_chave[chave_afetada] = (
+                event_status,
+                event_resumo.get("status_rotulo") or event_status.capitalize(),
+            )
     if only_chaves is not None:
         rows = [row for row in rows if (row.get("chave") or "").strip() in only_chaves]
     if updated_after is not None:
@@ -804,6 +825,16 @@ def ingerir_saida_legado(
                 continue
             status_documento = row.get("status_documento") or xml_resumo.get("status_documento") or None
             status_rotulo = row.get("status_rotulo") or xml_resumo.get("status_rotulo") or None
+            status_evento = status_evento_por_chave.get(chave)
+            nota_existente = notas_repo.get_nota_by_chave(db, int(processo.empresa_id), chave)
+            status_existente = str(getattr(nota_existente, "status_documento", None) or "").strip().lower()
+            if status_evento is not None:
+                status_documento, status_rotulo = status_evento
+            elif status_existente in {"cancelada", "substituida"}:
+                # Reprocessar o XML original nao pode apagar um evento fiscal
+                # ja conhecido nem recriar o espelho sem o respectivo carimbo.
+                status_documento = status_existente
+                status_rotulo = getattr(nota_existente, "status_rotulo", None) or status_existente.capitalize()
             pdf_espelho_path = None
             if pdf_storage_key is None:
                 try:
@@ -932,10 +963,19 @@ def ingerir_saida_legado(
             elif pdf_espelho_path is not None and pdf_storage_key is not None:
                 pdf_bytes = pdf_espelho_path.read_bytes()
                 if storage.exists(pdf_storage_key):
-                    meta = {
-                        "size": len(storage.get_bytes(pdf_storage_key)),
-                    }
-                    imported = False
+                    if str(status_documento or "").strip().lower() in {"cancelada", "substituida"}:
+                        # O status pode ter chegado por evento depois da
+                        # primeira geracao. Substitui o espelho antigo para
+                        # garantir que o arquivo entregue pelo portal tenha o
+                        # carimbo, preservando a mesma chave de storage.
+                        meta = storage.put_bytes(pdf_storage_key, pdf_bytes, content_type="application/pdf")
+                        imported = True
+                        counters["pdfs_espelho_regenerados"] = int(counters.get("pdfs_espelho_regenerados", 0)) + 1
+                    else:
+                        meta = {
+                            "size": len(storage.get_bytes(pdf_storage_key)),
+                        }
+                        imported = False
                 else:
                     meta = storage.put_bytes(pdf_storage_key, pdf_bytes, content_type="application/pdf")
                     imported = True
@@ -993,9 +1033,25 @@ def _ingerir_por_varredura(
     counters["pdfs_encontrados"] = len(pdf_files)
     empresa_cnpj = str(processo.empresa.cnpj if processo.empresa else processo.empresa_id)
 
+    resumos_por_xml: dict[Path, dict[str, str]] = {}
+    status_evento_por_chave: dict[str, tuple[str, str | None]] = {}
+    for candidate in xml_files:
+        try:
+            candidate_resumo = _parse_xml_resumo(candidate)
+        except Exception:
+            continue
+        resumos_por_xml[candidate] = candidate_resumo
+        event_status = str(candidate_resumo.get("status_documento") or "").strip().lower()
+        chave_afetada = str(candidate_resumo.get("chave_afetada") or "").strip()
+        if candidate_resumo.get("tipo_xml") == "evento" and chave_afetada and event_status in {"cancelada", "substituida"}:
+            status_evento_por_chave[chave_afetada] = (
+                event_status,
+                candidate_resumo.get("status_rotulo") or event_status.capitalize(),
+            )
+
     for xml_path in xml_files:
         try:
-            resumo = _parse_xml_resumo(xml_path)
+            resumo = resumos_por_xml.get(xml_path) or _parse_xml_resumo(xml_path)
             if resumo.get("tipo_xml") == "evento":
                 ano, mes = _ano_mes(resumo)
                 xml_storage_key = build_xml_key(empresa_cnpj, ano, mes, xml_path.name)
@@ -1024,6 +1080,17 @@ def _ingerir_por_varredura(
                 counters["erros"] += 1
                 continue
 
+            status_documento = resumo.get("status_documento") or None
+            status_rotulo = resumo.get("status_rotulo") or None
+            status_evento = status_evento_por_chave.get(chave)
+            nota_existente = notas_repo.get_nota_by_chave(db, int(processo.empresa_id), chave)
+            status_existente = str(getattr(nota_existente, "status_documento", None) or "").strip().lower()
+            if status_evento is not None:
+                status_documento, status_rotulo = status_evento
+            elif status_existente in {"cancelada", "substituida"}:
+                status_documento = status_existente
+                status_rotulo = getattr(nota_existente, "status_rotulo", None) or status_existente.capitalize()
+
             ano, mes = _ano_mes(resumo)
             xml_storage_key = build_xml_key(empresa_cnpj, ano, mes, xml_path.name)
             pdf_path = _find_pdf_for_chave(pdf_files, chave)
@@ -1037,7 +1104,7 @@ def _ingerir_por_varredura(
                     xml_path,
                     resumo,
                     pdf_filename,
-                    status_documento=resumo.get("status_documento"),
+                    status_documento=status_documento,
                 )
 
             nota_data = {
@@ -1071,8 +1138,8 @@ def _ingerir_por_varredura(
                 "descricao_servico_nacional": resumo.get("descricao_servico_nacional") or None,
                 "descricao_servico_detalhada": resumo.get("descricao_servico_detalhada") or None,
                 "aliquota_iss": _parse_decimal(resumo.get("aliquota_iss", "")),
-                "status_documento": resumo.get("status_documento") or None,
-                "status_rotulo": resumo.get("status_rotulo") or None,
+                "status_documento": status_documento,
+                "status_rotulo": status_rotulo,
                 "xml_storage_key": xml_storage_key,
                 "pdf_oficial_storage_key": pdf_storage_key if pdf_path is not None else None,
                 "pdf_espelho_storage_key": pdf_storage_key if pdf_path is None else None,
@@ -1101,7 +1168,7 @@ def _ingerir_por_varredura(
 
             if pdf_path is not None and pdf_storage_key is not None:
                 pdf_bytes = pdf_path.read_bytes()
-                aplicar_status_pdf_oficial(nota, pdf_bytes, resumo.get("status_documento"))
+                aplicar_status_pdf_oficial(nota, pdf_bytes, status_documento)
                 meta, imported = _put_file_if_needed(storage, pdf_storage_key, pdf_path, "application/pdf")
                 counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
                 if _registrar_arquivo(
@@ -1121,10 +1188,15 @@ def _ingerir_por_varredura(
             elif pdf_espelho_path is not None and pdf_storage_key is not None:
                 pdf_bytes = pdf_espelho_path.read_bytes()
                 if storage.exists(pdf_storage_key):
-                    meta = {
-                        "size": len(storage.get_bytes(pdf_storage_key)),
-                    }
-                    imported = False
+                    if str(status_documento or "").strip().lower() in {"cancelada", "substituida"}:
+                        meta = storage.put_bytes(pdf_storage_key, pdf_bytes, content_type="application/pdf")
+                        imported = True
+                        counters["pdfs_espelho_regenerados"] = int(counters.get("pdfs_espelho_regenerados", 0)) + 1
+                    else:
+                        meta = {
+                            "size": len(storage.get_bytes(pdf_storage_key)),
+                        }
+                        imported = False
                 else:
                     meta = storage.put_bytes(pdf_storage_key, pdf_bytes, content_type="application/pdf")
                     imported = True

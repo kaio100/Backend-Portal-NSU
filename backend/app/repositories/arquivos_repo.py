@@ -84,6 +84,12 @@ def create_arquivo_if_missing(db: Session, data: dict) -> tuple[Arquivo, bool]:
             existente.filename = data["filename"]
         if data.get("tipo"):
             existente.tipo = data["tipo"]
+        # A mesma chave pode receber um PDF espelho regenerado depois de um
+        # evento de cancelamento/substituicao. Mantenha os metadados do banco
+        # sincronizados com o conteudo efetivamente salvo no storage.
+        for field in ("tamanho_bytes", "checksum", "content_type", "storage_backend", "storage_bucket"):
+            if data.get(field) is not None:
+                setattr(existente, field, data[field])
         db.add(existente)
         db.flush()
         db.refresh(existente)

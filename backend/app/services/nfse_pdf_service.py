@@ -153,7 +153,15 @@ class NfsePdfService:
 
         status = str(dados.get("status_documento") or "").strip().lower()
 
-        if status not in {"cancelada", "cancelado"}:
+        rotulos = {
+            "cancelada": "CANCELADA",
+            "cancelado": "CANCELADA",
+            "substituida": "SUBSTITUÍDA",
+            "substituido": "SUBSTITUÍDA",
+        }
+        rotulo = rotulos.get(status)
+
+        if rotulo is None:
 
             return
 
@@ -175,7 +183,7 @@ class NfsePdfService:
 
         c.rotate(35)
 
-        c.drawCentredString(0, 0, "CANCELADA")
+        c.drawCentredString(0, 0, rotulo)
 
         c.restoreState()
 

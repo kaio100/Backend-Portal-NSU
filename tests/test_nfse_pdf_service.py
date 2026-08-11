@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
+import io
+
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from pypdf import PdfReader
@@ -11,7 +13,8 @@ from backend.app.db.models import Arquivo, Certificado, Empresa, Evento, Job, Lo
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.main import app
 from backend.app.services import legacy_ingestion_service
-from backend.app.services.nfse_pdf_service import NfsePdfService
+from backend.app.services.nfse_pdf_service import NfsePdfService
+from backend.app.scripts.regenerar_carimbos_pdfs import _gerar_pdf as gerar_pdf_com_carimbo
 from backend.app.services.nfse_xml_parser import extrair_dados_nfse
 from backend.app.services.storage_service import get_storage_service
 
@@ -121,6 +124,27 @@ def test_pdf_espelho_cancelado_recebe_carimbo(tmp_path: Path):
     NfsePdfService().gerar_danfse_espelho(dados, output_path)
 
     assert "CANCELADA" in _pdf_text(output_path)
+
+
+def test_pdf_espelho_substituido_recebe_carimbo(tmp_path: Path):
+    xml_path = tmp_path / "substituida.xml"
+    xml_path.write_text(_xml_minimo(), encoding="utf-8")
+    dados = extrair_dados_nfse(xml_path)
+    dados["status_documento"] = "substituida"
+    output_path = tmp_path / "substituida.pdf"
+
+    NfsePdfService().gerar_danfse_espelho(dados, output_path)
+
+    assert "SUBSTITUÍDA" in _pdf_text(output_path)
+
+
+def test_rotina_regenera_carimbos_cancelada_e_substituida():
+    xml_bytes = _xml_minimo().encode("utf-8")
+
+    for status, rotulo in (("cancelada", "CANCELADA"), ("substituida", "SUBSTITUÍDA")):
+        pdf_bytes = gerar_pdf_com_carimbo(xml_bytes, status, nota_id=1)
+        texto = "\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(pdf_bytes)).pages)
+        assert rotulo in texto
 
 
 def test_pdf_service_gera_danfse_v1_compacto(tmp_path: Path):
@@ -253,7 +277,30 @@ def test_ingestao_gera_pdf_espelho_sem_duplicar_e_endpoints(tmp_path: Path):
     assert len([arquivo for arquivo in arquivos if arquivo.tipo == "PDF_ESPELHO"]) == 1
     pdf = next(arquivo for arquivo in arquivos if arquivo.tipo == "PDF_ESPELHO")
     assert pdf.filename == "50.227.393_JORGE_LUIS_DINIZ_SILVA NFS-e 5.pdf"
-    assert pdf.tamanho_bytes and pdf.tamanho_bytes > 1000
+    assert pdf.tamanho_bytes and pdf.tamanho_bytes > 1000
+
+    # Um evento pode alterar o status depois que o espelho autorizado ja foi
+    # salvo. A nova ingestao deve preservar o status fiscal e substituir o PDF
+    # existente por uma versao carimbada na mesma chave.
+    with SessionLocal() as db:
+        nota_atual = db.query(Nota).filter(Nota.chave == chave).one()
+        nota_atual.status_documento = "cancelada"
+        nota_atual.status_rotulo = "Cancelada"
+        db.commit()
+
+        processo_atual = db.get(Processo, processo_id)
+        third = legacy_ingestion_service.ingerir_saida_legado(db, get_storage_service(), processo_atual, tmp_path)
+        db.commit()
+
+        nota_atual = db.query(Nota).filter(Nota.chave == chave).one()
+        assert nota_atual.status_documento == "cancelada"
+
+    pdf_atualizado = get_storage_service().get_bytes(pdf.storage_key)
+    texto_pdf_atualizado = "\n".join(
+        page.extract_text() or "" for page in PdfReader(io.BytesIO(pdf_atualizado)).pages
+    )
+    assert third["pdfs_espelho_regenerados"] == 1
+    assert "CANCELADA" in texto_pdf_atualizado
 
     with TestClient(app) as client:
         response = client.get(f"/notas/{nota.id}/arquivos")
