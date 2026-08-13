@@ -412,6 +412,7 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
     codigo_servico_display = codigo_info["codigo_servico_display"]
     subitem_lc116 = codigo_info["subitem_lc116"]
     regra = obter_regra_por_subitem(subitem_lc116) if subitem_lc116 else None
+    descricao_servico_detalhada = _find_text(root, "xDescServ")
     dados_fiscais = {
         "valor_servico": valor_servico,
         "valor_base_calculo": valor_base,
@@ -431,6 +432,7 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
         "valor_desconto_condicionado": _find_text(root, "DescontoCondicionado"),
         "valor_liquido": valor_liquido,
         "simples_xml": simples_xml,
+        "descricao_servico_detalhada": descricao_servico_detalhada,
     }
     calculo = calcular_retencoes_esperadas(dados_fiscais, regra, subitem_lc116=subitem_lc116 or None)
     return {
@@ -480,7 +482,7 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
         "codigo_servico_nacional": codigo_servico,
         "subitem_lc116": subitem_lc116 or "",
         "descricao_servico_nacional": _find_text(root, "xTribNac"),
-        "descricao_servico_detalhada": _find_text(root, "xDescServ"),
+        "descricao_servico_detalhada": descricao_servico_detalhada,
         "codigo_nbs": _find_text(root, "cNBS", "CodigoNBS", "CodigoNbs"),
         "codigo_cnae": _find_text(root, "CNAE", "cCNAE", "cnae", "CodigoCNAE"),
         "descricao_cnae": _find_text(root, "xCNAE", "DescricaoCNAE", "DescricaoCnae"),
@@ -718,6 +720,7 @@ def ingerir_saida_legado(
     updated_after: datetime | None = None,
     only_chaves: set[str] | None = None,
     commit_every: int | None = None,
+    start_row: int = 0,
 ) -> dict[str, Any]:
     base_dir = Path(pasta_saida)
     index_path = base_dir / "index_nfse.csv"
@@ -770,9 +773,15 @@ def ingerir_saida_legado(
             if (row_updated_at := _parse_datetime(row.get("atualizado_em", ""))) is not None
             and row_updated_at >= updated_after.replace(tzinfo=None)
         ]
+    total_rows = len(rows)
+    safe_start_row = min(max(0, int(start_row or 0)), total_rows)
+    rows = rows[safe_start_row:]
     if max_rows is not None:
         rows = rows[:max(0, max_rows)]
+    counters["linhas_index_total"] = total_rows
+    counters["linha_inicial"] = safe_start_row
     counters["linhas_index"] = len(rows)
+    counters["proxima_linha_index"] = safe_start_row + len(rows)
     empresa_cnpj = str(processo.empresa.cnpj if processo.empresa else processo.empresa_id)
 
     linhas_processadas = 0
