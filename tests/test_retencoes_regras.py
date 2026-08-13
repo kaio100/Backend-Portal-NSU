@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from backend.app.services.retencoes_calculo_service import calcular_retencoes_esperadas, comparar_valor_fiscal
+from types import SimpleNamespace
+
+from backend.app.services.retencoes_calculo_service import calcular_liquido_com_retencoes_salvas, calcular_retencoes_esperadas, comparar_valor_fiscal
 from backend.app.services.retencoes_regras_service import (
     normalizar_subitem_lc116,
     obter_regra_por_subitem,
@@ -161,3 +163,23 @@ def test_inss_usa_base_especifica_declarada_na_descricao_da_nota():
     assert calculo["status_inss"] == "Correto"
     assert calculo["valor_liquido_calculado"] == Decimal("13288.59")
     assert calculo["status_valor_liquido"] == "Correto"
+
+
+def test_liquido_salvo_deduz_irrf_calculado_nao_informado():
+    nota = SimpleNamespace(
+        valor_servico="10096.00", irrf="0", irrf_calculado="151.44",
+        inss="0", inss_calculado="0", csrf="0", csrf_calculado="0",
+        iss_retido=False, valor_iss_retido="0", iss="0", iss_calculado="0",
+        valor_outras_retencoes="0", valor_desconto_incondicionado="0", valor_desconto_condicionado="0",
+    )
+    assert calcular_liquido_com_retencoes_salvas(nota) == Decimal("9944.56")
+
+
+def test_liquido_salvo_deduz_csrf_informado_e_irrf_calculado():
+    nota = SimpleNamespace(
+        valor_servico="14160.00", irrf="0", irrf_calculado="212.40",
+        inss="0", inss_calculado="0", csrf="516.84", csrf_calculado="0",
+        iss_retido=False, valor_iss_retido="0", iss="0", iss_calculado="0",
+        valor_outras_retencoes="0", valor_desconto_incondicionado="0", valor_desconto_condicionado="0",
+    )
+    assert calcular_liquido_com_retencoes_salvas(nota) == Decimal("13430.76")

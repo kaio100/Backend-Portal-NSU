@@ -35,6 +35,40 @@ def money(value: Decimal | None) -> Decimal | None:
     return value.quantize(MONEY, rounding=ROUND_HALF_UP)
 
 
+def calcular_liquido_com_retencoes_salvas(nota: Any) -> Decimal:
+    """Recalcula o liquido usando os valores informados e esperados persistidos."""
+    def decimal_campo(*nomes: str) -> Decimal:
+        for nome in nomes:
+            valor = parse_decimal_xml(getattr(nota, nome, None))
+            if valor is not None:
+                return valor
+        return Decimal("0")
+
+    def maior(informado: Decimal, calculado: Decimal) -> Decimal:
+        return max(informado, calculado)
+
+    valor_servico = decimal_campo("valor_servico", "valor_base")
+    irrf = maior(decimal_campo("irrf"), decimal_campo("irrf_calculado"))
+    inss = maior(decimal_campo("inss"), decimal_campo("inss_calculado"))
+    csrf = maior(decimal_campo("csrf", "valor_csrf"), decimal_campo("csrf_calculado"))
+
+    iss = Decimal("0")
+    if bool(getattr(nota, "iss_retido", False)) or decimal_campo("valor_iss_retido") > 0:
+        iss_informado = decimal_campo("valor_iss_retido", "iss")
+        iss = maior(iss_informado, decimal_campo("iss_calculado"))
+
+    return money(
+        valor_servico
+        - irrf
+        - inss
+        - csrf
+        - iss
+        - decimal_campo("valor_outras_retencoes")
+        - decimal_campo("valor_desconto_incondicionado")
+        - decimal_campo("valor_desconto_condicionado")
+    ) or Decimal("0.00")
+
+
 def comparar_valor_fiscal(informado: Any, calculado: Any, nome: str = "") -> str:
     inf = money(parse_decimal_xml(informado) or Decimal("0"))
     calc = money(parse_decimal_xml(calculado)) if calculado is not None else None

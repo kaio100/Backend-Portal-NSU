@@ -34,6 +34,7 @@ from backend.app.db.models import Empresa, Job, LockProcessamento, Monitoramento
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.services import consultas_service
 from backend.app.services.notas_download_service import limpar_zips_temporarios
+from backend.app.services.valor_liquido_backfill_service import recalcular_notas_salvas
 from backend.app.scripts.revalidar_status_pdfs import executar as revalidar_status_pdfs
 from backend.app.worker.worker import processar_proximo_job
 
@@ -90,6 +91,8 @@ def _recover_stale_api_jobs(active_worker_ids: list[str]) -> int:
 
 async def _run_api_worker(slot: int, worker_id: str, grupo: str) -> None:
     print(f"API worker iniciado: {worker_id} | grupo={grupo} | dry_run={settings.worker_dry_run}")
+    idle_sleep = max(0.1, float(settings.api_worker_sleep))
+    idle_sleep_max = max(idle_sleep, 2.0)
 
     while True:
         try:
@@ -101,8 +104,10 @@ async def _run_api_worker(slot: int, worker_id: str, grupo: str) -> None:
             await asyncio.sleep(max(1.0, float(settings.api_worker_sleep)))
             continue
         if result.get("motivo") == "sem_job":
-            await asyncio.sleep(settings.api_worker_sleep)
+            await asyncio.sleep(idle_sleep)
+            idle_sleep = min(idle_sleep * 1.5, idle_sleep_max)
         else:
+            idle_sleep = max(0.1, float(settings.api_worker_sleep))
             print(f"API worker {slot} ({grupo}): {result}")
 
 
@@ -114,7 +119,9 @@ async def _run_consultas_scheduler() -> None:
             result = await asyncio.to_thread(_enqueue_consultas_automaticas)
             if result["certificados_enfileirados"]:
                 print(f"Agendador de consultas: {result}")
-        await asyncio.sleep(settings.consultas_scheduler_sleep)
+        # O agendador trabalha em minutos; consultar o banco varias vezes por
+        # segundo quando o sistema esta ocioso so consome CPU local.
+        await asyncio.sleep(max(5.0, float(settings.consultas_scheduler_sleep)))
 
 
 def _enqueue_consultas_automaticas() -> dict:
@@ -145,6 +152,14 @@ async def _revalidar_status_pdfs_salvos() -> None:
         print(f"Revalidacao de status por PDF oficial falhou: {exc}")
 
 
+async def _recalcular_valores_liquidos_salvos() -> None:
+    try:
+        relatorio = await asyncio.to_thread(recalcular_notas_salvas)
+        print(f"Recalculo de valores liquidos finalizado: {relatorio}")
+    except Exception as exc:
+        print(f"Recalculo de valores liquidos falhou: {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -154,6 +169,7 @@ async def lifespan(app: FastAPI):
     worker_tasks: list[asyncio.Task] = []
     scheduler_task: asyncio.Task | None = None
     pdf_revalidation_task: asyncio.Task | None = None
+    liquid_recalculation_task = asyncio.create_task(_recalcular_valores_liquidos_salvos())
     if settings.api_worker_enabled and settings.pdf_status_revalidation_enabled:
         pdf_revalidation_task = asyncio.create_task(_revalidar_status_pdfs_salvos())
     if settings.api_worker_enabled:
@@ -172,6 +188,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        if not liquid_recalculation_task.done():
+            liquid_recalculation_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await liquid_recalculation_task
         if scheduler_task is not None:
             scheduler_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

@@ -23,7 +23,8 @@ from backend.app.db.models import Arquivo, Empresa, Evento, Nota, NsuControle, P
 from backend.app.repositories import arquivos_repo, notas_repo, processos_repo
 from backend.app.schemas.notas import NotasDownloadFiltros
 from backend.app.services import cnpj_cache_service, legacy_ingestion_service, notas_service
-from backend.app.services.operational_fields_service import aplicar_campos_operacionais
+from backend.app.services.operational_fields_service import aplicar_campos_operacionais
+from backend.app.services.retencoes_calculo_service import calcular_liquido_com_retencoes_salvas
 from backend.app.services.storage_service import StorageService, get_storage_service
 
 
@@ -204,10 +205,16 @@ _STATUS_TRIBUTO_SEM_PROBLEMA = {
 
 def comparar_tributos_nota(db: Session, nota_id: int) -> dict:
     nota = notas_service.obter_nota(db, nota_id)
+    liquido_atualizado = calcular_liquido_com_retencoes_salvas(nota)
+    nota.valor_liquido_correto = liquido_atualizado
+    nota.valor_liquido_calculado = liquido_atualizado
+    informado_liquido = _decimal(nota.valor_liquido or 0)
+    nota.status_valor_liquido = "Correto" if abs(informado_liquido - liquido_atualizado) <= Decimal("0.01") else "Divergente"
     empresa = db.get(Empresa, nota.empresa_id)
     direcao = notas_service._classificar_nota(nota, empresa.cnpj if empresa else "")
     iss_retido = _decimal(getattr(nota, "valor_iss_retido", None) or 0)
-    iss_calculado = _decimal(getattr(nota, "iss_calculado", None) or 0)
+    iss_calculado_raw = getattr(nota, "iss_calculado", None)
+    iss_calculado = _decimal(iss_calculado_raw) if iss_calculado_raw is not None else iss_retido
     iss_status = getattr(nota, "status_iss", None) or "Não aplicável"
     iss_ativo = bool(getattr(nota, "iss_retido", False)) or iss_retido > 0
     iss_por_direcao = {
@@ -1252,7 +1259,7 @@ def _add_relatorio_sheet(
         cell.fill = header_fill
         cell.border = thin_border
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    header_by_col = {index + 1: header for index, header in enumerate(RELATORIO_XLSX_HEADERS)}
+    header_by_col = {index + 1: header for index, header in enumerate(headers)}
     wrap_alignment = Alignment(vertical="top", wrap_text=True)
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
         for cell in row:
