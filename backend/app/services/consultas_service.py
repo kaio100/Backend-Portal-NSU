@@ -298,6 +298,54 @@ def iniciar_consultas_automaticas(
     return resultado
 
 
+def iniciar_certificado_sem_substituir_monitor(
+    db: Session,
+    options: ConsultaIniciarRequest,
+    grupo: str = "planning_hub",
+) -> dict[str, Any]:
+    """Enfileira um certificado novo sem retirar os anteriores do monitor."""
+    config = get_monitoramento_config(db, grupo)
+    if not config.automatico_ativo:
+        return iniciar_consultas_automaticas(db, options=options, grupo=grupo)
+
+    filtros_atuais_raw = config.filtros_json
+    filtros_atuais = ConsultaIniciarRequest(**(filtros_atuais_raw or {}))
+
+    # O NSU e o modo forcar do autocadastro valem somente para o job imediato.
+    resultado = enqueue_consultas_pendentes(
+        db,
+        options=options,
+        respeitar_ciclo=False,
+        grupo=grupo,
+    )
+
+    # Ausencia de filtros representa monitoramento global e deve continuar
+    # global. Em um monitor restrito, o novo certificado e sua empresa sao
+    # acrescentados ao conjunto existente em vez de substitui-lo.
+    if filtros_atuais_raw is None or (
+        filtros_atuais.empresa_ids is None and filtros_atuais.certificado_ids is None
+    ):
+        filtros_ciclos = filtros_atuais.model_copy(update={"nsu_inicio": None, "forcar": False})
+    else:
+        empresa_ids = sorted(set(filtros_atuais.empresa_ids or []) | set(options.empresa_ids or [])) or None
+        certificado_ids = sorted(
+            set(filtros_atuais.certificado_ids or []) | set(options.certificado_ids or [])
+        ) or None
+        filtros_ciclos = filtros_atuais.model_copy(
+            update={
+                "empresa_ids": empresa_ids,
+                "certificado_ids": certificado_ids,
+                "nsu_inicio": None,
+                "forcar": False,
+            }
+        )
+
+    config.filtros_json = filtros_ciclos.model_dump()
+    db.add(config)
+    db.commit()
+    return resultado
+
+
 def desativar_consultas_automaticas(
     db: Session,
     cancelar_pendentes: bool = True,

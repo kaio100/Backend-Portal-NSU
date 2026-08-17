@@ -347,7 +347,7 @@ def autocadastrar_certificado(
             pausa=settings.consultas_default_pausa,
             forcar=forcar,
         )
-        result = consultas_service.iniciar_consultas_automaticas(db, options=options, grupo=grupo)
+        result = consultas_service.iniciar_certificado_sem_substituir_monitor(db, options=options, grupo=grupo)
         processo = (result.get("processos_criados") or [None])[0]
         if processo is None:
             logger.info("Job ignorado no autocadastro: ja existe pendente/rodando para certificado_id=%s", certificado.id)
