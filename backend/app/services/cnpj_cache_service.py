@@ -4,6 +4,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
@@ -11,6 +12,8 @@ from backend.app.db.models import CnpjCache
 
 
 DEFAULT_FONTE = "Invertexto"
+RECEITA_FONTE = "Receita Federal - Dados Abertos"
+FONTES_PRIORITARIAS = (RECEITA_FONTE, DEFAULT_FONTE)
 
 
 def only_digits(value: str | None) -> str:
@@ -38,19 +41,28 @@ def _cache_to_dict(cache: CnpjCache) -> dict[str, Any]:
     }
 
 
-def get_cache_valido(db: Session, cnpj: str, fonte: str = DEFAULT_FONTE) -> dict[str, Any] | None:
+def get_cache_valido(db: Session, cnpj: str, fonte: str | None = None) -> dict[str, Any] | None:
     cnpj_digits = only_digits(cnpj)
     if not cnpj_digits:
         return None
-    cache = (
+    hoje = _today()
+    query = (
         db.query(CnpjCache)
         .filter(CnpjCache.cnpj == cnpj_digits)
-        .filter(CnpjCache.fonte == fonte)
-        .first()
+        .filter(CnpjCache.data_expiracao.isnot(None))
+        .filter(CnpjCache.data_expiracao >= hoje)
     )
-    if cache is None or cache.data_expiracao is None:
-        return None
-    if cache.data_expiracao < _today():
+    if fonte:
+        query = query.filter(CnpjCache.fonte == fonte)
+    else:
+        prioridade = case(
+            {nome: ordem for ordem, nome in enumerate(FONTES_PRIORITARIAS)},
+            value=CnpjCache.fonte,
+            else_=len(FONTES_PRIORITARIAS),
+        )
+        query = query.order_by(prioridade.asc(), CnpjCache.data_expiracao.desc())
+    cache = query.first()
+    if cache is None:
         return None
     return _cache_to_dict(cache)
 
@@ -58,7 +70,7 @@ def get_cache_valido(db: Session, cnpj: str, fonte: str = DEFAULT_FONTE) -> dict
 def get_caches_validos(
     db: Session,
     cnpjs: set[str] | list[str],
-    fonte: str = DEFAULT_FONTE,
+    fonte: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Busca em lote (sem chamada externa) as consultas de CNPJ ja cacheadas
     e ainda validas, evitando N+1 quando anotando uma lista de notas."""
@@ -66,17 +78,22 @@ def get_caches_validos(
     if not cnpjs_digits:
         return {}
     hoje = _today()
-    rows = (
+    query = (
         db.query(CnpjCache)
         .filter(CnpjCache.cnpj.in_(cnpjs_digits))
-        .filter(CnpjCache.fonte == fonte)
-        .all()
+        .filter(CnpjCache.data_expiracao.isnot(None))
+        .filter(CnpjCache.data_expiracao >= hoje)
     )
-    return {
-        cache.cnpj: _cache_to_dict(cache)
-        for cache in rows
-        if cache.data_expiracao is not None and cache.data_expiracao >= hoje
-    }
+    if fonte:
+        query = query.filter(CnpjCache.fonte == fonte)
+    rows = query.all()
+    validos = rows
+    prioridade = {nome: ordem for ordem, nome in enumerate(FONTES_PRIORITARIAS)}
+    validos.sort(key=lambda row: (prioridade.get(row.fonte, len(prioridade)), -(row.data_expiracao.toordinal())))
+    result: dict[str, dict[str, Any]] = {}
+    for cache in validos:
+        result.setdefault(cache.cnpj, _cache_to_dict(cache))
+    return result
 
 
 def salvar_cache(

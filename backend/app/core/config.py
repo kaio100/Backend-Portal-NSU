@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     r2_region: str = "auto"
     r2_presigned_expires_seconds: int = 300
     database_url: str = "sqlite:///./data/nfse_backend.db"
+    database_pool_size: int = 5
+    database_max_overflow: int = 5
+    database_pool_timeout: int = 30
+    database_pool_recycle: int = 300
     worker_dry_run: bool = True
     worker_dry_run_sleep: float = 0.2
     worker_real_max_limite: int = 1000
@@ -34,7 +38,7 @@ class Settings(BaseSettings):
     consultas_default_pausa: float = 0.0
     nsu_lookback_normal: int = 50
     nsu_lookback_reconciliacao: int = 1000
-    nsu_reconciliacao_hora_inicio: int = 18
+    nsu_reconciliacao_hora_inicio: int = 19
     nsu_reconciliacao_hora_fim: int = 5
     nsu_reconciliacao_timezone: str = "America/Sao_Paulo"
     nsu_max_vazios_consecutivos: int = 5
@@ -44,6 +48,7 @@ class Settings(BaseSettings):
     download_temp_max_age_hours: int = 24
     pdf_status_revalidation_enabled: bool = True
     pdf_status_revalidation_batch_size: int = 200
+    certificado_upload_max_bytes: int = 5 * 1024 * 1024
     secrets_key: str | None = None
     api_key: str | None = None
     jwt_secret: str | None = None
@@ -54,6 +59,8 @@ class Settings(BaseSettings):
     invertexto_rpm: int = 30
     invertexto_delay_seconds: float = 0.6
     invertexto_cache_days: int = 30
+    cnpj_receita_db_path: str = "data/cnpj_receita.sqlite3"
+    cnpj_receita_cache_days: int = 30
 
     @field_validator("database_url", mode="before")
     @classmethod
