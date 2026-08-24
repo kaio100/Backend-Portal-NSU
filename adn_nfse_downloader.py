@@ -242,15 +242,16 @@ def requisicao_json_com_retry(
     ultimo_texto = ""
 
     for tentativa in range(1, tentativas + 1):
-        print(f"Tentativa {tentativa}/{tentativas}: {url}")
+        print(f"Tentativa {tentativa}/{tentativas} de consulta ADN")
         if params:
-            print(f"Params: {params}")
+            print("Parametros da consulta ADN omitidos do log")
 
         try:
             resp = mtls_get(cfg, url, params=params)
             status = resp.status_code
             ctype = resp.headers.get("content-type", "")
             ultimo_texto = resp.text or ""
+
             print(f"HTTP {status} | {ctype}")
 
             if status in TEMPORARY_STATUS:
@@ -274,7 +275,7 @@ def requisicao_json_com_retry(
             if tentativa >= tentativas:
                 raise
             espera = min(pausa_base * tentativa, 300)
-            print(f"Erro: {exc}")
+            print(f"Falha na consulta ADN: {type(exc).__name__}")
             print(f"Aguardando {espera}s...\n")
             time.sleep(espera)
 
@@ -628,9 +629,9 @@ def salvar_documento(doc: Dict[str, Any]) -> Optional[int]:
         try:
             xml_texto = decode_xml_gzip_base64(arquivo_xml)
             xml_path, resumo, _ = save_xml_file(nsu, chave, xml_texto)
-            print(f"XML salvo: {xml_path}")
+            print("XML salvo com sucesso")
         except Exception as exc:
-            print(f"Falha ao decodificar XML do NSU {nsu}: {exc}")
+            print(f"Falha ao decodificar XML: {type(exc).__name__}")
     else:
         print(f"NSU {nsu} não trouxe ArquivoXml.")
 
@@ -731,7 +732,7 @@ def cmd_baixar(args: argparse.Namespace) -> None:
     print("BAIXADOR ADN NFS-e")
     print("=" * 100)
     print(f"Ambiente: {cfg.ambiente}")
-    print(f"CNPJ: {cfg.cnpj}")
+    print("CNPJ da consulta: [OMITIDO]")
     print(f"NSU inicial: {nsu_atual}")
     print(f"Limite de consultas: {limite}")
     print(f"Pausa: {pausa}s")
@@ -801,12 +802,12 @@ def cmd_eventos(args: argparse.Namespace) -> None:
     url = f"{cfg.base_contribuintes}/NFSe/{chave}/Eventos"
     params = {"cnpjConsulta": cfg.cnpj}
 
-    print(f"Consultando eventos da chave {chave}")
+    print("Consultando eventos de NFS-e")
     resultado = requisicao_json_com_retry(cfg, url, params=params)
 
     raw_path = DIR_RAW / f"eventos_{chave}.json"
     salvar_json(raw_path, resultado)
-    print(f"JSON bruto salvo: {raw_path}")
+    print("JSON bruto de eventos salvo")
 
     print("StatusProcessamento:", resultado.get("StatusProcessamento"))
     lote_dfe = resultado.get("LoteDFe") or []
@@ -827,7 +828,7 @@ def cmd_danfse(args: argparse.Namespace) -> None:
         raise RuntimeError("Informe --chave")
 
     url = f"{cfg.base_danfse}/{chave}"
-    print(f"Baixando DANFSe: {url}")
+    print("Baixando DANFSe")
 
     resp = mtls_get(
         cfg,
@@ -839,20 +840,18 @@ def cmd_danfse(args: argparse.Namespace) -> None:
     print(f"HTTP {resp.status_code} | {ctype}")
 
     if resp.status_code in TEMPORARY_STATUS:
-        print(resp.text[:1500])
         print("Erro temporário do ADN/DANFSe. Tente novamente com pausa.")
         return
 
     if "pdf" in ctype.lower() or resp.content[:4] == b"%PDF":
         path = DIR_DANFSE / f"{chave}.pdf"
         path.write_bytes(resp.content)
-        print(f"PDF salvo: {path}")
+        print("PDF oficial salvo com sucesso")
         return
 
     path = DIR_DANFSE / f"{chave}.txt"
     path.write_text(resp.text or "", encoding="utf-8", errors="ignore")
-    print(resp.text[:3000])
-    print(f"Resposta salva: {path}")
+    print("Resposta inesperada do DANFSe salva para diagnóstico local")
 
 
 def cmd_decode(args: argparse.Namespace) -> None:
