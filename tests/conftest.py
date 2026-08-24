@@ -46,7 +46,8 @@ def authenticated_portal_user(request):
         nome="Portal Test",
         ativo=True,
         grupo="planning_hub",
-        is_admin=False,
+        is_admin=True,
+        papel="admin",
     )
     app.dependency_overrides[get_current_usuario] = lambda: usuario
     try:

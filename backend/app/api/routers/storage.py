@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_usuario, get_db
+from backend.app.api.deps import get_current_usuario, get_db, require_admin
 from backend.app.core.config import settings
 from backend.app.db.models import Empresa, Usuario
 from backend.app.services.storage_service import get_storage_service
@@ -24,14 +24,14 @@ def storage_health():
     return data
 
 
-@router.post("/test-write")
+@router.post("/test-write", dependencies=[Depends(require_admin)])
 def storage_test_write(usuario: Usuario = Depends(get_current_usuario)):
     storage = get_storage_service()
     key = f"health/{usuario.grupo}/storage-test.txt"
     return storage.put_bytes(key, TEST_CONTENT, content_type="text/plain")
 
 
-@router.get("/test-read")
+@router.get("/test-read", dependencies=[Depends(require_admin)])
 def storage_test_read(usuario: Usuario = Depends(get_current_usuario)):
     storage = get_storage_service()
     key = f"health/{usuario.grupo}/storage-test.txt"
@@ -47,7 +47,7 @@ def storage_test_read(usuario: Usuario = Depends(get_current_usuario)):
     return response
 
 
-@router.get("/list")
+@router.get("/list", dependencies=[Depends(require_admin)])
 def storage_list(prefix: str = "", db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     storage = get_storage_service()
     cnpjs = {str(cnpj) for (cnpj,) in db.query(Empresa.cnpj).filter(Empresa.grupo == usuario.grupo).all()}

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_db, require_admin
+from backend.app.api.deps import PAPEIS_VALIDOS, get_db, require_admin
 from backend.app.core.security import hash_password
 from backend.app.db.models import AcessoUsuario, Arquivo, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, Usuario
 
@@ -21,6 +21,7 @@ class UsuarioAdminUpdate(BaseModel):
     grupo: str | None = None
     ativo: bool | None = None
     is_admin: bool | None = None
+    papel: str | None = None
 
 
 class RedefinirSenha(BaseModel):
@@ -50,6 +51,7 @@ def _usuario_dict(usuario: Usuario) -> dict:
         "grupo": usuario.grupo,
         "ativo": usuario.ativo,
         "is_admin": usuario.is_admin,
+        "papel": "admin" if usuario.is_admin else usuario.papel,
         "created_at": usuario.created_at,
     }
 
@@ -106,12 +108,21 @@ def atualizar_usuario(usuario_id: int, payload: UsuarioAdminUpdate, admin: Usuar
     if usuario is None:
         raise HTTPException(status_code=404, detail="Usuario nao encontrado.")
     data = payload.model_dump(exclude_unset=True)
+    if "papel" in data:
+        data["papel"] = str(data["papel"] or "").strip().lower()
+        if data["papel"] not in PAPEIS_VALIDOS:
+            raise HTTPException(status_code=422, detail="Papel deve ser admin, operador ou leitura.")
+        data["is_admin"] = data["papel"] == "admin"
+    elif "is_admin" in data:
+        data["papel"] = "admin" if data["is_admin"] else "operador"
     if "grupo" in data and db.query(Grupo).filter(Grupo.codigo == data["grupo"], Grupo.ativo.is_(True)).first() is None:
         raise HTTPException(status_code=422, detail="Grupo inexistente ou inativo.")
     if usuario.id == admin.id and data.get("ativo") is False:
         raise HTTPException(status_code=400, detail="Voce nao pode desativar sua propria conta.")
     if usuario.id == admin.id and data.get("is_admin") is False:
         raise HTTPException(status_code=400, detail="Voce nao pode remover sua propria permissao administrativa.")
+    if usuario.id == admin.id and data.get("papel") not in (None, "admin"):
+        raise HTTPException(status_code=400, detail="Voce nao pode rebaixar seu proprio papel administrativo.")
     for campo, valor in data.items():
         setattr(usuario, campo, valor)
     db.commit()

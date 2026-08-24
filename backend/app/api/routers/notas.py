@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
-from backend.app.api.deps import get_current_usuario, get_db, require_empresa_grupo, require_nota_grupo
+from backend.app.api.deps import get_current_usuario, get_db, require_empresa_grupo, require_nota_grupo, require_operator
 from backend.app.api.deps import get_storage
 from backend.app.schemas.arquivos import ArquivoRead
 from backend.app.schemas.notas import (
@@ -568,7 +568,7 @@ def get_tributos_comparativo(nota_id: int, db: Session = Depends(get_db), usuari
         _handle_error(exc)
 
 
-@router.patch("/{nota_id}/conferencia", response_model=NotaDetail)
+@router.patch("/{nota_id}/conferencia", response_model=NotaDetail, dependencies=[Depends(require_operator)])
 def patch_conferencia_nota(
     nota_id: int,
     payload: NotaConferenciaUpdate,

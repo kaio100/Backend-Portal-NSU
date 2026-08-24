@@ -33,5 +33,6 @@ def criar_usuario(db: Session, empresa_id: int, email: str, senha: str, nome: st
             "senha_hash": hash_password(senha),
             "nome": nome,
             "ativo": True,
+            "papel": "operador",
         },
     )

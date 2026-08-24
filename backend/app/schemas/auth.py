@@ -30,6 +30,7 @@ class UsuarioRead(BaseModel):
     ativo: bool
     grupo: str
     is_admin: bool = False
+    papel: str = "operador"
 
 
 class LoginResponse(BaseModel):

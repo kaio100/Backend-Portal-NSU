@@ -10,6 +10,11 @@ from backend.app.db.models import Arquivo, Certificado, Empresa, Nota, Processo,
 from backend.app.db.session import get_db
 from backend.app.services.storage_service import get_storage_service
 
+PAPEL_ADMIN = "admin"
+PAPEL_OPERADOR = "operador"
+PAPEL_LEITURA = "leitura"
+PAPEIS_VALIDOS = frozenset({PAPEL_ADMIN, PAPEL_OPERADOR, PAPEL_LEITURA})
+
 
 def get_storage():
     return get_storage_service()
@@ -51,8 +56,15 @@ def get_current_usuario(
 
 
 def require_admin(usuario: Usuario = Depends(get_current_usuario)) -> Usuario:
-    if not usuario.is_admin:
+    if not usuario.is_admin and getattr(usuario, "papel", PAPEL_OPERADOR) != PAPEL_ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso exclusivo para administradores.")
+    return usuario
+
+
+def require_operator(usuario: Usuario = Depends(get_current_usuario)) -> Usuario:
+    papel = PAPEL_ADMIN if usuario.is_admin else getattr(usuario, "papel", PAPEL_OPERADOR)
+    if papel not in {PAPEL_ADMIN, PAPEL_OPERADOR}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso exclusivo para operadores.")
     return usuario
 
 

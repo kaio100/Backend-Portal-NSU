@@ -5,7 +5,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_usuario, get_db
+from backend.app.api.deps import get_current_usuario, get_db, require_operator
 from backend.app.api.deps import get_storage
 from backend.app.schemas.jobs import JobRead
 from backend.app.schemas.processos import ProcessoCancelResponse, ProcessoCreate, ProcessoRead
@@ -32,7 +32,7 @@ def _handle_portal_error(exc: PortalSupportError) -> None:
     raise HTTPException(status_code=status_code, detail=message)
 
 
-@router.post("", response_model=ProcessoRead)
+@router.post("", response_model=ProcessoRead, dependencies=[Depends(require_operator)])
 def create_processo(payload: ProcessoCreate, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
         return processos_service.criar_processo_com_job(db, payload, grupo=usuario.grupo)
@@ -134,7 +134,7 @@ def get_summary_processo(processo_id: int, db: Session = Depends(get_db), usuari
         _handle_portal_error(exc)
 
 
-@router.post("/{processo_id}/cancelar", response_model=ProcessoCancelResponse)
+@router.post("/{processo_id}/cancelar", response_model=ProcessoCancelResponse, dependencies=[Depends(require_operator)])
 def cancelar_processo(processo_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
         processos_service.obter_processo_no_grupo(db, processo_id, usuario.grupo)

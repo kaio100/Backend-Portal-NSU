@@ -6,7 +6,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_empresa_grupo, require_nota_grupo
+from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_empresa_grupo, require_nota_grupo, require_operator
 from backend.app.db.models import Usuario
 from backend.app.schemas.notas import NotaConferenciaUpdate
 from backend.app.services import notas_service, portal_support_service
@@ -164,7 +164,7 @@ def get_nfse_compat(nota_id: int, db: Session = Depends(get_db), usuario: Usuari
         _handle_error(exc)
 
 
-@router.put("/{nota_id}")
+@router.put("/{nota_id}", dependencies=[Depends(require_operator)])
 async def update_nfse_compat(nota_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     require_nota_grupo(db, nota_id, usuario)
     payload = await request.json()

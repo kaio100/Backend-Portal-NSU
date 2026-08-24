@@ -5,7 +5,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_usuario, get_db, require_empresa_grupo
+from backend.app.api.deps import get_current_usuario, get_db, require_admin, require_empresa_grupo
 from backend.app.db.models import Usuario
 from backend.app.schemas.empresas import EmpresaCreate, EmpresaRead, EmpresaUpdate
 from backend.app.services import empresas_service
@@ -22,7 +22,7 @@ def _handle_error(exc: EmpresaServiceError) -> None:
     raise HTTPException(status_code=status_code, detail=message)
 
 
-@router.post("", response_model=EmpresaRead)
+@router.post("", response_model=EmpresaRead, dependencies=[Depends(require_admin)])
 def create_empresa(payload: EmpresaCreate, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
         return empresas_service.criar_empresa(db, payload, grupo=usuario.grupo)
@@ -71,7 +71,7 @@ def get_empresa(empresa_id: int, db: Session = Depends(get_db), usuario: Usuario
         _handle_error(exc)
 
 
-@router.patch("/{empresa_id}", response_model=EmpresaRead)
+@router.patch("/{empresa_id}", response_model=EmpresaRead, dependencies=[Depends(require_admin)])
 def update_empresa(empresa_id: int, payload: EmpresaUpdate, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
         require_empresa_grupo(db, empresa_id, usuario)
@@ -80,7 +80,7 @@ def update_empresa(empresa_id: int, payload: EmpresaUpdate, db: Session = Depend
         _handle_error(exc)
 
 
-@router.delete("/{empresa_id}", response_model=EmpresaRead)
+@router.delete("/{empresa_id}", response_model=EmpresaRead, dependencies=[Depends(require_admin)])
 def delete_empresa(empresa_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
         require_empresa_grupo(db, empresa_id, usuario)

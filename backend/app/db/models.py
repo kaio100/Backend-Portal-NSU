@@ -406,6 +406,7 @@ class Usuario(TimestampMixin, Base):
     ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     grupo: Mapped[str] = mapped_column(String(40), nullable=False, default="planning_hub", index=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    papel: Mapped[str] = mapped_column(String(20), nullable=False, default="operador", index=True)
 
     empresa: Mapped[Empresa] = relationship(back_populates="usuarios")
 
