@@ -11,9 +11,9 @@ from backend.app.core.config import settings
 from backend.app.db.models import CnpjCache
 
 
-DEFAULT_FONTE = "Invertexto"
 RECEITA_FONTE = "Receita Federal - Dados Abertos"
-FONTES_PRIORITARIAS = (RECEITA_FONTE, DEFAULT_FONTE)
+DEFAULT_FONTE = RECEITA_FONTE
+FONTES_PRIORITARIAS = (RECEITA_FONTE, "Invertexto")
 
 
 def only_digits(value: str | None) -> str:

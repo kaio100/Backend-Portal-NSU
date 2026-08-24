@@ -4,7 +4,6 @@ import io
 import os
 import re
 import tempfile
-import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -1047,94 +1046,37 @@ def _invertexto_result(
     }
 
 
-def _consultar_invertexto_cnpjs(db: Session, cnpjs: set[str]) -> dict[str, dict]:
-    cnpjs_normalizados = sorted({cnpj_cache_service.only_digits(cnpj) for cnpj in cnpjs if cnpj_cache_service.only_digits(cnpj)})
-    results: dict[str, dict] = {}
+def _consultar_receita_cache_cnpjs(db: Session, cnpjs: set[str]) -> dict[str, dict]:
+    """Resolve CNPJs exclusivamente pelo cache alimentado pela Receita.
 
-    for cnpj in cnpjs_normalizados:
-        cache = cnpj_cache_service.get_cache_valido(db, cnpj)
-        if cache:
-            result = _invertexto_result(
-                cache.get("consulta_simples_api") or "Não disponível",
-                cache.get("codigo_cnae"),
-                cache.get("descricao_cnae"),
-            )
-            results[cnpj] = result
-            _INVERTEXTO_CACHE[cnpj] = (datetime.now(), result)
-
-    pendentes = [cnpj for cnpj in cnpjs_normalizados if cnpj not in results]
-    if not pendentes:
-        return results
-
-    if not settings.invertexto_enabled:
-        results.update({cnpj: _invertexto_result("Não consultado") for cnpj in pendentes})
-        return results
-    if not settings.invertexto_token:
-        results.update({cnpj: _invertexto_result("Não consultado") for cnpj in pendentes})
-        return results
-    try:
-        import requests
-    except Exception:
-        results.update({cnpj: _invertexto_result("Erro na consulta") for cnpj in pendentes})
-        return results
-
-    delay = max(float(settings.invertexto_delay_seconds), 60.0 / max(1, int(settings.invertexto_rpm)))
-    for index, cnpj in enumerate(pendentes):
-        if index:
-            time.sleep(delay)
-        try:
-            response = requests.get(f"https://api.invertexto.com/v1/cnpj/{cnpj}", params={"token": settings.invertexto_token}, timeout=20)
-            response.raise_for_status()
-            payload = response.json()
-            normalizado = _normalizar_invertexto_payload(payload)
-            result = _invertexto_result(normalizado.get("consulta") or "Não disponível", normalizado.get("cnae"), normalizado.get("descricao_cnae"))
-            cnpj_cache_service.salvar_cache(
-                db,
-                cnpj,
-                consulta_simples_api=result["consulta"],
-                codigo_cnae=result["cnae"],
-                descricao_cnae=result["descricao_cnae"],
-                status_consulta="OK",
-                json_resposta=payload,
-            )
-            db.commit()
-        except Exception as exc:
-            db.rollback()
-            result = _invertexto_result("Erro na consulta")
-            try:
-                cnpj_cache_service.salvar_cache(
-                    db,
-                    cnpj,
-                    consulta_simples_api=result["consulta"],
-                    codigo_cnae="",
-                    descricao_cnae="",
-                    status_consulta="Erro na consulta",
-                    json_resposta=None,
-                    erro=str(exc)[:1000],
-                    cache_days=1,
-                )
-                db.commit()
-            except Exception:
-                db.rollback()
-        _INVERTEXTO_CACHE[cnpj] = (datetime.now(), result)
-        results[cnpj] = result
-    return results
-
-
-def _invertexto_cache_cnpjs(db: Session, cnpjs: set[str]) -> dict[str, dict]:
-    """Le somente o cache; gerar relatorio nunca deve aguardar API externa."""
-    normalizados = {cnpj_cache_service.only_digits(cnpj) for cnpj in cnpjs if cnpj_cache_service.only_digits(cnpj)}
+    Esta funcao nunca realiza requisicao HTTP. Ausencias recebem a regra
+    operacional de nao optante e serao persistidas pelo enriquecimento.
+    """
+    normalizados = {
+        cnpj_cache_service.only_digits(cnpj)
+        for cnpj in cnpjs
+        if cnpj_cache_service.only_digits(cnpj)
+    }
     caches = cnpj_cache_service.get_caches_validos(db, normalizados)
     return {
         cnpj: _invertexto_result(
-            caches[cnpj].get("consulta_simples_api") or "Não disponível",
+            caches[cnpj].get("consulta_simples_api") or "Não optante",
             caches[cnpj].get("codigo_cnae"),
             caches[cnpj].get("descricao_cnae"),
         )
         if cnpj in caches
-        else _invertexto_result("Não consultado")
+        else _invertexto_result("Não optante")
         for cnpj in normalizados
     }
+
+
+def _receita_cache_cnpjs(db: Session, cnpjs: set[str]) -> dict[str, dict]:
+    return _consultar_receita_cache_cnpjs(db, cnpjs)
+
+
+# Compatibilidade nominal para consumidores antigos. Esta funcao nao realiza
+# chamada externa; a implementacao usa somente Receita/cache.
+_consultar_invertexto_cnpjs = _consultar_receita_cache_cnpjs
 
 
 def _relatorio_status_simples(simples_xml: str, consulta_api: str) -> str:
@@ -1295,7 +1237,7 @@ def exportar_conferencia_xlsx(db: Session, filtros: NotasDownloadFiltros, grupo:
     xml_resumos = _xml_resumos_por_nota(db, notas)
     empresa_cnpjs = _relatorio_empresa_cnpjs(db, notas)
     cnpjs_consulta = {cnpj for nota in notas for cnpj, _nome, _tipo in [_relatorio_party(nota, empresa_cnpjs.get(int(nota.empresa_id), ""))] if cnpj}
-    api_data = _invertexto_cache_cnpjs(db, cnpjs_consulta)
+    api_data = _receita_cache_cnpjs(db, cnpjs_consulta)
     gerado_em = datetime.now().date()
     rows = [
         _relatorio_row(nota, xml_resumos.get(int(nota.id)), empresa_cnpjs.get(int(nota.empresa_id), ""), api_data, gerado_em)

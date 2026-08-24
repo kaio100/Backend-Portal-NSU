@@ -75,11 +75,9 @@ def corrigir(local_db: Path, cache_days: int = 30, batch_size: int = 500) -> dic
                 continue
             payload = dict(item)
             payload["fonte"] = RECEITA_FONTE
-            payload["origem_cache_compatibilidade"] = DEFAULT_FONTE
+            payload["origem_cache"] = RECEITA_FONTE
             resolvidos.append({
                 "cnpj": item["cnpj"],
-                # Compatibilidade com o backend atualmente publicado, que
-                # ainda busca explicitamente esta chave de fonte.
                 "fonte": DEFAULT_FONTE,
                 "consulta_simples_api": consulta,
                 "codigo_cnae": item.get("cnae_fiscal_principal") or "",

@@ -30,7 +30,7 @@ from backend.app.db.models import (  # noqa: E402
 )
 from backend.app.db.session import SessionLocal, init_db  # noqa: E402
 from backend.app.main import app  # noqa: E402
-from backend.app.services import cnpj_cache_service, cnpj_enrichment_service, portal_support_service  # noqa: E402
+from backend.app.services import cnpj_cache_service, cnpj_enrichment_service, cnpj_receita_service, portal_support_service  # noqa: E402
 from backend.app.services.storage_service import get_storage_service  # noqa: E402
 
 
@@ -270,7 +270,9 @@ def test_comparativo_separa_iss_retido_por_direcao_da_nota():
             valor_servico=1000,
             iss_retido=True,
             valor_iss_retido=50,
-            iss_calculado=50,
+            # Bases antigas podem ter o valor retido sem o campo calculado.
+            # O comparativo nao deve inventar uma divergencia contra zero.
+            iss_calculado=None,
             status_iss="Correto",
         )
         db.add(nota)
@@ -466,8 +468,8 @@ def test_relatorio_conferencia_csv(monkeypatch):
         assert row_by_doc["456"][13] == 0
         assert row_by_doc["456"][14] == 0
         assert row_by_doc["456"][18] == "01.05"
-        assert row_by_doc["456"][24] == "Não consultado"
-        assert row_by_doc["456"][25] == "Não comparado"
+        assert row_by_doc["456"][24] == "Não optante"
+        assert row_by_doc["456"][25] == "Pendente"
         assert row_by_doc["456"][26] == "Não se aplica"
         assert row_by_doc["456"][28] == "Depende de análise"
 
@@ -481,9 +483,12 @@ def test_relatorio_conferencia_csv(monkeypatch):
             )
             assert filtrado.status_code == 200
             wb_filtrado = load_workbook(filename=io.BytesIO(filtrado.content), read_only=True)
-            headers_filtrados = [cell.value for cell in wb_filtrado["Todas as Notas"][1]]
+            ws_filtrado = wb_filtrado["Todas as Notas"]
+            headers_filtrados = [cell.value for cell in ws_filtrado[1]]
             assert esperado in headers_filtrados
             assert ausente not in headers_filtrados
+            coluna_processado = headers_filtrados.index("dia processado") + 1
+            assert ws_filtrado.cell(row=2, column=coluna_processado).number_format == "yyyy-mm-dd"
 
 
 def test_relatorio_conferencia_enriquece_campos_vazios_pelo_xml(monkeypatch):
@@ -547,7 +552,7 @@ def test_relatorio_conferencia_enriquece_campos_vazios_pelo_xml(monkeypatch):
         assert row["IRRF"] == 10
         assert row["INSS"] == 20
         assert row["Valor Líquido"] == 900
-        assert row["Consulta Simples API"] == "Não consultado"
+        assert row["Consulta Simples API"] == "Não optante"
 
 
 def test_relatorio_codigo_servico_padrao_xx_xx():
@@ -589,10 +594,10 @@ def test_relatorio_invertexto_usa_cnpjs_unicos_e_cache(monkeypatch):
         first = portal_support_service._consultar_invertexto_cnpjs(db, {"11222333000181", "11222333000181"})
         second = portal_support_service._consultar_invertexto_cnpjs(db, {"11222333000181"})
 
-    assert len(calls) == 1
-    assert first["11222333000181"]["consulta"] == "Optante S.N"
-    assert first["11222333000181"]["cnae"] == "6201501"
-    assert second["11222333000181"]["descricao_cnae"] == "Desenvolvimento de programas"
+    assert calls == []
+    assert first["11222333000181"]["consulta"] == "Não optante"
+    assert first["11222333000181"]["cnae"] == ""
+    assert second["11222333000181"]["descricao_cnae"] == ""
 
 
 def test_relatorio_invertexto_normaliza_formato_atual():
@@ -707,10 +712,10 @@ def test_invertexto_cache_expirado_chama_api_e_atualiza(monkeypatch):
         result = portal_support_service._consultar_invertexto_cnpjs(db, {"11222333000181"})
         atualizado = db.query(CnpjCache).filter(CnpjCache.cnpj == "11222333000181").first()
 
-    assert len(calls) == 1
-    assert result["11222333000181"]["consulta"] == "Optante S.N"
-    assert atualizado.codigo_cnae == "6201501"
-    assert atualizado.descricao_cnae == "Novo CNAE"
+    assert calls == []
+    assert result["11222333000181"]["consulta"] == "Não optante"
+    assert atualizado.codigo_cnae == "0000000"
+    assert atualizado.descricao_cnae == "Antigo"
 
 
 def test_invertexto_desligado_sem_cache_nao_chama_api(monkeypatch):
@@ -732,7 +737,7 @@ def test_invertexto_desligado_sem_cache_nao_chama_api(monkeypatch):
         result = portal_support_service._consultar_invertexto_cnpjs(db, {"11222333000181"})
 
     assert calls == []
-    assert result["11222333000181"]["consulta"] == "Não consultado"
+    assert result["11222333000181"]["consulta"] == "Não optante"
 
 
 def test_invertexto_token_vazio_nao_chama_api(monkeypatch):
@@ -754,7 +759,7 @@ def test_invertexto_token_vazio_nao_chama_api(monkeypatch):
         result = portal_support_service._consultar_invertexto_cnpjs(db, {"11222333000181"})
 
     assert calls == []
-    assert result["11222333000181"]["consulta"] == "Não consultado"
+    assert result["11222333000181"]["consulta"] == "Não optante"
 
 
 def test_invertexto_cache_expira_em_trinta_dias(monkeypatch):
@@ -777,29 +782,18 @@ def test_invertexto_cache_expira_em_trinta_dias(monkeypatch):
     assert cache.data_expiracao == cache.data_consulta + timedelta(days=30)
 
 
-def test_enriquecimento_pos_certificado_consulta_cnpjs_do_processo(monkeypatch):
+def test_enriquecimento_pos_certificado_classifica_ausente_como_nao_optante(monkeypatch):
     _reset_db()
     _, processo_id, _ = _base_data()
-    chamadas = []
-
-    def fake_consultar(db, cnpjs):
-        chamadas.append(set(cnpjs))
-        return {
-            cnpj: {
-                "consulta": "Optante S.N",
-                "consulta_simples_api": "Optante S.N",
-                "cnae": "6201501",
-                "codigo_cnae": "6201501",
-                "descricao_cnae": "Desenvolvimento de programas",
-            }
-            for cnpj in cnpjs
-        }
-
-    monkeypatch.setattr(portal_support_service, "_consultar_invertexto_cnpjs", fake_consultar)
+    monkeypatch.setattr(cnpj_receita_service, "consultar_cnpjs", lambda _cnpjs: {})
 
     with SessionLocal() as db:
         resumo = cnpj_enrichment_service.enriquecer_cnpjs_do_processo(db, processo_id=processo_id, certificado_id=123)
 
-    assert chamadas == [{"11111111000191"}]
     assert resumo["cnpjs_total"] == 1
     assert resumo["pendentes"] == 1
+    assert resumo["receita_ausentes"] == 1
+    assert resumo["consultados"] == 0
+    with SessionLocal() as db:
+        cache = db.query(CnpjCache).filter(CnpjCache.cnpj == "11111111000191").one()
+        assert cache.consulta_simples_api == "Não optante"
