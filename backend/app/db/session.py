@@ -148,6 +148,11 @@ def _ensure_runtime_columns() -> None:
             statements.append(f"UPDATE {table_name} SET grupo = 'planning_hub' WHERE grupo IS NULL OR TRIM(grupo) = ''")
             if table_name == "usuarios" and "is_admin" not in columns:
                 statements.append("ALTER TABLE usuarios ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE")
+            if table_name == "usuarios" and "papel" not in columns:
+                statements.append("ALTER TABLE usuarios ADD COLUMN papel VARCHAR(20) NOT NULL DEFAULT 'operador'")
+            if table_name == "usuarios":
+                statements.append("UPDATE usuarios SET papel = 'admin' WHERE is_admin = TRUE AND papel <> 'admin'")
+                statements.append("UPDATE usuarios SET papel = 'operador' WHERE papel IS NULL OR papel NOT IN ('admin', 'operador', 'leitura')")
 
     if "monitoramento_config" in table_names:
         columns = {column["name"] for column in inspector.get_columns("monitoramento_config")}

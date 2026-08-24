@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_usuario, get_db
+from backend.app.api.deps import get_current_usuario, get_db, require_operator
 from backend.app.db.models import Usuario
 from backend.app.schemas.consultas import (
     ConsultaDesativarRequest,
@@ -25,7 +25,7 @@ def get_consultas_status(
     return consultas_service.montar_status(db, limit=limit, grupo=usuario.grupo)
 
 
-@router.post("/iniciar", response_model=ConsultaStatusResponse)
+@router.post("/iniciar", response_model=ConsultaStatusResponse, dependencies=[Depends(require_operator)])
 def iniciar_consultas(
     payload: ConsultaIniciarRequest | None = Body(default=None),
     db: Session = Depends(get_db),
@@ -35,7 +35,7 @@ def iniciar_consultas(
     return consultas_service.montar_status(db, grupo=usuario.grupo)
 
 
-@router.post("/desativar", response_model=ConsultaStatusResponse)
+@router.post("/desativar", response_model=ConsultaStatusResponse, dependencies=[Depends(require_operator)])
 def desativar_consultas(
     payload: ConsultaDesativarRequest | None = Body(default=None),
     db: Session = Depends(get_db),

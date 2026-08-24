@@ -5,7 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
-from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_empresa_grupo
+from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_admin, require_empresa_grupo
 from backend.app.core.rate_limit import RateLimiter
 from backend.app.db.models import Certificado, Usuario
 from backend.app.schemas.certificados import (
@@ -105,7 +105,7 @@ def _resolve_certificado_ref(db: Session, certificado_ref: str) -> Certificado:
     return certificado
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_admin)])
 async def create_certificado_compat(
     request: Request,
     db: Session = Depends(get_db),
@@ -180,7 +180,7 @@ async def create_certificado_compat(
         _handle_error(exc)
 
 
-@router.post("/upload", response_model=CertificadoRead)
+@router.post("/upload", response_model=CertificadoRead, dependencies=[Depends(require_admin)])
 async def upload_certificado(
     empresa_id: int | None = Form(default=None),
     nome: str | None = Form(default=None),
@@ -219,7 +219,7 @@ async def upload_certificado(
         _handle_error(exc)
 
 
-@router.post("/autocadastrar", response_model=CertificadoAutocadastroResponse)
+@router.post("/autocadastrar", response_model=CertificadoAutocadastroResponse, dependencies=[Depends(require_admin)])
 async def autocadastrar_certificado(
     arquivo: UploadFile = File(...),
     senha: str = Form(...),
@@ -263,7 +263,7 @@ async def autocadastrar_certificado(
         _handle_error(exc)
 
 
-@empresa_router.post("", response_model=CertificadoRead)
+@empresa_router.post("", response_model=CertificadoRead, dependencies=[Depends(require_admin)])
 async def create_certificado_empresa(
     empresa_id: int,
     nome: str = Form(...),
@@ -311,7 +311,7 @@ def list_certificados(
     return certificados_service.listar_certificados(db, empresa_id=empresa_id, ativo=ativo, grupo=usuario.grupo)
 
 
-@router.put("/{certificado_ref}", response_model=CertificadoRead)
+@router.put("/{certificado_ref}", response_model=CertificadoRead, dependencies=[Depends(require_admin)])
 async def update_certificado_compat(
     certificado_ref: str,
     request: Request,
@@ -362,7 +362,7 @@ def get_certificado(certificado_id: int, db: Session = Depends(get_db), usuario:
 @router.post(
     "/{certificado_id}/testar",
     response_model=CertificadoTestResult,
-    dependencies=[Depends(_limitar_tentativas_senha)],
+    dependencies=[Depends(require_admin), Depends(_limitar_tentativas_senha)],
 )
 def testar_certificado(
     certificado_id: int,
@@ -378,7 +378,7 @@ def testar_certificado(
         _handle_error(exc)
 
 
-@router.patch("/{certificado_id}", response_model=CertificadoRead)
+@router.patch("/{certificado_id}", response_model=CertificadoRead, dependencies=[Depends(require_admin)])
 async def update_certificado(
     certificado_id: int,
     nome: str | None = Form(default=None),
@@ -406,7 +406,7 @@ async def update_certificado(
         _handle_error(exc)
 
 
-@router.post("/{certificado_id}/senha", response_model=SecretStatusResponse)
+@router.post("/{certificado_id}/senha", response_model=SecretStatusResponse, dependencies=[Depends(require_admin)])
 def salvar_senha_certificado(
     certificado_id: int,
     payload: SecretSetRequest,
@@ -436,7 +436,7 @@ def status_senha_certificado(certificado_id: int, db: Session = Depends(get_db),
         _handle_error(exc)
 
 
-@router.delete("/{certificado_id}/senha", response_model=SecretStatusResponse)
+@router.delete("/{certificado_id}/senha", response_model=SecretStatusResponse, dependencies=[Depends(require_admin)])
 def remover_senha_certificado(certificado_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
         _garantir_certificado_do_grupo(db, certificado_id, usuario)
@@ -448,7 +448,7 @@ def remover_senha_certificado(certificado_id: int, db: Session = Depends(get_db)
 @router.post(
     "/{certificado_id}/testar-senha-salva",
     response_model=CertificadoTestResult,
-    dependencies=[Depends(_limitar_tentativas_senha)],
+    dependencies=[Depends(require_admin), Depends(_limitar_tentativas_senha)],
 )
 def testar_senha_salva(
     certificado_id: int,
@@ -463,7 +463,7 @@ def testar_senha_salva(
         _handle_error(exc)
 
 
-@router.delete("/{certificado_ref}", response_model=CertificadoRead)
+@router.delete("/{certificado_ref}", response_model=CertificadoRead, dependencies=[Depends(require_admin)])
 def delete_certificado(certificado_ref: str, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
         certificado = _resolve_certificado_ref(db, certificado_ref)
