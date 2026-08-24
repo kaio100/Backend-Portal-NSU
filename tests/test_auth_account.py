@@ -14,6 +14,7 @@ Path("data/test_auth_account.db").unlink(missing_ok=True)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from backend.app.core.security import create_access_token, hash_password  # noqa: E402
 from backend.app.db.models import Empresa, Usuario  # noqa: E402
 from backend.app.db.session import SessionLocal, init_db  # noqa: E402
 from backend.app.main import app  # noqa: E402
@@ -27,65 +28,64 @@ def _reset_db() -> None:
         db.commit()
 
 
-def test_criar_conta_publica_cria_empresa_padrao_usuario_e_retorna_token():
-    _reset_db()
-    with TestClient(app) as client:
-        response = client.post(
-            "/auth/criar-conta",
-            json={
-                "nome": "Kaio",
-                "email": "Kaio@Example.com",
-                "senha": "senha-forte-123",
-            },
-        )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["token_type"] == "bearer"
-    assert payload["access_token"]
-    assert payload["usuario"]["email"] == "kaio@example.com"
-    assert payload["usuario"]["nome"] == "Kaio"
-
+def _criar_usuario(*, email: str, is_admin: bool) -> tuple[Usuario, str]:
     with SessionLocal() as db:
-        usuario = db.query(Usuario).filter(Usuario.email == "kaio@example.com").one()
-        empresa = db.get(Empresa, usuario.empresa_id)
-    assert empresa is not None
-    assert empresa.nome == "Planning/Hub"
-    assert empresa.cnpj.startswith("9")
-    assert len(empresa.cnpj) == 14
-    assert empresa.grupo == "planning_hub"
-    assert usuario.empresa_id == empresa.id
-    assert usuario.senha_hash != "senha-forte-123"
-
-
-def test_register_alias_funciona_com_razao_social_e_cnpj():
-    _reset_db()
-    with TestClient(app) as client:
-        response = client.post(
-            "/auth/register",
-            json={
-                "email": "ana@example.com",
-                "senha": "senha-forte-456",
-                "razao_social": "Empresa Alias LTDA",
-                "cnpj": "22333444000155",
-            },
+        empresa = Empresa(nome="Empresa Segura", cnpj="12345678000199", ambiente="producao", ativo=True, grupo="planning_hub")
+        db.add(empresa)
+        db.flush()
+        usuario = Usuario(
+            empresa_id=empresa.id,
+            email=email,
+            senha_hash=hash_password("senha-forte-123"),
+            nome="Administrador" if is_admin else "Operador",
+            ativo=True,
+            grupo="planning_hub",
+            is_admin=is_admin,
         )
+        db.add(usuario)
+        db.commit()
+        db.refresh(usuario)
+        token = create_access_token(usuario.id, usuario.empresa_id)
+        db.expunge(usuario)
+        return usuario, token
 
-    assert response.status_code == 200
-    assert response.json()["usuario"]["email"] == "ana@example.com"
 
-
-def test_criar_conta_bloqueia_email_duplicado():
+def test_rotas_de_autocadastro_nao_existem_e_nao_criam_registros():
     _reset_db()
-    payload = {
-        "email": "duplicado@example.com",
-        "senha": "senha-forte-123",
-        "nome": "Duplicado",
-    }
+    payload = {"nome": "Atacante", "email": "atacante@example.com", "senha": "senha-forte-123", "grupo": "planning_hub", "cnpj": "22333444000155"}
     with TestClient(app) as client:
-        first = client.post("/auth/criar-conta", json=payload)
-        second = client.post("/auth/criar-conta", json=payload)
+        criar_conta = client.post("/auth/criar-conta", json=payload)
+        register = client.post("/auth/register", json=payload)
+        openapi = client.get("/openapi.json").json()
 
-    assert first.status_code == 200
-    assert second.status_code == 400
-    assert "Ja existe" in second.json()["detail"]
+    assert criar_conta.status_code == 404
+    assert register.status_code == 404
+    assert "/auth/criar-conta" not in openapi["paths"]
+    assert "/auth/register" not in openapi["paths"]
+    with SessionLocal() as db:
+        assert db.query(Usuario).count() == 0
+        assert db.query(Empresa).count() == 0
+
+
+def test_listagem_de_grupos_exige_login_administrativo():
+    _reset_db()
+    _usuario, token = _criar_usuario(email="operador@example.com", is_admin=False)
+    with TestClient(app) as client:
+        sem_login = client.get("/auth/grupos")
+        operador = client.get("/auth/grupos", headers={"Authorization": f"Bearer {token}"})
+
+    assert sem_login.status_code == 401
+    assert operador.status_code == 403
+
+
+def test_administrador_pode_listar_grupos_e_login_existente_continua_funcionando():
+    _reset_db()
+    usuario, token = _criar_usuario(email="admin@example.com", is_admin=True)
+    with TestClient(app) as client:
+        grupos = client.get("/auth/grupos", headers={"Authorization": f"Bearer {token}"})
+        login = client.post("/auth/login", json={"email": usuario.email, "senha": "senha-forte-123"})
+
+    assert grupos.status_code == 200
+    assert any(item["codigo"] == "planning_hub" for item in grupos.json())
+    assert login.status_code == 200
+    assert login.json()["usuario"]["email"] == usuario.email
