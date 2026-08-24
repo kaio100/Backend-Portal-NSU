@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.core.config import settings
@@ -24,11 +24,39 @@ def _ensure_sqlite_parent() -> None:
 
 _ensure_sqlite_parent()
 
-engine = create_engine(
-    settings.database_url,
-    connect_args=_connect_args(),
-    pool_pre_ping=True,
-)
+_is_sqlite = settings.database_url.startswith("sqlite")
+
+_engine_options = {
+    "connect_args": _connect_args(),
+    # SQLite local nao perde conexoes de rede. O pre-ping apenas acrescenta
+    # um SELECT a cada checkout da sessao, que pesa bastante no polling.
+    "pool_pre_ping": not _is_sqlite,
+}
+if not _is_sqlite:
+    # Mantem conexoes suficientes para o portal e o worker coexistirem sem
+    # abrir uma conexao nova a cada polling. O recycle evita conexoes mortas
+    # em poolers como Supabase/Railway.
+    _engine_options.update({
+        "pool_size": max(1, int(settings.database_pool_size)),
+        "max_overflow": max(0, int(settings.database_max_overflow)),
+        "pool_timeout": max(1, int(settings.database_pool_timeout)),
+        "pool_recycle": max(30, int(settings.database_pool_recycle)),
+    })
+
+engine = create_engine(settings.database_url, **_engine_options)
+
+
+if _is_sqlite:
+    @event.listens_for(engine, "connect")
+    def _configure_sqlite(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute("PRAGMA temp_store=MEMORY")
+        finally:
+            cursor.close()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -41,6 +69,19 @@ def get_db():
 
 
 def init_db() -> None:
+    """Inicializa somente o banco SQLite usado localmente e nos testes.
+
+    Em PostgreSQL o esquema deve ser aplicado explicitamente por migrate_db().
+    Isso impede que cada processo web/worker dispute locks de DDL no startup.
+    """
+    from backend.app.db import models  # noqa: F401
+
+    if _is_sqlite:
+        migrate_db()
+
+
+def migrate_db() -> None:
+    """Cria e atualiza o esquema em uma etapa administrativa explícita."""
     from backend.app.db import models  # noqa: F401
     from backend.app.db.base import Base
 
@@ -139,6 +180,15 @@ def _ensure_runtime_columns() -> None:
             if name not in nota_columns:
                 statements.append(f"ALTER TABLE notas ADD COLUMN {name} {column_type}")
         statements.append("UPDATE notas SET importado_em = COALESCE(updated_at, created_at) WHERE importado_em IS NULL")
+        # Indices compostos acompanham exatamente os filtros e ordenacoes das
+        # telas de notas emitidas/recebidas. IF NOT EXISTS torna a migracao
+        # barata nas inicializacoes seguintes.
+        statements.extend([
+            "CREATE INDEX IF NOT EXISTS ix_notas_empresa_importado_id ON notas (empresa_id, importado_em DESC, id DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_notas_empresa_emissao_id ON notas (empresa_id, data_emissao DESC, id DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_notas_empresa_prestador_emissao ON notas (empresa_id, prestador_cnpj, data_emissao DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_notas_empresa_tomador_emissao ON notas (empresa_id, tomador_cnpj, data_emissao DESC)",
+        ])
 
     for table_name in ("empresas", "usuarios"):
         if table_name in table_names:
@@ -168,6 +218,10 @@ def _ensure_runtime_columns() -> None:
         if "filename" not in arquivo_columns:
             statements.append("ALTER TABLE arquivos ADD COLUMN filename VARCHAR(255)")
         statements.append("UPDATE arquivos SET updated_at = created_at WHERE updated_at IS NULL")
+        statements.extend([
+            "CREATE INDEX IF NOT EXISTS ix_arquivos_nota_tipo_id ON arquivos (nota_id, tipo, id)",
+            "CREATE INDEX IF NOT EXISTS ix_arquivos_empresa_tipo_id ON arquivos (empresa_id, tipo, id DESC)",
+        ])
 
     if "cnpj_cache" in table_names:
         cache_columns = {column["name"] for column in inspector.get_columns("cnpj_cache")}
@@ -181,10 +235,10 @@ def _ensure_runtime_columns() -> None:
         for name, column_type in cache_runtime_columns.items():
             if name not in cache_columns:
                 statements.append(f"ALTER TABLE cnpj_cache ADD COLUMN {name} {column_type}")
-        statements.append("UPDATE cnpj_cache SET consulta_simples_api = COALESCE(consulta_simples_api, simples_status)")
-        statements.append("UPDATE cnpj_cache SET status_consulta = COALESCE(status_consulta, status)")
-        statements.append("UPDATE cnpj_cache SET json_resposta = COALESCE(json_resposta, json_completo)")
-        statements.append("UPDATE cnpj_cache SET created_at = COALESCE(created_at, updated_at)")
+        statements.append("UPDATE cnpj_cache SET consulta_simples_api = simples_status WHERE consulta_simples_api IS NULL AND simples_status IS NOT NULL")
+        statements.append("UPDATE cnpj_cache SET status_consulta = status WHERE status_consulta IS NULL AND status IS NOT NULL")
+        statements.append("UPDATE cnpj_cache SET json_resposta = json_completo WHERE json_resposta IS NULL AND json_completo IS NOT NULL")
+        statements.append("UPDATE cnpj_cache SET created_at = updated_at WHERE created_at IS NULL AND updated_at IS NOT NULL")
 
     if "nsu_controle" in table_names:
         nsu_columns = {column["name"] for column in inspector.get_columns("nsu_controle")}
