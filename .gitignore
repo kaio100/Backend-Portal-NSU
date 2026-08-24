@@ -13,10 +13,14 @@ htmlcov/
 
 # Dados gerados em execucao
 data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/*.sqlite3-*
 data/*.log
 data/tmp_*/
 storage/
 saida_adn_nfse/
+.runlogs/
 
 # Temporarios e sistema operacional
 *.tmp

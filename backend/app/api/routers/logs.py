@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_usuario, get_db, require_empresa_grupo, require_processo_grupo
@@ -21,6 +21,16 @@ class LogProcessoRead(BaseModel):
     mensagem: str
     contexto_json: dict | None = None
     created_at: datetime | None = None
+
+    @field_validator("mensagem", mode="before")
+    @classmethod
+    def sanitize_message(cls, value):
+        return logs_service.sanitizar_texto(value, max_length=8000)
+
+    @field_validator("contexto_json", mode="before")
+    @classmethod
+    def sanitize_context(cls, value):
+        return logs_service.sanitizar_contexto(value)
 
 
 router = APIRouter(tags=["logs"])
