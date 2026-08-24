@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from cryptography.fernet import Fernet
 
 
 # Esta configuracao precisa acontecer antes da coleta importar qualquer modulo
@@ -13,6 +14,9 @@ import pytest
 _TEST_DB_PATH = Path(__file__).resolve().parents[1] / "data" / "test_suite.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH.as_posix()}"
 os.environ["API_WORKER_ENABLED"] = "false"
+os.environ["API_KEY"] = "api-key-test-with-at-least-32-bytes"
+os.environ["JWT_SECRET"] = "jwt-secret-test-with-at-least-32-bytes"
+os.environ["SECRETS_KEY"] = Fernet.generate_key().decode("utf-8")
 for suffix in ("", "-shm", "-wal"):
     Path(f"{_TEST_DB_PATH}{suffix}").unlink(missing_ok=True)
 
