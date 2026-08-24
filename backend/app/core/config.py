@@ -76,13 +76,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_secrets(self):
-        environment = (self.environment or "").strip().lower()
-        railway_environment = (self.railway_environment_name or "").strip().lower()
-        if environment not in {"production", "producao", "prod"} and railway_environment not in {
-            "production",
-            "producao",
-            "prod",
-        }:
+        if not self.is_production:
             return self
 
         missing = [
@@ -105,6 +99,13 @@ class Settings(BaseSettings):
         except (TypeError, ValueError) as exc:
             raise ValueError("SECRETS_KEY deve ser uma chave Fernet valida em producao.") from exc
         return self
+
+    @property
+    def is_production(self) -> bool:
+        production_names = {"production", "producao", "prod"}
+        environment = (self.environment or "").strip().lower()
+        railway_environment = (self.railway_environment_name or "").strip().lower()
+        return environment in production_names or railway_environment in production_names
 
     @property
     def cors_origin_list(self) -> list[str]:

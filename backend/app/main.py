@@ -207,11 +207,31 @@ async def lifespan(app: FastAPI):
                 await pdf_revalidation_task
 
 
+def _documentation_options(production: bool) -> dict[str, str | None]:
+    if production:
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
+
 app = FastAPI(
     title="NFS-e Backend API",
     version="0.1.0",
     lifespan=lifespan,
+    **_documentation_options(settings.is_production),
 )
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), geolocation=(), microphone=()"
+    if settings.is_production:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    return response
 
 
 def _parse_cors_origins() -> list[str]:
@@ -229,11 +249,9 @@ def _parse_cors_origins() -> list[str]:
         if origin and origin not in origins:
             origins.append(origin)
 
-    default_origins = [
-        "https://frontend-portal-nsu.vercel.app",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
+    default_origins = ["https://frontend-portal-nsu.vercel.app"]
+    if not settings.is_production:
+        default_origins.extend(["http://localhost:5173", "http://127.0.0.1:5173"])
 
     for origin in default_origins:
         if origin not in origins:
@@ -248,8 +266,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
 # /health e /db/health ficam sem API key: sao usados por health checks de
