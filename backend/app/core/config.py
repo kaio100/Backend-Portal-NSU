@@ -1,4 +1,5 @@
-from pydantic import field_validator
+from cryptography.fernet import Fernet
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,6 +9,7 @@ class Settings(BaseSettings):
     app_name: str = "nfse-backend"
     app_version: str = "0.1.0"
     environment: str = "local"
+    railway_environment_name: str | None = None
     storage_backend: str = "local"
     storage_root: str = "storage"
     storage_bucket: str = "nfse"
@@ -71,6 +73,38 @@ class Settings(BaseSettings):
         if url.startswith("postgresql://"):
             return "postgresql+psycopg://" + url.removeprefix("postgresql://")
         return url
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self):
+        environment = (self.environment or "").strip().lower()
+        railway_environment = (self.railway_environment_name or "").strip().lower()
+        if environment not in {"production", "producao", "prod"} and railway_environment not in {
+            "production",
+            "producao",
+            "prod",
+        }:
+            return self
+
+        missing = [
+            name
+            for name, value in (
+                ("API_KEY", self.api_key),
+                ("JWT_SECRET", self.jwt_secret),
+                ("SECRETS_KEY", self.secrets_key),
+            )
+            if not str(value or "").strip()
+        ]
+        if missing:
+            raise ValueError("Configuracao de producao incompleta: " + ", ".join(missing))
+        if len(str(self.api_key)) < 32:
+            raise ValueError("API_KEY deve ter pelo menos 32 caracteres em producao.")
+        if len(str(self.jwt_secret)) < 32:
+            raise ValueError("JWT_SECRET deve ter pelo menos 32 caracteres em producao.")
+        try:
+            Fernet(str(self.secrets_key).encode("utf-8"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("SECRETS_KEY deve ser uma chave Fernet valida em producao.") from exc
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:

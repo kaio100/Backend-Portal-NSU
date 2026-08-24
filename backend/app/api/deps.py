@@ -16,14 +16,13 @@ def get_storage():
 
 
 def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
-    """Exige o header X-API-Key quando API_KEY estiver configurada no ambiente.
-
-    Sem API_KEY configurada (dev/local), a checagem fica desativada para nao
-    quebrar o fluxo local/testes; em producao a variavel deve sempre ser definida.
-    """
+    """Exige X-API-Key e nunca libera a rota por falha de configuracao."""
     expected = settings.api_key
     if not expected:
-        return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Endpoint interno indisponivel.",
+        )
     if not x_api_key or not hmac.compare_digest(x_api_key, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
