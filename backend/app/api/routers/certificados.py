@@ -105,7 +105,7 @@ def _resolve_certificado_ref(db: Session, certificado_ref: str) -> Certificado:
     return certificado
 
 
-@router.post("", dependencies=[Depends(require_admin)])
+@router.post("")
 async def create_certificado_compat(
     request: Request,
     db: Session = Depends(get_db),
@@ -180,7 +180,7 @@ async def create_certificado_compat(
         _handle_error(exc)
 
 
-@router.post("/upload", response_model=CertificadoRead, dependencies=[Depends(require_admin)])
+@router.post("/upload", response_model=CertificadoRead)
 async def upload_certificado(
     empresa_id: int | None = Form(default=None),
     nome: str | None = Form(default=None),
@@ -219,7 +219,7 @@ async def upload_certificado(
         _handle_error(exc)
 
 
-@router.post("/autocadastrar", response_model=CertificadoAutocadastroResponse, dependencies=[Depends(require_admin)])
+@router.post("/autocadastrar", response_model=CertificadoAutocadastroResponse)
 async def autocadastrar_certificado(
     arquivo: UploadFile = File(...),
     senha: str = Form(...),
@@ -263,7 +263,7 @@ async def autocadastrar_certificado(
         _handle_error(exc)
 
 
-@empresa_router.post("", response_model=CertificadoRead, dependencies=[Depends(require_admin)])
+@empresa_router.post("", response_model=CertificadoRead)
 async def create_certificado_empresa(
     empresa_id: int,
     nome: str = Form(...),
