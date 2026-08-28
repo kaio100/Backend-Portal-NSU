@@ -75,23 +75,30 @@ def create_arquivo(db: Session, data: dict) -> Arquivo:
 def create_arquivo_if_missing(db: Session, data: dict) -> tuple[Arquivo, bool]:
     existente = get_arquivo_by_storage_key(db, data["storage_key"])
     if existente is not None:
-        existente.updated_at = datetime.now(timezone.utc)
+        changed = False
         if data.get("nota_id") and existente.nota_id is None:
             existente.nota_id = data["nota_id"]
+            changed = True
         if data.get("processo_id") and existente.processo_id is None:
             existente.processo_id = data["processo_id"]
+            changed = True
         if data.get("filename") and not existente.filename:
             existente.filename = data["filename"]
-        if data.get("tipo"):
+            changed = True
+        if data.get("tipo") and existente.tipo != data["tipo"]:
             existente.tipo = data["tipo"]
+            changed = True
         # A mesma chave pode receber um PDF espelho regenerado depois de um
         # evento de cancelamento/substituicao. Mantenha os metadados do banco
         # sincronizados com o conteudo efetivamente salvo no storage.
         for field in ("tamanho_bytes", "checksum", "content_type", "storage_backend", "storage_bucket"):
-            if data.get(field) is not None:
+            if data.get(field) is not None and getattr(existente, field) != data[field]:
                 setattr(existente, field, data[field])
+                changed = True
+        if not changed:
+            return existente, False
+        existente.updated_at = datetime.now(timezone.utc)
         db.add(existente)
         db.flush()
-        db.refresh(existente)
         return existente, False
     return create_arquivo(db, data), True

@@ -41,10 +41,11 @@ def desativar_consultas(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_usuario),
 ):
+    options = payload or ConsultaDesativarRequest()
     consultas_service.desativar_consultas_automaticas(
         db,
-        cancelar_pendentes=True,
-        cancelar_rodando=True,
+        cancelar_pendentes=options.cancelar_pendentes,
+        cancelar_rodando=options.cancelar_rodando,
         grupo=usuario.grupo,
     )
     return consultas_service.montar_status(db, grupo=usuario.grupo)

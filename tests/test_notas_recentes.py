@@ -384,6 +384,55 @@ def test_reconciliacao_nsu_acontece_uma_vez_na_mesma_janela_noturna():
     assert segundo["reconciliacao_profunda"] is False
 
 
+def test_reconciliacao_comeca_as_19_e_varre_desde_o_mes_anterior():
+    _reset_db()
+    empresa_id = _empresa()
+    antes_da_janela = datetime(2026, 8, 11, 18, 59, tzinfo=ZoneInfo("America/Sao_Paulo"))
+    inicio_da_janela = datetime(2026, 8, 11, 19, 0, tzinfo=ZoneInfo("America/Sao_Paulo"))
+
+    with SessionLocal() as db:
+        nsu_control_service.atualizar_ultimo_nsu(
+            db, empresa_id, 1, "11222333000181", 10000, origem="teste"
+        )
+        notas_repo.create_nota(
+            db,
+            {
+                "empresa_id": empresa_id,
+                "chave": "JUNHO-NSU-LIMITE",
+                "data_emissao": date(2026, 6, 30),
+                "competencia": date(2026, 6, 30),
+                "primeiro_nsu": 2999,
+                "ultimo_nsu": 3000,
+            },
+        )
+        notas_repo.create_nota(
+            db,
+            {
+                "empresa_id": empresa_id,
+                "chave": "JULHO-NSU-INICIAL",
+                "data_emissao": date(2026, 7, 2),
+                "competencia": date(2026, 7, 1),
+                "primeiro_nsu": 5000,
+                "ultimo_nsu": 5001,
+            },
+        )
+        db.commit()
+        plano_antes = nsu_control_service.planejar_inicio_consulta(
+            db, empresa_id, 1, now=antes_da_janela
+        )
+        plano_19h = nsu_control_service.planejar_inicio_consulta(
+            db, empresa_id, 1, now=inicio_da_janela
+        )
+
+    assert plano_antes["reconciliacao_profunda"] is False
+    assert plano_antes["nsu_inicio"] == 9950
+    assert plano_19h["reconciliacao_profunda"] is True
+    assert plano_19h["nsu_mes_anterior"] == 3000
+    assert plano_19h["margem_seguranca"] == 1000
+    assert plano_19h["nsu_inicio"] == 2000
+    assert plano_19h["recuo"] == 8000
+
+
 def test_notas_recebidas_usa_cnpj_empresa_e_competencia_operacional():
     _reset_db()
     empresa_id = _empresa()

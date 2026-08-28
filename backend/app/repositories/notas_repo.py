@@ -182,11 +182,21 @@ def update_nota(db: Session, nota: Nota, data: dict) -> Nota:
     # campo durante a paginacao faz o mesmo ID aparecer em offsets diferentes.
     if nota.importado_em is None:
         data["importado_em"] = importado_em_recebido or now
-    data.setdefault("updated_at", now)
-    for key, value in data.items():
+    requested_updated_at = data.pop("updated_at", None)
+    changed = {
+        key: value
+        for key, value in data.items()
+        if getattr(nota, key, None) != value
+    }
+    if not changed:
+        return nota
+    changed["updated_at"] = requested_updated_at or now
+    for key, value in changed.items():
         setattr(nota, key, value)
     db.add(nota)
     db.flush()
+    # Mantem a normalizacao de timezone do dialeto (especialmente SQLite) e
+    # o contrato historico retornado aos chamadores apos uma alteracao real.
     db.refresh(nota)
     return nota
 
@@ -196,6 +206,10 @@ def upsert_nota_by_chave(db: Session, empresa_id: int, chave: str, data: dict) -
     if nota is None:
         return create_nota(db, data), True
     data = dict(data)
+    # O processo original representa quando a nota entrou no acervo. Troca-lo
+    # a cada janela de reconciliacao gera UPDATEs e disputa de locks sem mudar
+    # qualquer dado fiscal exibido no portal.
+    data.pop("processo_id", None)
     # Uma nova leitura do XML pode atualizar os campos fiscais de origem, mas
     # nao pode desfazer a decisao de um usuario que ja conferiu/corrigiu a
     # nota. Quando a conferencia for reaberta como "pendente", o valor volta

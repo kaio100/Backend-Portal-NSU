@@ -589,6 +589,26 @@ def listar_notas_por_tipo_operacional(
             next_month = _next_month(competencia_fim)
             query_competencia_fim = date(next_month.year, next_month.month, dia_corte)
 
+    # A direcao ja determina qual lado da nota contem o CNPJ da empresa.
+    # Filtrar no banco evita buscar e instanciar ate 5.000 registros para
+    # devolver apenas uma pagina de 100 itens.
+    prestador_filtro = _only_digits(prestador_cnpj) or None
+    tomador_filtro = _only_digits(tomador_cnpj) or None
+    if nota_tipo == "emitida":
+        if prestador_filtro and prestador_filtro != empresa_cnpj:
+            return []
+        prestador_filtro = empresa_cnpj
+    else:
+        if tomador_filtro and tomador_filtro != empresa_cnpj:
+            return []
+        tomador_filtro = empresa_cnpj
+
+    precisa_ajustar_competencia = nota_tipo == "recebida" and (
+        competencia_inicio is not None or competencia_fim is not None
+    )
+    repo_limit = 5000 if precisa_ajustar_competencia else min(max(limit, 1), 500)
+    repo_offset = 0 if precisa_ajustar_competencia else max(offset, 0)
+
     notas = notas_repo.list_notas(
         db,
         empresa_id=empresa_id,
@@ -596,16 +616,16 @@ def listar_notas_por_tipo_operacional(
         processo_id=processo_id,
         status_documento=effective_status,
         numero=numero,
-        prestador_cnpj=_only_digits(prestador_cnpj) or None,
-        tomador_cnpj=_only_digits(tomador_cnpj) or None,
+        prestador_cnpj=prestador_filtro,
+        tomador_cnpj=tomador_filtro,
         chave=chave,
         busca=busca,
         data_inicio=data_inicio,
         data_fim=data_fim,
         competencia_inicio=query_competencia_inicio,
         competencia_fim=query_competencia_fim,
-        limit=5000,
-        offset=0,
+        limit=repo_limit,
+        offset=repo_offset,
         sort=sort,
     )
 
@@ -646,7 +666,7 @@ def listar_notas_por_tipo_operacional(
         )
 
     safe_limit = min(max(limit, 1), 500)
-    safe_offset = max(offset, 0)
+    safe_offset = max(offset, 0) if precisa_ajustar_competencia else 0
     return classificadas[safe_offset : safe_offset + safe_limit]
 
 

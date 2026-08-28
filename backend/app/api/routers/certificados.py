@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_admin, require_empresa_grupo
+from backend.app.core.config import settings
 from backend.app.core.rate_limit import RateLimiter
 from backend.app.db.models import Certificado, Usuario
 from backend.app.schemas.certificados import (
@@ -26,6 +27,17 @@ empresa_router = APIRouter(prefix="/empresas/{empresa_id}/certificados", tags=["
 # Freio contra tentativas repetidas de adivinhar a senha de um certificado:
 # no maximo 5 tentativas a cada 5 minutos, por IP + certificado.
 _senha_rate_limiter = RateLimiter(max_attempts=5, window_seconds=300)
+
+
+async def _ler_certificado_limitado(arquivo: UploadFile) -> bytes:
+    limite = max(1, int(settings.certificado_upload_max_bytes))
+    conteudo = await arquivo.read(limite + 1)
+    if len(conteudo) > limite:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Certificado excede o limite de {limite // (1024 * 1024)} MB.",
+        )
+    return conteudo
 
 
 def _limitar_tentativas_senha(certificado_id: int, request: Request) -> None:
@@ -132,7 +144,7 @@ async def create_certificado_compat(
     client_name = _first_form_value(form, "client_name")
 
     try:
-        pfx_bytes = await arquivo.read()
+        pfx_bytes = await _ler_certificado_limitado(arquivo)
         result = certificados_service.autocadastrar_certificado(
             db=db,
             storage=storage,
@@ -191,7 +203,7 @@ async def upload_certificado(
     usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
-        pfx_bytes = await arquivo_pfx.read()
+        pfx_bytes = await _ler_certificado_limitado(arquivo_pfx)
         if empresa_id is None:
             if not senha_teste:
                 raise CertificadoServiceError("Senha do certificado e obrigatoria para identificar a empresa automaticamente.")
@@ -236,7 +248,7 @@ async def autocadastrar_certificado(
     usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
-        pfx_bytes = await arquivo.read()
+        pfx_bytes = await _ler_certificado_limitado(arquivo)
         nsu_inicial = _validar_nsu_inicio(
             nsu_inicio
             if nsu_inicio is not None
@@ -276,7 +288,7 @@ async def create_certificado_empresa(
 ):
     try:
         require_empresa_grupo(db, empresa_id, usuario)
-        pfx_bytes = await arquivo_pfx.read()
+        pfx_bytes = await _ler_certificado_limitado(arquivo_pfx)
         return certificados_service.criar_certificado_com_upload_e_senha(
             db=db,
             storage=storage,
@@ -391,7 +403,7 @@ async def update_certificado(
 ):
     try:
         _garantir_certificado_do_grupo(db, certificado_id, usuario)
-        pfx_bytes = await arquivo_pfx.read() if arquivo_pfx is not None else None
+        pfx_bytes = await _ler_certificado_limitado(arquivo_pfx) if arquivo_pfx is not None else None
         return certificados_service.atualizar_certificado_com_upload_ou_senha(
             db=db,
             storage=storage,

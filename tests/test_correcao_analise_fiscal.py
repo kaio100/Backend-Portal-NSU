@@ -191,8 +191,8 @@ def test_identificar_iss_retido_sem_indicador_no_xml():
 
 
 # ---------------------------------------------------------------------------
-# Cenario completo do relato: valor liquido com ISS retido pelo tomador
-# deve bater exatamente com o exemplo do PDF (320,00 - 16,00 = 304,00).
+# Cenario completo: alem do ISS retido pelo tomador, o liquido correto deve
+# deduzir o IRRF de 1,5% identificado pela regra fiscal do subitem 11.01.
 # ---------------------------------------------------------------------------
 def test_cenario_relatado_valor_liquido_iss_retido_end_to_end():
     xml = _xml_com_ctribnac("110101")
@@ -200,9 +200,9 @@ def test_cenario_relatado_valor_liquido_iss_retido_end_to_end():
 
     assert resumo["subitem_lc116"] == "11.01"
     assert resumo["iss_retido"] is True
-    assert resumo["valor_liquido_calculado"] == "304.00"
+    assert resumo["valor_liquido_calculado"] == "299.20"
     assert "Subitem LC116 nao identificado" not in resumo["alertas_fiscais"]
-    assert "Valor liquido esperado" not in resumo["alertas_fiscais"]
+    assert "Valor liquido esperado R$ 299.20, informado R$ 304.00." in resumo["alertas_fiscais"]
 
 
 # ---------------------------------------------------------------------------

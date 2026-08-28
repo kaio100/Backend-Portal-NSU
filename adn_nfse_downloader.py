@@ -252,6 +252,18 @@ def requisicao_json_com_retry(
             ctype = resp.headers.get("content-type", "")
             ultimo_texto = resp.text or ""
 
+            # O ADN usa HTTP 404 tambem para a resposta funcional E2220
+            # (nenhum documento a partir do NSU). Isso nao e falha de rota,
+            # certificado ou servidor e nao deve poluir o portal como erro.
+            if status == 404:
+                try:
+                    payload_404 = resp.json()
+                except Exception:
+                    payload_404 = None
+                if isinstance(payload_404, dict) and payload_404.get("StatusProcessamento") == "NENHUM_DOCUMENTO_LOCALIZADO":
+                    print("ADN sem novos documentos | E2220")
+                    return payload_404
+
             print(f"HTTP {status} | {ctype}")
 
             if status in TEMPORARY_STATUS:

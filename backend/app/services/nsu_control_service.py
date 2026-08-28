@@ -25,6 +25,35 @@ def maior_nsu_importado(db: Session, empresa_id: int) -> int:
     return int(value or 0)
 
 
+def nsu_base_mes_anterior(db: Session, empresa_id: int, referencia: date) -> int | None:
+    """Localiza um NSU anterior ao mes alvo para atravessa-lo por completo."""
+    inicio_mes_atual = referencia.replace(day=1)
+    fim_mes_anterior = inicio_mes_atual - timedelta(days=1)
+    inicio_mes_anterior = fim_mes_anterior.replace(day=1)
+    data_nota = func.coalesce(Nota.data_emissao, Nota.competencia)
+    nsu_inicio_nota = func.coalesce(Nota.primeiro_nsu, Nota.ultimo_nsu)
+    nsu_fim_nota = func.coalesce(Nota.ultimo_nsu, Nota.primeiro_nsu)
+    limite_anterior = (
+        db.query(func.max(nsu_fim_nota))
+        .filter(Nota.empresa_id == empresa_id)
+        .filter(nsu_fim_nota.isnot(None))
+        .filter(data_nota < inicio_mes_anterior)
+        .scalar()
+    )
+    if limite_anterior is not None:
+        return int(limite_anterior)
+
+    value = (
+        db.query(func.min(nsu_inicio_nota))
+        .filter(Nota.empresa_id == empresa_id)
+        .filter(nsu_inicio_nota.isnot(None))
+        .filter(data_nota >= inicio_mes_anterior)
+        .filter(data_nota < inicio_mes_atual)
+        .scalar()
+    )
+    return int(value) if value is not None else None
+
+
 def obter_ultimo_nsu(
     db: Session,
     empresa_id: int,
@@ -41,7 +70,7 @@ def obter_ultimo_nsu(
 
 
 def janela_reconciliacao(now: datetime | None = None) -> date | None:
-    """Retorna a data da janela 18h-05h; apos meia-noite pertence ao dia anterior."""
+    """Retorna a data da janela 19h-05h; apos meia-noite pertence ao dia anterior."""
     timezone = ZoneInfo(settings.nsu_reconciliacao_timezone or "America/Sao_Paulo")
     momento = now or datetime.now(timezone)
     if momento.tzinfo is None:
@@ -78,10 +107,17 @@ def planejar_inicio_consulta(
         else int(settings.nsu_lookback_normal or 50)
     )
     recuo = max(0, recuo)
+    nsu_mes_anterior = nsu_base_mes_anterior(db, empresa_id, janela) if profunda and janela else None
+    if nsu_mes_anterior is not None:
+        nsu_inicio = max(0, nsu_mes_anterior - recuo)
+    else:
+        nsu_inicio = max(0, confirmado - recuo)
     return {
         "nsu_confirmado": confirmado,
-        "nsu_inicio": max(0, confirmado - recuo),
-        "recuo": recuo,
+        "nsu_inicio": nsu_inicio,
+        "recuo": max(0, confirmado - nsu_inicio),
+        "margem_seguranca": recuo,
+        "nsu_mes_anterior": nsu_mes_anterior,
         "reconciliacao_profunda": profunda,
         "janela_reconciliacao": janela,
     }

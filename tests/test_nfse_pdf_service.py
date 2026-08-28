@@ -12,7 +12,8 @@ import pytest
 from backend.app.db.models import Arquivo, Certificado, Empresa, Evento, Job, LockProcessamento, LogProcesso, Nota, NsuControle, Processo
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.main import app
-from backend.app.services import legacy_ingestion_service
+from backend.app.services import legacy_ingestion_service
+from backend.app.scripts import regenerar_carimbos_pdfs
 from backend.app.services.nfse_pdf_service import NfsePdfService
 from backend.app.scripts.regenerar_carimbos_pdfs import _gerar_pdf as gerar_pdf_com_carimbo
 from backend.app.services.nfse_xml_parser import extrair_dados_nfse
@@ -145,6 +146,41 @@ def test_rotina_regenera_carimbos_cancelada_e_substituida():
         pdf_bytes = gerar_pdf_com_carimbo(xml_bytes, status, nota_id=1)
         texto = "\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(pdf_bytes)).pages)
         assert rotulo in texto
+
+
+def test_rotina_informa_id_e_motivo_quando_regeneracao_falha(monkeypatch):
+    _reset_db()
+    storage = get_storage_service()
+    xml_key = "test-carimbo/falha/nota.xml"
+    pdf_key = "test-carimbo/falha/nota.pdf"
+    storage.put_bytes(xml_key, _xml_minimo().encode("utf-8"), content_type="application/xml")
+
+    with SessionLocal() as db:
+        empresa = Empresa(nome="Empresa Carimbo", cnpj="57526860000180", ambiente="producao", ativo=True)
+        db.add(empresa)
+        db.flush()
+        nota = Nota(
+            empresa_id=empresa.id,
+            chave="CHAVE-CARIMBO-FALHA",
+            status_documento="cancelada",
+            xml_storage_key=xml_key,
+            pdf_espelho_storage_key=pdf_key,
+        )
+        db.add(nota)
+        db.commit()
+        nota_id = int(nota.id)
+
+    monkeypatch.setattr(
+        regenerar_carimbos_pdfs,
+        "_gerar_pdf",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("falha controlada")),
+    )
+    relatorio = regenerar_carimbos_pdfs.executar(dry_run=False)
+
+    assert relatorio.erros == 1
+    assert relatorio.atualizadas == 0
+    assert relatorio.falhas == [{"nota_id": nota_id, "erro": "RuntimeError: falha controlada"}]
+    storage.delete(xml_key)
 
 
 def test_pdf_service_gera_danfse_v1_compacto(tmp_path: Path):

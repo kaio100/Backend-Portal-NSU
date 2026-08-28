@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import uuid
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -156,6 +157,7 @@ def _loop_ingestao_incremental(
     stop_event: threading.Event,
     intervalo: float,
 ) -> None:
+    proxima_linha_index = 0
     while not stop_event.is_set():
         try:
             base_dir = Path(pasta_saida)
@@ -170,7 +172,10 @@ def _loop_ingestao_incremental(
                         processo,
                         base_dir,
                         updated_after=run_started_at,
+                        commit_every=20,
+                        start_row=proxima_linha_index,
                     )
+                    proxima_linha_index = int(ingestao.get("proxima_linha_index") or proxima_linha_index)
                     if _ingestao_tem_movimento(ingestao):
                         logs_service.registrar_log(
                             session,
@@ -281,6 +286,8 @@ def _executar_baixa_empresa_compat(
     max_vazios = max(1, int(settings.nsu_max_vazios_consecutivos or 5))
     xmls_baixados = 0
     pdfs_gerados = 0
+    pdfs_pendentes: deque[str] = deque()
+    chaves_pdf_enfileiradas: set[str] = set()
     ultimo_nsu = nsu_atual
     consultas_realizadas = 0
     consulta_lote_tamanho = max(1, int(consulta_lote_tamanho or 1))
@@ -305,6 +312,11 @@ def _executar_baixa_empresa_compat(
 
             lote_dfe = resultado.get("LoteDFe") or []
             if not lote_dfe:
+                if resultado.get("StatusProcessamento") == "NENHUM_DOCUMENTO_LOCALIZADO":
+                    # E2220 e uma resposta final valida para o NSU consultado;
+                    # repetir cinco vezes so gera cinco 404 equivalentes.
+                    parar = True
+                    break
                 vazios += 1
                 if vazios >= max_vazios:
                     parar = True
@@ -319,9 +331,13 @@ def _executar_baixa_empresa_compat(
                     xmls_baixados += 1
                     if nsu_doc > maior_nsu:
                         maior_nsu = nsu_doc
-                if chave and (gerar_pdf or baixar_pdf):
-                    if _baixar_pdf_danfse_compat(legacy, config, chave):
-                        pdfs_gerados += 1
+                # O espelho e produzido pela ingestao a partir do XML. A busca
+                # do PDF oficial fica enfileirada para aproveitar as pausas do
+                # ciclo, sem concorrer com a consulta ADN nem disparar uma
+                # rajada de requisicoes ao endpoint DANFSe.
+                if chave and baixar_pdf and chave not in chaves_pdf_enfileiradas:
+                    pdfs_pendentes.append(chave)
+                    chaves_pdf_enfileiradas.add(chave)
 
             if maior_nsu <= nsu_atual:
                 parar = True
@@ -343,7 +359,14 @@ def _executar_baixa_empresa_compat(
                     session.commit()
 
         if not parar and consultas_realizadas < limite:
-            time.sleep(pausa)
+            baixados_na_pausa = _processar_pdfs_durante_pausa(
+                legacy,
+                config,
+                pdfs_pendentes,
+                pausa,
+                processo_id=processo_id,
+            )
+            pdfs_gerados += baixados_na_pausa
 
     return {
         "empresa": config.cnpj,
@@ -353,13 +376,60 @@ def _executar_baixa_empresa_compat(
         "ultimo_nsu": ultimo_nsu,
         "xmls_baixados": xmls_baixados,
         "pdfs_gerados": pdfs_gerados,
+        "pdfs_oficiais_pendentes": len(pdfs_pendentes),
         "consultas_realizadas": consultas_realizadas,
         "consulta_lote_tamanho": consulta_lote_tamanho,
         "cancelado": parar and processo_id is not None and _processo_cancelado(processo_id),
     }
 
 
-def _baixar_pdf_danfse_compat(legacy: Any, config: Any, chave: str) -> bool:
+def _processar_pdfs_durante_pausa(
+    legacy: Any,
+    config: Any,
+    fila: deque[str],
+    pausa: float,
+    processo_id: int | None = None,
+) -> int:
+    """Usa apenas a janela da pausa para buscar DANFSe oficiais pendentes."""
+    if pausa <= 0:
+        return 0
+
+    inicio = time.monotonic()
+    prazo = inicio + pausa
+    baixados = 0
+    # Cada chave recebe no maximo uma tentativa por pausa. As que falharem
+    # voltam ao fim da fila para o proximo intervalo, evitando insistencia
+    # imediata no mesmo documento quando o servico responde 429 ou 503.
+    tentativas_disponiveis = len(fila)
+
+    while fila and tentativas_disponiveis > 0 and time.monotonic() < prazo:
+        if processo_id is not None and _processo_cancelado(processo_id):
+            break
+
+        chave = fila.popleft()
+        tentativas_disponiveis -= 1
+        restante = prazo - time.monotonic()
+        timeout = max(1.0, min(30.0, restante))
+        if _baixar_pdf_danfse_compat(legacy, config, chave, timeout=timeout):
+            baixados += 1
+        else:
+            # Mantem a chave para outra pausa; indisponibilidade e limite de
+            # requisicoes do endpoint oficial sao normalmente temporarios.
+            fila.append(chave)
+
+        restante = prazo - time.monotonic()
+        if fila and restante > 0:
+            time.sleep(min(2.0, restante))
+
+    # Se as requisicoes terminaram antes da janela, preserva a pausa original
+    # para nao acelerar inadvertidamente as consultas por NSU.
+    restante = prazo - time.monotonic()
+    if restante > 0:
+        time.sleep(restante)
+    return baixados
+
+
+def _baixar_pdf_danfse_compat(legacy: Any, config: Any, chave: str, timeout: float = 240) -> bool:
     pdf_dir = legacy.DIR_DANFSE / "pdf_gerado"
     pdf_dir.mkdir(parents=True, exist_ok=True)
     pdf_path = pdf_dir / f"{chave}.pdf"
@@ -371,7 +441,7 @@ def _baixar_pdf_danfse_compat(legacy: Any, config: Any, chave: str) -> bool:
         config,
         f"{config.base_danfse}/{chave}",
         accept="application/pdf, application/json, text/plain, */*",
-        timeout=240,
+        timeout=timeout,
     )
     content_type = response.headers.get("content-type", "")
     is_pdf = response.status_code == 200 and (

@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from sqlalchemy import func
@@ -45,6 +45,7 @@ class Relatorio:
     sem_pdf_espelho: int = 0
     arquivo_indisponivel: int = 0
     erros: int = 0
+    falhas: list[dict[str, str | int]] = field(default_factory=list)
 
 
 def _gerar_pdf(xml_bytes: bytes, status: str, nota_id: int) -> bytes:
@@ -101,11 +102,16 @@ def executar(empresa_id: int | None = None, dry_run: bool = True, batch_size: in
                         arquivo.tamanho_bytes = int(meta.get("size") or len(pdf_bytes))
                         arquivo.checksum = checksum
                         arquivo.content_type = "application/pdf"
+                    db.commit()
                     relatorio.atualizadas += 1
-                except Exception:
+                except Exception as exc:
+                    db.rollback()
                     relatorio.erros += 1
-            if not dry_run:
-                db.commit()
+                    if len(relatorio.falhas) < 50:
+                        relatorio.falhas.append({
+                            "nota_id": int(nota.id),
+                            "erro": f"{type(exc).__name__}: {exc}"[:500],
+                        })
 
     return relatorio
 

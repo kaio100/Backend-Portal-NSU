@@ -144,6 +144,19 @@ def post_autocadastro(client: TestClient, **data):
     )
 
 
+def test_upload_certificado_acima_do_limite_retorna_413():
+    tamanho = int(settings.certificado_upload_max_bytes) + 1
+    with TestClient(app) as client:
+        response = client.post(
+            "/certificados",
+            data={"senha": "senha-teste", "auto_iniciar": "false"},
+            files={"arquivo": ("grande.pfx", b"x" * tamanho, "application/x-pkcs12")},
+        )
+
+    assert response.status_code == 413
+    assert "excede o limite" in response.json()["detail"]
+
+
 def test_health_endpoints_and_consultas_contract():
     with TestClient(app) as client:
         assert client.get("/health").status_code == 200
@@ -287,7 +300,7 @@ def test_nsu_inicial_cancela_fila_antiga_e_e_usado_apenas_na_nova_partida():
             assert config.filtros_json["forcar"] is False
 
 
-def test_desativar_consultas_cancela_pendentes_e_rodando_mesmo_com_payload_false():
+def test_desativar_consultas_respeita_payload_sem_cancelamento():
     with TestClient(app) as client:
         empresa = criar_empresa(client, cnpj="11222333000194", payload_nome="nome")
         certificado_id = criar_certificado_elegivel(int(empresa["id"]))
@@ -330,8 +343,8 @@ def test_desativar_consultas_cancela_pendentes_e_rodando_mesmo_com_payload_false
         assert response.status_code == 200
         payload = response.json()
         assert payload["automatico_ativo"] is False
-        assert payload["totais"]["rodando"] == 0
-        assert payload["totais"]["pendentes"] == 0
+        assert payload["totais"]["rodando"] >= 1
+        assert payload["totais"]["pendentes"] >= 1
 
         with SessionLocal() as db:
             statuses = {
@@ -342,8 +355,8 @@ def test_desativar_consultas_cancela_pendentes_e_rodando_mesmo_com_payload_false
                 job.status
                 for job in db.query(Job).filter(Job.certificado_id == certificado_id).all()
             }
-        assert statuses == {"cancelado"}
-        assert job_statuses == {"cancelado"}
+        assert statuses == {"rodando", "pendente"}
+        assert job_statuses == {"rodando", "pendente"}
 
 
 def test_worker_standalone_e_cors_localhost_5173():
