@@ -59,6 +59,37 @@ dois consumidores da mesma fila.
 - `GET /arquivos/{id}/download`
 - `POST /consultas/iniciar`
 - `POST /consultas/cancelar`
+- `GET /cnpj/status`
+- `GET /cnpj/{cnpj}`
+
+## Base local de CNPJ da Receita Federal
+
+O importador le o ZIP mensal da Receita em fluxo e cria um SQLite indexado,
+sem manter os CSVs descompactados. Para validar CNPJs especificos antes da
+carga completa:
+
+```powershell
+python -m backend.app.scripts.importar_base_cnpj_receita `
+  "C:\caminho\2026-08.zip" `
+  --destino data\cnpj_receita.sqlite3 `
+  --cnpj 62069724000149
+```
+
+Repita `--cnpj` para importar mais de um. Sem `--cnpj`, todos os registros de
+Empresas, Estabelecimentos e Simples sao importados; essa operacao exige
+dezenas de GB livres e pode demorar. Configure `CNPJ_RECEITA_DB_PATH` com o
+caminho do SQLite. Os endpoints exigem o mesmo JWT Bearer do portal.
+
+Para copiar ao cache online somente os CNPJs usados pelo portal, configure
+`ONLINE_DATABASE_URL` localmente e valide primeiro sem gravar:
+
+```powershell
+python -m backend.app.scripts.sincronizar_cnpjs_portal --dry-run
+python -m backend.app.scripts.sincronizar_cnpjs_portal
+```
+
+O sincronizador altera somente `cnpj_cache`, em lotes, e prioriza os dados
+oficiais da Receita sem remover o cache anterior da Invertexto.
 
 ## Regras operacionais atuais
 

@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import inspect  # noqa: E402
 
 from backend.app.core.config import settings  # noqa: E402
-from backend.app.db.models import Certificado, Empresa, Job, Nota, NsuControle, Processo  # noqa: E402
+from backend.app.db.models import Certificado, Empresa, Job, MonitoramentoConfig, Nota, NsuControle, Processo  # noqa: E402
 from backend.app.db.session import SessionLocal, engine, init_db  # noqa: E402
 from backend.app.main import app  # noqa: E402
 from backend.app.services import certificado_metadata_service, certificados_service, consultas_service, legacy_ingestion_service, legacy_processing_service, secrets_service  # noqa: E402
@@ -603,6 +603,42 @@ def test_autocadastro_cria_empresa_certificado_e_job(monkeypatch):
         assert payload["processo"] is not None
         assert payload["processo"]["certificado_id"] == payload["certificado"]["id"]
         assert payload["consulta_status"]["totais"]["pendentes"] >= 1
+
+
+def test_autocadastro_nao_substitui_certificados_do_monitor_ativo(monkeypatch):
+    metadados = iter(
+        [
+            fake_metadata_thumb("22333444000171", "THUMB-171"),
+            fake_metadata_thumb("22333444000172", "THUMB-172"),
+        ]
+    )
+    monkeypatch.setattr(
+        certificado_metadata_service,
+        "extrair_metadata_pfx",
+        lambda pfx_bytes, senha: next(metadados),
+    )
+
+    with TestClient(app) as client:
+        primeiro = post_autocadastro(client, auto_iniciar=True).json()
+        with SessionLocal() as db:
+            config = db.query(MonitoramentoConfig).filter(MonitoramentoConfig.grupo == "planning_hub").one()
+            empresas_antes = set(config.filtros_json["empresa_ids"])
+            certificados_antes = set(config.filtros_json["certificado_ids"])
+
+        segundo = post_autocadastro(client, auto_iniciar=True).json()
+
+        with SessionLocal() as db:
+            config = db.query(MonitoramentoConfig).filter(MonitoramentoConfig.grupo == "planning_hub").one()
+            filtros = config.filtros_json
+
+        assert empresas_antes <= set(filtros["empresa_ids"])
+        assert certificados_antes <= set(filtros["certificado_ids"])
+        assert primeiro["empresa"]["id"] in filtros["empresa_ids"]
+        assert segundo["empresa"]["id"] in filtros["empresa_ids"]
+        assert primeiro["certificado"]["id"] in filtros["certificado_ids"]
+        assert segundo["certificado"]["id"] in filtros["certificado_ids"]
+        assert filtros["nsu_inicio"] is None
+        assert filtros["forcar"] is False
 
 
 def test_autocadastro_reutiliza_empresa_existente(monkeypatch):

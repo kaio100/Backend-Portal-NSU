@@ -25,6 +25,7 @@ from backend.app.services.legacy_ingestion_service import (
     _parse_decimal,
     parse_xml_resumo_bytes,
 )
+from backend.app.services.retencoes_regras_service import normalizar_subitem_lc116
 from backend.app.services.storage_service import StorageService, get_storage_service
 
 
@@ -66,18 +67,42 @@ def _split_alertas(texto: str | None) -> set[str]:
     return {linha.strip() for linha in str(texto).split("\n") if linha.strip()}
 
 
-def _listar_lotes_de_ids(db: Session, empresa_id: int | None, batch_size: int) -> list[list[int]]:
-    query = db.query(Nota.id).order_by(Nota.id.asc())
+def _listar_lotes_de_ids(
+    db: Session,
+    empresa_id: int | None,
+    batch_size: int,
+    subitem: str | None = None,
+) -> list[list[int]]:
+    query = db.query(
+        Nota.id,
+        Nota.subitem_lc116,
+        Nota.codigo_servico,
+        Nota.codigo_servico_raw,
+        Nota.codigo_servico_nacional,
+    ).order_by(Nota.id.asc())
     if empresa_id is not None:
         query = query.filter(Nota.empresa_id == empresa_id)
+    # Quando ha filtro de subitem, ainda percorremos todos os XMLs. O codigo
+    # salvo em notas pode vir ausente ou de campos municipais diferentes; a
+    # confirmacao definitiva e feita pelo parser dentro de recalcular_nota.
     ids = [row[0] for row in query.all()]
     return [ids[i : i + batch_size] for i in range(0, len(ids), batch_size)]
 
 
-def recalcular_nota(nota: Nota, storage: StorageService, dry_run: bool, relatorio: Relatorio) -> None:
-    relatorio.total_analisadas += 1
-
+def recalcular_nota(
+    nota: Nota,
+    storage: StorageService,
+    dry_run: bool,
+    relatorio: Relatorio,
+    subitem: str | None = None,
+) -> None:
     storage_key = nota.xml_storage_key
+    if not storage_key:
+        arquivo_xml = next(
+            (arquivo for arquivo in nota.arquivos if str(arquivo.tipo or "").upper() == "XML"),
+            None,
+        )
+        storage_key = arquivo_xml.storage_key if arquivo_xml is not None else None
     if not storage_key or not storage.exists(storage_key):
         relatorio.notas_sem_xml += 1
         return
@@ -92,6 +117,11 @@ def recalcular_nota(nota: Nota, storage: StorageService, dry_run: bool, relatori
     if resumo.get("tipo_xml") == "evento" or "alertas_fiscais" not in resumo:
         relatorio.erros_xml += 1
         return
+
+    if subitem and normalizar_subitem_lc116(resumo.get("subitem_lc116")) != normalizar_subitem_lc116(subitem):
+        return
+
+    relatorio.total_analisadas += 1
 
     if resumo.get("subitem_lc116"):
         relatorio.com_subitem += 1
@@ -128,20 +158,25 @@ def recalcular_nota(nota: Nota, storage: StorageService, dry_run: bool, relatori
         setattr(nota, campo, valor)
 
 
-def executar(empresa_id: int | None, dry_run: bool, batch_size: int) -> Relatorio:
+def executar(
+    empresa_id: int | None,
+    dry_run: bool,
+    batch_size: int,
+    subitem: str | None = None,
+) -> Relatorio:
     init_db()
     storage = get_storage_service()
     relatorio = Relatorio()
 
     with SessionLocal() as db:
-        lotes = _listar_lotes_de_ids(db, empresa_id, batch_size)
+        lotes = _listar_lotes_de_ids(db, empresa_id, batch_size, subitem=subitem)
         total_lotes = len(lotes)
         for indice, lote_ids in enumerate(lotes, start=1):
             if not lote_ids:
                 continue
             notas = db.query(Nota).filter(Nota.id.in_(lote_ids)).order_by(Nota.id.asc()).all()
             for nota in notas:
-                recalcular_nota(nota, storage, dry_run, relatorio)
+                recalcular_nota(nota, storage, dry_run, relatorio, subitem=subitem)
             if dry_run:
                 db.rollback()
             else:
@@ -162,6 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Nao grava alteracoes, apenas mostra o que mudaria.")
     parser.add_argument("--all", action="store_true", help="Processa as notas de todas as empresas.")
     parser.add_argument("--empresa-id", type=int, default=None, help="Processa apenas as notas da empresa informada.")
+    parser.add_argument("--subitem", default=None, help="Processa apenas o subitem LC116 informado (ex.: 7.04).")
     parser.add_argument(
         "--batch-size",
         type=int,
@@ -176,7 +212,12 @@ def main(argv: list[str] | None = None) -> int:
             "uma execucao real. Use --dry-run para simular sem escopo explicito."
         )
 
-    relatorio = executar(empresa_id=args.empresa_id, dry_run=args.dry_run, batch_size=max(1, args.batch_size))
+    relatorio = executar(
+        empresa_id=args.empresa_id,
+        dry_run=args.dry_run,
+        batch_size=max(1, args.batch_size),
+        subitem=args.subitem,
+    )
     relatorio.imprimir(args.dry_run)
     return 0
 

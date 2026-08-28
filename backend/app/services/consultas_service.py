@@ -352,8 +352,6 @@ def desativar_consultas_automaticas(
     cancelar_rodando: bool = True,
     grupo: str = "planning_hub",
 ) -> dict[str, Any]:
-    cancelar_pendentes = True
-    cancelar_rodando = True
     config = get_monitoramento_config(db, grupo)
     config.automatico_ativo = False
     config.proximo_ciclo_em = None

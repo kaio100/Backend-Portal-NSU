@@ -22,6 +22,7 @@ def test_carrega_regras_planilha2_principais():
     assert obter_regra_por_subitem("1.03")["pcc"] == "SIM"
     assert obter_regra_por_subitem("3.02")["irrf_aliquota"] == Decimal("0.15")
     assert obter_regra_por_subitem("7.02")["inss"] == "SIM"
+    assert obter_regra_por_subitem("7.04")["irrf_aliquota"] == Decimal("0.01")
     assert obter_regra_por_subitem("10.05")["pcc"] == "NAO"
     assert obter_regra_por_subitem("11.02")["irrf_aliquota"] == Decimal("0.01")
     assert obter_regra_por_subitem("17.01")["pcc"] == "SIM"
@@ -72,6 +73,23 @@ def test_calcula_irrf_csrf_inss_e_simples():
         obter_regra_por_subitem("7.02"),
     )
     assert inss["inss_calculado"] == Decimal("110.00")
+
+
+def test_subitem_704_calcula_irrf_exclusivamente_a_um_por_cento():
+    regra = obter_regra_por_subitem("7.04")
+    calculo = calcular_retencoes_esperadas(
+        {
+            "valor_servico": "1000.00",
+            "valor_base_calculo": "1000.00",
+            "valor_irrf": "10.00",
+        },
+        regra,
+        subitem_lc116="7.04",
+    )
+
+    assert regra["irrf_aliquota"] == Decimal("0.01")
+    assert calculo["irrf_calculado"] == Decimal("10.00")
+    assert calculo["status_irrf"] == "Correto"
 
 
 def test_comparar_valor_fiscal_status():

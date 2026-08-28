@@ -6,7 +6,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from backend.app.core.config import settings
+from backend.app.services import cnpj_cache_service
 
 
 class CnpjReceitaError(RuntimeError):
@@ -68,6 +71,42 @@ def consultar_cnpj(value: str) -> dict[str, Any] | None:
     result["fonte"] = "Receita Federal - Dados Abertos"
     result["competencia_base"] = metadata["valor"] if metadata else None
     return result
+
+
+def consultar_cnpj_cacheado(db: Session, value: str) -> dict[str, Any] | None:
+    """Consulta um CNPJ usando o cache persistente antes da base da Receita.
+
+    Somente respostas preenchidas sao armazenadas. Cada leitura vencida e
+    renovada a partir da base local pelo prazo configurado (30 dias por padrao).
+    """
+    cnpj = normalizar_cnpj(value)
+    cache = cnpj_cache_service.get_cache_valido(
+        db,
+        cnpj,
+        fonte=cnpj_cache_service.RECEITA_FONTE,
+    )
+    if cache is not None:
+        payload = cache.get("json_resposta")
+        if isinstance(payload, dict) and payload:
+            return payload
+
+    resultado = consultar_cnpj(cnpj)
+    if resultado is None:
+        return None
+
+    cnpj_cache_service.salvar_cache(
+        db,
+        cnpj,
+        consulta_simples_api=status_simples(resultado),
+        codigo_cnae=resultado.get("cnae_fiscal_principal"),
+        descricao_cnae="",
+        status_consulta="Encontrado",
+        json_resposta=resultado,
+        fonte=cnpj_cache_service.RECEITA_FONTE,
+        cache_days=settings.cnpj_receita_cache_days,
+    )
+    db.commit()
+    return resultado
 
 
 def consultar_cnpjs(values: set[str] | list[str]) -> dict[str, dict[str, Any]]:

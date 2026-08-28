@@ -325,6 +325,32 @@ def test_consulta_simples_api_sem_cache_fica_none():
         assert detalhe.json()["consulta_simples_api"] is None
 
 
+def test_consulta_simples_api_sem_documento_da_contraparte_nao_fica_pendente():
+    _reset_db()
+    empresa_id = _empresa()
+    with SessionLocal() as db:
+        empresa = db.get(Empresa, empresa_id)
+        nota = notas_repo.create_nota(
+            db,
+            {
+                "empresa_id": empresa_id,
+                "chave": "CHAVE-SEM-CONTRAPARTE",
+                "numero_nfse": "22",
+                "prestador_cnpj": empresa.cnpj,
+                "tomador_cnpj": None,
+                "valor_servico": 100,
+            },
+        )
+        nota_id = int(nota.id)
+        db.commit()
+
+    with TestClient(app) as client:
+        detalhe = client.get(f"/notas/{nota_id}")
+        assert detalhe.status_code == 200
+        assert detalhe.json()["consulta_simples_api"] == "Nao se aplica"
+        assert detalhe.json()["status_simples_nacional"] == "Nao se aplica"
+
+
 def test_conferencia_ok_tira_nota_do_status_divergente():
     _reset_db()
     empresa_id = _empresa()

@@ -113,6 +113,8 @@ def calcular_status_simples_nacional(simples_xml: str | None, consulta_simples_a
         return "Pendente"
     if api_raw == "Erro na consulta":
         return "Erro"
+    if _norm(api_raw) == "nao se aplica":
+        return "Nao se aplica"
     if not xml:
         return "Não informado no XML"
     if not api:

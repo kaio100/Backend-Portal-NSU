@@ -15,6 +15,7 @@ from backend.app.api.routers import (
     admin,
     auth,
     certificados,
+    cnpj,
     consultas,
     db_health,
     empresas,
@@ -286,6 +287,7 @@ app.include_router(empresas.router)
 app.include_router(nsu.router)
 app.include_router(certificados.router)
 app.include_router(certificados.empresa_router)
+app.include_router(cnpj.router)
 app.include_router(consultas.router)
 app.include_router(execucoes.router)
 app.include_router(processos.router)

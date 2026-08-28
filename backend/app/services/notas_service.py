@@ -200,6 +200,7 @@ def _consultas_simples_api_lote(db: Session, notas: list[Nota]) -> dict[int, str
     consultado (sem chamada externa), em lote para evitar N+1."""
     empresa_cnpj_cache: dict[int | None, str] = {}
     cnpj_por_nota: dict[int, str] = {}
+    resultado: dict[int, str | None] = {}
     for nota in notas:
         empresa_id = getattr(nota, "empresa_id", None)
         if empresa_id not in empresa_cnpj_cache:
@@ -208,14 +209,23 @@ def _consultas_simples_api_lote(db: Session, notas: list[Nota]) -> dict[int, str
         cnpj = _cnpj_contraparte(nota, direcao)
         if cnpj:
             cnpj_por_nota[int(nota.id)] = cnpj
+        else:
+            # Sem documento da contraparte nao existe CNPJ consultavel. Isso
+            # nao e uma consulta pendente e nao deve gerar cache ficticio.
+            resultado[int(nota.id)] = "Nao se aplica"
 
     cnpjs = set(cnpj_por_nota.values())
     if not cnpjs:
-        return {}
-    caches = cnpj_cache_service.get_caches_validos(db, cnpjs)
+        return resultado
+    # Pessoa fisica nao pode optar pelo Simples Nacional. A resposta e
+    # deterministica e nao deve consumir Receita/Invertexto nem ficar pendente.
+    cpfs = {documento for documento in cnpjs if len(documento) == 11}
+    caches = cnpj_cache_service.get_caches_validos(db, cnpjs - cpfs)
 
-    resultado: dict[int, str | None] = {}
     for nota_id, cnpj in cnpj_por_nota.items():
+        if cnpj in cpfs:
+            resultado[nota_id] = "Não optante"
+            continue
         cache = caches.get(cnpj)
         if not cache:
             continue

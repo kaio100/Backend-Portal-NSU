@@ -23,6 +23,12 @@ REGRAS_XLSX_PATH = next(
     PROJECT_ROOT / "data" / "RETENCOES_REGRAS.xlsx",
 )
 
+# Excecoes fiscais aprovadas que devem prevalecer sobre a planilha-base.
+# Mantidas em codigo para que uma troca/atualizacao do XLSX nao reverta a regra.
+IRRF_ALIQUOTAS_POR_SUBITEM = {
+    "7.04": Decimal("0.01"),
+}
+
 
 def _sem_acentos(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value or "")
@@ -111,7 +117,15 @@ def obter_regra_por_subitem(subitem: str | None) -> dict[str, Any] | None:
     normalized = normalizar_subitem_lc116(subitem)
     if not normalized:
         return None
-    return carregar_regras_retencao().get(normalized)
+    regra = carregar_regras_retencao().get(normalized)
+    if regra is None:
+        return None
+    aliquota_exclusiva = IRRF_ALIQUOTAS_POR_SUBITEM.get(normalized)
+    if aliquota_exclusiva is None:
+        return regra
+    regra_ajustada = dict(regra)
+    regra_ajustada["irrf_aliquota"] = aliquota_exclusiva
+    return regra_ajustada
 
 
 def resolver_subitem_lc116(dados_xml: dict[str, Any]) -> str | None:

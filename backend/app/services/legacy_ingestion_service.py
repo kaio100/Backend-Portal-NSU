@@ -174,6 +174,30 @@ def _find_path_text(root: ElementTree.Element, *path: str) -> str:
     return ""
 
 
+def _find_scoped_text(
+    root: ElementTree.Element,
+    contexts: tuple[str, ...],
+    names: tuple[str, ...],
+) -> str:
+    """Busca um campo somente dentro do bloco fiscal informado.
+
+    Identificadores genericos como ``CNPJ``/``CPF`` e ``xNome`` aparecem nos
+    blocos de prestador e tomador. Uma busca global pode atribuir a parte
+    errada, especialmente quando o prestador e pessoa fisica.
+    """
+    wanted_contexts = {name.lower() for name in contexts}
+    wanted_names = {name.lower() for name in names}
+    for context in root.iter():
+        if _local_name(context.tag) not in wanted_contexts:
+            continue
+        for element in context.iter():
+            if _local_name(element.tag) in wanted_names and element.text:
+                value = element.text.strip()
+                if value:
+                    return value
+    return ""
+
+
 def extrair_simples_nacional_xml(root: ElementTree.Element) -> str | None:
     op_simp = _find_path_text(root, "prest", "regTrib", "opSimpNac") or _find_text(root, "opSimpNac")
     reg_ap = _find_path_text(root, "prest", "regTrib", "regApTribSN") or _find_text(root, "regApTribSN")
@@ -386,8 +410,22 @@ def _extract_chave_from_xml(xml_path: Path, root: ElementTree.Element | None = N
 def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[str, str]:
     root_name = _local_name(root.tag)
     is_evento = root_name == "evento" or bool(_find_text(root, "chNFSe", "chSubstda")) and _xml_contains_text(root, "evento")
-    prestador_cnpj = _text_digits(_find_text(root, "CnpjPrestador", "CNPJPrestador", "CpfCnpjPrestador", "Cnpj"))
-    tomador_cnpj = _text_digits(_find_text(root, "CnpjTomador", "CNPJTomador", "CpfCnpjTomador"))
+    prestador_cnpj = _text_digits(
+        _find_scoped_text(root, ("prest", "prestador", "emit"), ("cnpj", "cpf", "cpfcnpj"))
+        or _find_text(root, "CnpjPrestador", "CNPJPrestador", "CpfCnpjPrestador", "CpfPrestador")
+    )
+    tomador_cnpj = _text_digits(
+        _find_scoped_text(root, ("toma", "tomador"), ("cnpj", "cpf", "cpfcnpj"))
+        or _find_text(root, "CnpjTomador", "CNPJTomador", "CpfCnpjTomador", "CpfTomador")
+    )
+    prestador_nome = (
+        _find_scoped_text(root, ("prest", "prestador", "emit"), ("xnome", "razaosocial", "nome"))
+        or _find_text(root, "RazaoSocialPrestador", "NomePrestador")
+    )
+    tomador_nome = (
+        _find_scoped_text(root, ("toma", "tomador"), ("xnome", "razaosocial", "nome"))
+        or _find_text(root, "RazaoSocialTomador", "NomeTomador")
+    )
     status_documento, status_rotulo = _status_from_xml(root)
     simples_xml = extrair_simples_nacional_xml(root)
     valor_liquido = _find_text(root, "ValorLiquidoNfse", "ValorLiquido", "vLiq")
@@ -445,9 +483,9 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
         "data_emissao": _find_text(root, "DataEmissao", "dhEmi", "DataHoraEmissao")[:10],
         "competencia": _find_text(root, "Competencia", "DataCompetencia")[:10],
         "prestador_cnpj": prestador_cnpj,
-        "prestador_nome": _find_text(root, "RazaoSocialPrestador", "NomePrestador", "xNome"),
+        "prestador_nome": prestador_nome,
         "tomador_cnpj": tomador_cnpj,
-        "tomador_nome": _find_text(root, "RazaoSocialTomador", "NomeTomador"),
+        "tomador_nome": tomador_nome,
         "valor_servico": valor_servico,
         "valor_base": valor_base,
         "origem_base_calculo": origem_base,

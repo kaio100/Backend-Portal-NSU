@@ -71,6 +71,7 @@ SELECT
     max(left(coalesce(erro, ''), 160)) AS erro
 FROM escolhidos
 WHERE rn = 1
+  AND documento <> ''
   AND (
       consulta_simples_api IS NULL
       OR consulta_simples_api IN ('Não consultado', 'Não disponível', 'Erro na consulta')
