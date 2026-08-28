@@ -90,13 +90,7 @@ def consultar_cnpj_cacheado(db: Session, value: str) -> dict[str, Any] | None:
         if isinstance(payload, dict) and payload:
             return payload
 
-    try:
-        resultado = consultar_cnpj(cnpj)
-    except CnpjReceitaError:
-        from backend.app.services import cnpj_invertexto_service
-
-        fallback = cnpj_invertexto_service.consultar_cnpj(db, cnpj)
-        return fallback.get("json_resposta") if fallback is not None else None
+    resultado = consultar_cnpj(cnpj)
     if resultado is None:
         return None
 

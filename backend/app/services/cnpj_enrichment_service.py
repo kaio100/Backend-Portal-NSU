@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
 from backend.app.db.models import Empresa, Nota, Processo
-from backend.app.services import cnpj_cache_service, cnpj_invertexto_service, cnpj_receita_service
+from backend.app.services import cnpj_cache_service, cnpj_receita_service
 
 
 def _only_digits(value: str | None) -> str:
@@ -64,9 +64,8 @@ def enriquecer_cnpjs_do_processo(
     receita_encontrados = 0
     receita_ausentes = 0
     encontrados: dict[str, dict[str, Any]] = {}
-    ausentes_receita: set[str] = set()
-    base_receita_disponivel = True
     if pendentes:
+        base_receita_disponivel = True
         try:
             encontrados = cnpj_receita_service.consultar_cnpjs(pendentes)
         except cnpj_receita_service.CnpjReceitaError:
@@ -109,14 +108,10 @@ def enriquecer_cnpjs_do_processo(
         receita_encontrados = len(encontrados)
         receita_ausentes = len(ausentes_receita)
 
-    # Na Railway a base SQLite completa da Receita pode nao estar montada.
-    # Nesse caso, somente os CNPJs ainda sem cache usam a API externa; toda
-    # resposta preenchida e persistida e reutilizada durante 30 dias.
-    restantes = pendentes - set(encontrados) - ausentes_receita
+    # A decisao e integralmente local; CNPJ ausente tambem recebe a
+    # classificacao operacional acima e nao consome API externa.
     resultados: dict[str, dict] = {}
-    if restantes and not base_receita_disponivel:
-        resultados = cnpj_invertexto_service.consultar_cnpjs(db, restantes)
-    erros = len(restantes - set(resultados)) if not base_receita_disponivel else 0
+    erros = 0
     api_habilitada = bool(settings.invertexto_enabled and settings.invertexto_token)
 
     return {
@@ -128,6 +123,6 @@ def enriquecer_cnpjs_do_processo(
         "receita_encontrados": receita_encontrados,
         "receita_ausentes": receita_ausentes,
         "api_habilitada": api_habilitada,
-        "consultados": len(resultados),
+        "consultados": 0,
         "erros": erros,
     }
