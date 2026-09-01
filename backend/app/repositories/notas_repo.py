@@ -70,8 +70,16 @@ def list_notas(
     limit: int = 100,
     offset: int = 0,
     sort: str = "recentes",
-) -> list[Nota]:
+    arquivadas: str = "ativas",
+    count_only: bool = False,
+) -> list[Nota] | int:
     query = db.query(Nota)
+    if arquivadas == "ativas":
+        query = query.filter(Nota.arquivada.is_(False))
+    elif arquivadas == "somente":
+        query = query.filter(Nota.arquivada.is_(True))
+    elif arquivadas != "todas":
+        raise ValueError("Filtro de arquivadas invalido.")
     if grupo is not None:
         query = query.join(Empresa, Empresa.id == Nota.empresa_id).filter(Empresa.grupo == grupo)
     if empresa_id is not None:
@@ -136,6 +144,9 @@ def list_notas(
     if sla_status:
         query = query.filter(Nota.sla_status == sla_status)
 
+    if count_only:
+        return int(query.count())
+
     safe_limit = min(max(limit, 1), 5000)
     safe_offset = max(offset, 0)
     if sort == "emissao":
@@ -154,9 +165,15 @@ def list_notas_by_ids(db: Session, nota_ids: list[int]) -> list[Nota]:
     return sorted(notas, key=lambda nota: order.get(int(nota.id), len(order)))
 
 
-def count_notas_grupo(db: Session, grupo: str | None = None) -> int:
+def count_notas_grupo(db: Session, grupo: str | None = None, arquivadas: str = "ativas") -> int:
     """Conta o acervo sem materializar milhares de registros em memoria."""
     query = db.query(Nota.id)
+    if arquivadas == "ativas":
+        query = query.filter(Nota.arquivada.is_(False))
+    elif arquivadas == "somente":
+        query = query.filter(Nota.arquivada.is_(True))
+    elif arquivadas != "todas":
+        raise ValueError("Filtro de arquivadas invalido.")
     if grupo is not None:
         query = query.join(Empresa, Empresa.id == Nota.empresa_id).filter(Empresa.grupo == grupo)
     return int(query.count())

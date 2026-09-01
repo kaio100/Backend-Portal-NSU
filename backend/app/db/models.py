@@ -288,6 +288,9 @@ class Nota(TimestampMixin, Base):
     pdf_oficial_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     pdf_espelho_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     importado_em: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    arquivada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    arquivada_em: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    arquivo_backup_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     empresa: Mapped[Empresa] = relationship(back_populates="notas")
     processo: Mapped[Processo | None] = relationship(back_populates="notas")

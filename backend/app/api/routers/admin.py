@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta
 import re
 import unicodedata
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -12,6 +12,9 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import PAPEIS_VALIDOS, get_db, require_admin
 from backend.app.core.security import hash_password
 from backend.app.db.models import AcessoUsuario, Arquivo, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, Usuario
+from backend.app.db.session import SessionLocal
+from backend.app.services.notas_archive_service import arquivar_notas_anos_anteriores
+from backend.app.services.storage_service import get_storage_service
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -36,6 +39,26 @@ class GrupoCreate(BaseModel):
 class GrupoUpdate(BaseModel):
     nome: str | None = Field(default=None, min_length=2, max_length=120)
     ativo: bool | None = None
+
+
+class ArquivamentoExecutar(BaseModel):
+    ano: int = Field(default=2026, ge=2000, le=2100)
+    confirmacao: str
+
+
+_arquivamento_estado: dict = {"status": "ocioso", "iniciado_em": None, "finalizado_em": None, "resultado": None, "erro": None}
+
+
+def _executar_arquivamento_background(ano: int) -> None:
+    _arquivamento_estado.update(status="executando", iniciado_em=datetime.now().isoformat(), finalizado_em=None, resultado=None, erro=None)
+    try:
+        with SessionLocal() as db:
+            resultado = arquivar_notas_anos_anteriores(db, get_storage_service(), ano_operacional=ano, executar=True)
+        _arquivamento_estado.update(status="finalizado", resultado=resultado)
+    except Exception as exc:
+        _arquivamento_estado.update(status="erro", erro=str(exc))
+    finally:
+        _arquivamento_estado["finalizado_em"] = datetime.now().isoformat()
 
 
 def _slug_grupo(value: str) -> str:
@@ -234,3 +257,45 @@ def erros(limit: int = 50, db: Session = Depends(get_db)):
             "empresa_id": log.empresa_id, "mensagem": log.mensagem, "created_at": log.created_at,
         } for log in logs)
     return sorted(items, key=lambda item: item["created_at"] or datetime.min, reverse=True)[:limit]
+
+
+@router.get("/arquivamento")
+def status_arquivamento(ano: int = 2026, db: Session = Depends(get_db)):
+    preview = arquivar_notas_anos_anteriores(db, get_storage_service(), ano_operacional=ano, executar=False)
+    arquivadas = db.query(Nota).filter(Nota.arquivada.is_(True)).count()
+    backups = (
+        db.query(Arquivo)
+        .filter(Arquivo.tipo == "BACKUP_NOTAS")
+        .order_by(Arquivo.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return {
+        "ano_operacional": ano,
+        "notas_elegiveis": preview["notas"],
+        "empresas": preview["empresas"],
+        "notas_arquivadas": arquivadas,
+        "execucao": dict(_arquivamento_estado),
+        "backups": [
+            {
+                "id": item.id,
+                "empresa_id": item.empresa_id,
+                "filename": item.filename,
+                "tamanho_bytes": item.tamanho_bytes,
+                "checksum": item.checksum,
+                "created_at": item.created_at,
+            }
+            for item in backups
+        ],
+    }
+
+
+@router.post("/arquivamento", status_code=202)
+def executar_arquivamento(payload: ArquivamentoExecutar, background_tasks: BackgroundTasks):
+    if payload.confirmacao.strip().upper() != f"ARQUIVAR {payload.ano}":
+        raise HTTPException(status_code=422, detail=f'Digite "ARQUIVAR {payload.ano}" para confirmar.')
+    if _arquivamento_estado["status"] == "executando":
+        raise HTTPException(status_code=409, detail="Ja existe um arquivamento em execucao.")
+    _arquivamento_estado.update(status="agendado", iniciado_em=None, finalizado_em=None, resultado=None, erro=None)
+    background_tasks.add_task(_executar_arquivamento_background, payload.ano)
+    return {"status": "agendado", "ano_operacional": payload.ano}

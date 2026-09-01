@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import get_current_usuario, get_db, require_admin, require_api_key
 from backend.app.core.config import settings
 from backend.app.core.rate_limit import RateLimiter
+from backend.app.core.security import create_access_token
 from backend.app.db.models import AcessoUsuario, Grupo, Usuario
 from backend.app.schemas.auth import LoginRequest, LoginResponse, UsuarioRead
 from backend.app.schemas.usuarios import UsuarioCreate
@@ -17,6 +18,29 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # Freio contra tentativas de login (forca bruta de senha): no maximo 8
 # tentativas a cada 5 minutos, por IP + email.
 _login_rate_limiter = RateLimiter(max_attempts=8, window_seconds=300)
+
+
+@router.post("/local", response_model=LoginResponse, include_in_schema=False)
+def login_local(request: Request, db: Session = Depends(get_db)):
+    """Autentica automaticamente apenas o frontend executado nesta maquina."""
+    client_host = request.client.host if request.client else ""
+    if settings.is_production or client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    usuario = (
+        db.query(Usuario)
+        .filter(Usuario.ativo.is_(True))
+        .order_by(Usuario.is_admin.desc(), Usuario.id.asc())
+        .first()
+    )
+    if usuario is None:
+        raise HTTPException(status_code=503, detail="Nenhum usuario local ativo foi encontrado.")
+
+    return LoginResponse(
+        access_token=create_access_token(usuario.id, usuario.empresa_id),
+        expires_in_minutes=settings.jwt_expire_minutes,
+        usuario=usuario,
+    )
 
 
 @router.post("/login", response_model=LoginResponse)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
+import shutil
 from typing import Any, Optional
 
 from backend.app.core.config import settings
@@ -18,6 +19,9 @@ class StorageService:
 
     def get_bytes(self, key: str) -> bytes:
         raise NotImplementedError
+
+    def put_file(self, key: str, path: str | Path, content_type: Optional[str] = None) -> dict:
+        return self.put_bytes(key, Path(path).read_bytes(), content_type=content_type)
 
     def exists(self, key: str) -> bool:
         raise NotImplementedError
@@ -62,6 +66,14 @@ class LocalFilesystemStorage(StorageService):
 
     def get_bytes(self, key: str) -> bytes:
         return self.get_path(key).read_bytes()
+
+    def put_file(self, key: str, path: str | Path, content_type: Optional[str] = None) -> dict:
+        normalized_key = normalize_storage_key(key)
+        source = Path(path)
+        target = self.get_path(normalized_key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+        return {"backend": self.backend, "key": normalized_key, "path": str(target), "size": source.stat().st_size, "content_type": content_type}
 
     def exists(self, key: str) -> bool:
         return self.get_path(key).exists()
@@ -167,6 +179,18 @@ class R2StorageService(StorageService):
         response = self.client.get_object(Bucket=self.bucket, Key=normalized_key)
         body = response["Body"]
         return body.read()
+
+    def put_file(self, key: str, path: str | Path, content_type: Optional[str] = None) -> dict:
+        normalized_key = normalize_storage_key(key)
+        source = Path(path)
+        extra_args = {"ContentType": content_type} if content_type else None
+        kwargs: dict[str, Any] = {}
+        if extra_args:
+            kwargs["ExtraArgs"] = extra_args
+        # upload_file usa multipart automaticamente para arquivos grandes e
+        # evita manter o backup completo na memoria do worker.
+        self.client.upload_file(str(source), self.bucket, normalized_key, **kwargs)
+        return {"backend": self.backend, "bucket": self.bucket, "key": normalized_key, "size": source.stat().st_size, "content_type": content_type}
 
     def exists(self, key: str) -> bool:
         return self.object_size(key) is not None

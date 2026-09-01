@@ -89,3 +89,15 @@ def test_administrador_pode_listar_grupos_e_login_existente_continua_funcionando
     assert any(item["codigo"] == "planning_hub" for item in grupos.json())
     assert login.status_code == 200
     assert login.json()["usuario"]["email"] == usuario.email
+
+
+def test_login_local_entra_sem_senha_com_usuario_ativo():
+    _reset_db()
+    usuario, _token = _criar_usuario(email="admin-local@example.com", is_admin=True)
+
+    with TestClient(app) as client:
+        response = client.post("/auth/local")
+
+    assert response.status_code == 200
+    assert response.json()["access_token"]
+    assert response.json()["usuario"]["email"] == usuario.email

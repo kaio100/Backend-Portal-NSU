@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     worker_real_max_pausa: float = 0.0
     worker_consulta_lote_tamanho: int = 1000
     worker_adn_lote: bool = True
+    worker_pdf_official_max_per_job: int = 25
+    worker_pdf_official_delay_seconds: float = 0.5
     worker_temp_dir: str = "data/tmp_worker"
     api_worker_enabled: bool = True
     api_worker_sleep: float = 0.2

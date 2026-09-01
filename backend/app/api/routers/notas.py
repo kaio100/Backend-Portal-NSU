@@ -96,6 +96,7 @@ def list_notas(
     sla: str | None = Query(default=None),
     tipo_nota: str | None = Query(default=None),
     direcao_nota: str | None = Query(default=None),
+    arquivadas: str = Query(default="ativas", pattern="^(ativas|somente|todas)$"),
     sort: str = Query(default="recentes", pattern="^(recentes|emissao)$"),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -134,6 +135,7 @@ def list_notas(
             sort=sort,
             limit=limit,
             offset=offset,
+            arquivadas=arquivadas,
         )
     except NotaServiceError as exc:
         _handle_error(exc)
@@ -178,6 +180,7 @@ def list_todas_notas(
     sla: str | None = Query(default=None),
     tipo_nota: str | None = Query(default=None),
     direcao_nota: str | None = Query(default=None),
+    arquivadas: str = Query(default="ativas", pattern="^(ativas|somente|todas)$"),
     somente_divergentes: bool = Query(default=False),
     valor_min: Decimal | None = Query(default=None),
     valor_max: Decimal | None = Query(default=None),
@@ -220,6 +223,7 @@ def list_todas_notas(
             valor_max=valor_max,
             sort=sort,
             somente_total=somente_total,
+            arquivadas=arquivadas,
         )
         if somente_total:
             return {"items": [], "total": resultado["total"]}

@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -131,6 +131,17 @@ def _contar_saida_legada(pasta_saida: str | None) -> dict[str, Any]:
             "pdfs_encontrados": 0,
         }
     base_dir = Path(pasta_saida)
+    # Com pausa zero a fila antiga nunca era consumida, embora a opcao de PDF
+    # oficial estivesse ativa. Ao terminar a consulta, busca um lote pequeno e
+    # limitado para nao prolongar indefinidamente o job nem sobrecarregar o ADN.
+    if baixar_pdf and pdfs_pendentes:
+        pdfs_gerados += _processar_pdfs_ao_final(
+            legacy,
+            config,
+            pdfs_pendentes,
+            processo_id=processo_id,
+        )
+
     return {
         "pasta_saida": str(base_dir),
         "pasta_existe": base_dir.exists(),
@@ -152,6 +163,7 @@ def _ingestao_tem_movimento(ingestao: dict[str, Any]) -> bool:
 
 def _loop_ingestao_incremental(
     processo_id: int,
+    job_id: int,
     pasta_saida: str,
     run_started_at: datetime,
     stop_event: threading.Event,
@@ -165,6 +177,9 @@ def _loop_ingestao_incremental(
                 with SessionLocal() as session:
                     processo = session.get(Processo, processo_id)
                     if processo is None or processo.status == "cancelado":
+                        return
+                    job = session.get(Job, job_id)
+                    if job is None or job.status == "cancelado":
                         return
                     ingestao = legacy_ingestion_service.ingerir_saida_legado(
                         session,
@@ -185,6 +200,14 @@ def _loop_ingestao_incremental(
                             "Ingestao incremental da saida legada",
                             {"contadores": ingestao},
                         )
+                    # O motor legado pode trabalhar por horas dentro de uma
+                    # unica chamada. Mantenha os timestamps vivos para que o
+                    # dashboard diferencie uma consulta ativa de uma travada.
+                    heartbeat = datetime.now(timezone.utc)
+                    processo.updated_at = heartbeat
+                    job.updated_at = heartbeat
+                    session.add(processo)
+                    session.add(job)
                     session.commit()
         except Exception:
             # A ingestao final pos-processamento ainda roda no fluxo principal.
@@ -194,6 +217,7 @@ def _loop_ingestao_incremental(
 
 def _iniciar_ingestao_incremental(
     processo_id: int,
+    job_id: int,
     pasta_saida: str,
     run_started_at: datetime,
     intervalo: float = 5.0,
@@ -201,7 +225,7 @@ def _iniciar_ingestao_incremental(
     stop_event = threading.Event()
     thread = threading.Thread(
         target=_loop_ingestao_incremental,
-        args=(processo_id, pasta_saida, run_started_at, stop_event, intervalo),
+        args=(processo_id, job_id, pasta_saida, run_started_at, stop_event, intervalo),
         name=f"ingestao-incremental-{processo_id}",
         daemon=True,
     )
@@ -429,6 +453,31 @@ def _processar_pdfs_durante_pausa(
     return baixados
 
 
+def _processar_pdfs_ao_final(
+    legacy: Any,
+    config: Any,
+    fila: deque[str],
+    processo_id: int | None = None,
+) -> int:
+    limite = max(0, int(settings.worker_pdf_official_max_per_job or 0))
+    delay = max(0.0, float(settings.worker_pdf_official_delay_seconds or 0))
+    baixados = 0
+    for _ in range(min(limite, len(fila))):
+        if processo_id is not None and _processo_cancelado(processo_id):
+            break
+        chave = fila.popleft()
+        try:
+            if _baixar_pdf_danfse_compat(legacy, config, chave, timeout=30):
+                baixados += 1
+        except Exception:
+            # Falha do endpoint de DANFSe nao invalida XMLs ja baixados. O
+            # backfill pode tentar novamente depois sem repetir a consulta NSU.
+            pass
+        if delay:
+            time.sleep(delay)
+    return baixados
+
+
 def _baixar_pdf_danfse_compat(legacy: Any, config: Any, chave: str, timeout: float = 240) -> bool:
     pdf_dir = legacy.DIR_DANFSE / "pdf_gerado"
     pdf_dir.mkdir(parents=True, exist_ok=True)
@@ -652,6 +701,7 @@ def executar_consulta_nfse_legado(
         if pasta_saida_incremental:
             ingestao_stop_event, ingestao_thread = _iniciar_ingestao_incremental(
                 processo_id=int(processo.id),
+                job_id=int(job.id),
                 pasta_saida=pasta_saida_incremental,
                 run_started_at=run_started_at,
                 intervalo=min(max(1.0, pausa), 3.0),

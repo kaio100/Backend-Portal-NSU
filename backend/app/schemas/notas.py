@@ -28,6 +28,9 @@ class NotaListItem(BaseModel):
     xml_storage_key: str | None = None
     pdf_oficial_storage_key: str | None = None
     pdf_espelho_storage_key: str | None = None
+    arquivada: bool = False
+    arquivada_em: datetime | None = None
+    arquivo_backup_storage_key: str | None = None
     importado_em: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

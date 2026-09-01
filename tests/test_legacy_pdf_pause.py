@@ -128,3 +128,21 @@ def test_pausa_zero_nao_tenta_buscar_pdf(monkeypatch):
     fila = deque(["pdf-pendente"])
     assert legacy_processing_service._processar_pdfs_durante_pausa(object(), object(), fila, pausa=0) == 0
     assert list(fila) == ["pdf-pendente"]
+
+
+def test_fila_final_busca_pdf_mesmo_quando_pausa_e_zero(monkeypatch):
+    chamadas: list[str] = []
+    monkeypatch.setattr(legacy_processing_service.settings, "worker_pdf_official_max_per_job", 2)
+    monkeypatch.setattr(legacy_processing_service.settings, "worker_pdf_official_delay_seconds", 0)
+    monkeypatch.setattr(
+        legacy_processing_service,
+        "_baixar_pdf_danfse_compat",
+        lambda _legacy, _config, chave, timeout=30: chamadas.append(chave) or True,
+    )
+
+    fila = deque(["pdf-1", "pdf-2", "pdf-3"])
+    baixados = legacy_processing_service._processar_pdfs_ao_final(object(), object(), fila)
+
+    assert baixados == 2
+    assert chamadas == ["pdf-1", "pdf-2"]
+    assert list(fila) == ["pdf-3"]

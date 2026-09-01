@@ -307,6 +307,7 @@ def listar_notas(
     limit: int = 100,
     offset: int = 0,
     sort: str = "recentes",
+    arquivadas: str = "ativas",
 ) -> list[Nota]:
     filtro_tipo = normalizar_tipo_nota(tipo_nota)
     filtro_direcao = normalizar_direcao_nota(direcao_nota)
@@ -368,6 +369,7 @@ def listar_notas(
         limit=repo_limit,
         offset=repo_offset,
         sort=sort,
+        arquivadas=arquivadas,
     )
     mapa_consulta_simples = _consultas_simples_api_lote(db, notas)
     anotadas = [_anotar_detalhe_frontend(nota, mapa_consulta_simples.get(int(nota.id))) for nota in notas]
@@ -418,26 +420,34 @@ def listar_todas_notas(
     valor_max: Decimal | None = None,
     sort: str = "recentes",
     somente_total: bool = False,
+    arquivadas: str = "ativas",
 ) -> dict:
     filtro_tipo = normalizar_tipo_nota(tipo_nota)
     filtro_direcao = normalizar_direcao_nota(direcao_nota)
     if filtro_tipo and filtro_direcao and tipo_para_direcao(filtro_tipo) != filtro_direcao:
         return {"items": [], "total": 0}
 
-    # O dashboard sem filtros precisa apenas do numero do acervo. Antes, ate
-    # `somente_total=true` percorria e anotava todas as notas para depois
-    # descartar os itens, tornando a pagina progressivamente mais pesada.
-    filtros_ativos = any(value is not None and value is not False for value in (
-        empresa_id, certificado_id, processo_id, status_documento, status,
-        numero, prestador_cnpj, tomador_cnpj, chave, busca, data_inicio,
-        data_fim, competencia_inicio, competencia_fim, conferencia_status,
-        prioridade, responsavel, status_nota_pdf, simples_nacional_xml,
-        consulta_simples_api, status_simples_nacional, incidencia_iss,
-        divergencia, sla_status, filtro_tipo, filtro_direcao,
-        somente_divergentes, valor_min, valor_max,
-    ))
-    if somente_total and not filtros_ativos:
-        return {"items": [], "total": notas_repo.count_notas_grupo(db, grupo=grupo)}
+    # Filtros gravados diretamente em colunas podem ser contados pelo banco.
+    # Assim o dashboard nao carrega dezenas de milhares de objetos Python para
+    # responder apenas um contador. Os filtros calculados continuam no fluxo
+    # completo porque dependem das anotacoes de negocio.
+    filtros_calculados = any((filtro_tipo, filtro_direcao, somente_divergentes, valor_min is not None, valor_max is not None))
+    if somente_total and not filtros_calculados:
+        total = notas_repo.list_notas(
+            db, grupo=grupo, empresa_id=empresa_id, certificado_id=certificado_id,
+            processo_id=processo_id, status_documento=status_documento, status=status,
+            numero=numero, prestador_cnpj=prestador_cnpj, tomador_cnpj=tomador_cnpj,
+            chave=chave, busca=busca, data_inicio=data_inicio, data_fim=data_fim,
+            competencia_inicio=competencia_inicio, competencia_fim=competencia_fim,
+            conferencia_status=conferencia_status, prioridade=prioridade,
+            responsavel=responsavel, status_nota_pdf=status_nota_pdf,
+            simples_nacional_xml=simples_nacional_xml,
+            consulta_simples_api=consulta_simples_api,
+            status_simples_nacional=status_simples_nacional,
+            incidencia_iss=incidencia_iss, divergencia=divergencia,
+            sla_status=sla_status, arquivadas=arquivadas, count_only=True,
+        )
+        return {"items": [], "total": int(total)}
 
     batch_size = 5000
     offset = 0
@@ -475,6 +485,7 @@ def listar_todas_notas(
             limit=batch_size,
             offset=offset,
             sort=sort,
+            arquivadas=arquivadas,
         )
         items.extend(batch)
         if len(batch) < batch_size:

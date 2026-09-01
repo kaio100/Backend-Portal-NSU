@@ -175,6 +175,9 @@ def _ensure_runtime_columns() -> None:
             "sla": "VARCHAR(80)",
             "sla_status": "VARCHAR(80)",
             "entrada": "DATETIME" if is_sqlite else "TIMESTAMP WITH TIME ZONE",
+            "arquivada": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "arquivada_em": "DATETIME" if is_sqlite else "TIMESTAMP WITH TIME ZONE",
+            "arquivo_backup_storage_key": "VARCHAR(512)",
         }
         for name, column_type in nota_runtime_columns.items():
             if name not in nota_columns:
@@ -188,6 +191,7 @@ def _ensure_runtime_columns() -> None:
             "CREATE INDEX IF NOT EXISTS ix_notas_empresa_emissao_id ON notas (empresa_id, data_emissao DESC, id DESC)",
             "CREATE INDEX IF NOT EXISTS ix_notas_empresa_prestador_emissao ON notas (empresa_id, prestador_cnpj, data_emissao DESC)",
             "CREATE INDEX IF NOT EXISTS ix_notas_empresa_tomador_emissao ON notas (empresa_id, tomador_cnpj, data_emissao DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_notas_arquivada_empresa_emissao ON notas (arquivada, empresa_id, data_emissao DESC, id DESC)",
         ])
 
     for table_name in ("empresas", "usuarios"):
