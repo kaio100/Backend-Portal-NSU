@@ -23,4 +23,7 @@ RUN mkdir -p /app/storage /app/data /app/data/tmp_worker
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# O PostgreSQL de producao nao e alterado pelo lifespan da API. Execute a
+# migracao como etapa obrigatoria do container para que uma versao que usa
+# colunas novas nunca comece a receber trafego com o schema antigo.
+CMD ["sh", "-c", "python -m backend.app.scripts.migrar_banco && exec uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
