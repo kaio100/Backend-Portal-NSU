@@ -350,16 +350,17 @@ def _executar_baixa_empresa_compat(
             maior_nsu = nsu_atual
             for doc in lote_dfe:
                 chave = str(doc.get("ChaveAcesso") or "").strip()
-                nsu_doc = legacy.salvar_documento(doc)
+                nsu_doc, documento_persistido = legacy.processar_documento(doc)
                 if nsu_doc is not None:
-                    xmls_baixados += 1
+                    if documento_persistido:
+                        xmls_baixados += 1
                     if nsu_doc > maior_nsu:
                         maior_nsu = nsu_doc
                 # O espelho e produzido pela ingestao a partir do XML. A busca
                 # do PDF oficial fica enfileirada para aproveitar as pausas do
                 # ciclo, sem concorrer com a consulta ADN nem disparar uma
                 # rajada de requisicoes ao endpoint DANFSe.
-                if chave and baixar_pdf and chave not in chaves_pdf_enfileiradas:
+                if documento_persistido and chave and baixar_pdf and chave not in chaves_pdf_enfileiradas:
                     pdfs_pendentes.append(chave)
                     chaves_pdf_enfileiradas.add(chave)
 

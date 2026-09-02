@@ -33,7 +33,7 @@ import sys
 import time
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from xml.etree import ElementTree as ET
@@ -621,7 +621,28 @@ def upsert_indexes(row_unico: Dict[str, str], ocorrencia: Dict[str, str]) -> Non
     salvar_ocorrencias(ocorrencias)
 
 
-def salvar_documento(doc: Dict[str, Any]) -> Optional[int]:
+def data_corte_documentos() -> date:
+    valor = os.getenv("NOTAS_DATA_CORTE", "2026-01-01").strip()
+    try:
+        return date.fromisoformat(valor)
+    except ValueError as exc:
+        raise RuntimeError("NOTAS_DATA_CORTE deve usar o formato AAAA-MM-DD") from exc
+
+
+def _data_documento(resumo: Dict[str, str]) -> Optional[date]:
+    for campo in ("data_emissao", "competencia"):
+        valor = str(resumo.get(campo) or "").strip()
+        match = re.match(r"^(\d{4})-(\d{2})-(\d{2})", valor)
+        if not match:
+            continue
+        try:
+            return date(*(int(parte) for parte in match.groups()))
+        except ValueError:
+            continue
+    return None
+
+
+def processar_documento(doc: Dict[str, Any]) -> Tuple[Optional[int], bool]:
     nsu = str(doc.get("NSU") or "").strip()
     chave = str(doc.get("ChaveAcesso") or "").strip()
     tipo = str(doc.get("TipoDocumento") or "NFSE").strip()
@@ -629,17 +650,30 @@ def salvar_documento(doc: Dict[str, Any]) -> Optional[int]:
 
     if not nsu or not chave:
         print("Documento sem NSU ou ChaveAcesso. Pulando.")
-        return None
+        return None, False
+
+    nsu_numero = int(nsu) if nsu.isdigit() else None
+
+    resumo: Dict[str, str] = {}
+    xml_texto: Optional[str] = None
+    if arquivo_xml:
+        try:
+            xml_texto = decode_xml_gzip_base64(arquivo_xml)
+            resumo = parse_xml_resumo(xml_texto)
+            data_documento = _data_documento(resumo)
+            if data_documento is not None and data_documento < data_corte_documentos():
+                print(f"NSU {nsu} descartado: documento de {data_documento.isoformat()} anterior ao corte.")
+                return nsu_numero, False
+        except Exception as exc:
+            print(f"Falha ao decodificar XML: {type(exc).__name__}")
 
     json_path = DIR_JSON / f"{nsu}_{chave}.json"
     xml_path: Optional[Path] = None
 
     salvar_json(json_path, doc)
 
-    resumo: Dict[str, str] = {}
-    if arquivo_xml:
+    if xml_texto is not None:
         try:
-            xml_texto = decode_xml_gzip_base64(arquivo_xml)
             xml_path, resumo, _ = save_xml_file(nsu, chave, xml_texto)
             print("XML salvo com sucesso")
         except Exception as exc:
@@ -678,7 +712,12 @@ def salvar_documento(doc: Dict[str, Any]) -> Optional[int]:
     }
 
     upsert_indexes(row_unico, ocorrencia)
-    return int(nsu) if nsu.isdigit() else None
+    return nsu_numero, True
+
+
+def salvar_documento(doc: Dict[str, Any]) -> Optional[int]:
+    nsu, _ = processar_documento(doc)
+    return nsu
 
 
 # =============================================================================
@@ -782,7 +821,7 @@ def cmd_baixar(args: argparse.Namespace) -> None:
         maior_nsu = nsu_atual
 
         for doc in lote_dfe:
-            nsu_doc = salvar_documento(doc)
+            nsu_doc, _ = processar_documento(doc)
             if nsu_doc is not None and nsu_doc > maior_nsu:
                 maior_nsu = nsu_doc
 
