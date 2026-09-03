@@ -23,8 +23,7 @@ from sqlalchemy import func
 
 from backend.app.db.models import Arquivo, Nota
 from backend.app.db.session import SessionLocal, init_db
-from backend.app.services.nfse_pdf_service import NfsePdfService
-from backend.app.services.nfse_xml_parser import extrair_dados_nfse
+from backend.app.services.danfse_service import DanfseService
 from backend.app.services.storage_service import get_storage_service
 
 
@@ -54,9 +53,8 @@ def _gerar_pdf(xml_bytes: bytes, status: str, nota_id: int) -> bytes:
         xml_path = temp_path / "nota.xml"
         pdf_path = temp_path / "nota.pdf"
         xml_path.write_bytes(xml_bytes)
-        dados = extrair_dados_nfse(xml_path)
-        dados["status_documento"] = status
-        NfsePdfService().gerar_danfse_espelho(dados, pdf_path)
+        pdf_bytes, _ = DanfseService().generate(xml_path.read_bytes(), watermark=status)
+        pdf_path.write_bytes(pdf_bytes)
         return pdf_path.read_bytes()
 
 

@@ -131,17 +131,6 @@ def _contar_saida_legada(pasta_saida: str | None) -> dict[str, Any]:
             "pdfs_encontrados": 0,
         }
     base_dir = Path(pasta_saida)
-    # Com pausa zero a fila antiga nunca era consumida, embora a opcao de PDF
-    # oficial estivesse ativa. Ao terminar a consulta, busca um lote pequeno e
-    # limitado para nao prolongar indefinidamente o job nem sobrecarregar o ADN.
-    if baixar_pdf and pdfs_pendentes:
-        pdfs_gerados += _processar_pdfs_ao_final(
-            legacy,
-            config,
-            pdfs_pendentes,
-            processo_id=processo_id,
-        )
-
     return {
         "pasta_saida": str(base_dir),
         "pasta_existe": base_dir.exists(),
@@ -189,6 +178,7 @@ def _loop_ingestao_incremental(
                         updated_after=run_started_at,
                         commit_every=20,
                         start_row=proxima_linha_index,
+                        gerar_pdf_espelho=bool(processo.gerar_pdf_espelho),
                     )
                     proxima_linha_index = int(ingestao.get("proxima_linha_index") or proxima_linha_index)
                     if _ingestao_tem_movimento(ingestao):
@@ -726,7 +716,7 @@ def executar_consulta_nfse_legado(
                     inicio=nsu_inicio_efetivo,
                     gerar_pdf_xml=gerar_pdf_espelho,
                     baixar_pdf=baixar_pdf_oficial,
-                    fallback_pdf_xml=True,
+                    fallback_pdf_xml=gerar_pdf_espelho,
                     sobrescrever_pdf=False,
                 )
             else:
@@ -794,6 +784,7 @@ def executar_consulta_nfse_legado(
                 processo,
                 pasta_saida,
                 updated_after=run_started_at,
+                gerar_pdf_espelho=bool(processo.gerar_pdf_espelho),
             )
             logs_service.registrar_log(
                 db,

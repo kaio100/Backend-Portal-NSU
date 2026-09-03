@@ -1,0 +1,30 @@
+name: backend-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - run: python -m compileall -q backend tests
+
+  danfse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: dom, fileinfo, libxml, mbstring, simplexml, gd
+          tools: composer
+      - run: composer install --no-dev --prefer-dist --no-interaction --working-dir=backend/danfse
+      - run: php -l backend/danfse/generate.php
+      - run: php backend/danfse/tests/run.php backend/danfse/assets/xml/teste.xml

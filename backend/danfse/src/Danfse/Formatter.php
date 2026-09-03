@@ -1,0 +1,192 @@
+<?php
+
+namespace GuilhermeViana\Nfsenacional\Danfse;
+
+/**
+ * Formatadores para padrões brasileiros (CNPJ, CPF, telefone, CEP, moeda, datas)
+ */
+class Formatter
+{
+    public function cnpjCpf(string $value): string
+    {
+        $raw = trim($value);
+
+        if ($raw === '' || $raw === '-') {
+            return '-';
+        }
+
+        $digits = preg_replace('/\D/', '', $raw);
+
+        if (strlen($digits) === 14) {
+            return preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $digits);
+        }
+
+        if (strlen($digits) === 11) {
+            return preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $digits);
+        }
+
+        // Para NIF e demais documentos fora do padrão CPF/CNPJ,
+        // preserva exatamente o valor recebido no XML.
+        return $value;
+    }
+
+    public function phone(string $value): string
+    {
+        if ($value === '' || $value === '-') {
+            return '-';
+        }
+
+        $value = preg_replace('/\D/', '', $value);
+
+        if (strlen($value) === 11) {
+            return preg_replace('/(\d{2})(\d{5})(\d{4})/', '($1) $2-$3', $value);
+        }
+
+        if (strlen($value) === 10) {
+            return preg_replace('/(\d{2})(\d{4})(\d{4})/', '($1) $2-$3', $value);
+        }
+
+        return $value;
+    }
+
+    public function cep(string $value): string
+    {
+        if ($value === '' || $value === '-') {
+            return '-';
+        }
+
+        $value = preg_replace('/\D/', '', $value);
+
+        if (strlen($value) === 8) {
+            return preg_replace('/(\d{5})(\d{3})/', '$1-$2', $value);
+        }
+
+        return $value;
+    }
+
+    public function date(string $value): string
+    {
+        if ($value === '' || $value === '-') {
+            return '-';
+        }
+
+        try {
+            $dt = new \DateTimeImmutable($value);
+            return $dt->format('d/m/Y');
+        } catch (\Exception) {
+            return $value;
+        }
+    }
+
+    public function dateTime(string $value): string
+    {
+        if ($value === '' || $value === '-') {
+            return '-';
+        }
+
+        try {
+            $dt = new \DateTimeImmutable($value);
+            return $dt->format('d/m/Y H:i:s');
+        } catch (\Exception) {
+            return $value;
+        }
+    }
+
+    public function currency(string|float|int $value): string
+    {
+        if ($value === '' || $value === '-') {
+            return '-';
+        }
+
+        return 'R$ ' . number_format((float) $value, 2, ',', '.');
+    }
+
+    public function formatOptionalMoney(string|float|int|null $value): string
+    {
+        return $value === null || $value === '' ? '-' : $this->currency($value);
+    }
+
+    public function formatOptionalPercent(string|float|int|null $value): string
+    {
+        return $value === null || $value === '' ? '-' : number_format((float) $value, 2, ',', '.') . '%';
+    }
+
+    public function formatOptionalText(?string $value): string
+    {
+        $value = trim((string) $value);
+        return $value === '' ? '-' : $value;
+    }
+
+    public function formatNbsCode(?string $value): string
+    {
+        $digits = preg_replace('/\D/', '', (string) $value);
+        if ($digits === '') {
+            return '-';
+        }
+        if (strlen($digits) === 9) {
+            return preg_replace('/(\d)(\d{4})(\d{2})(\d{2})/', '$1.$2.$3.$4', $digits);
+        }
+        return $digits;
+    }
+
+    public function formatTributacaoNacional(?string $value): string
+    {
+        return $this->codTribNacional((string) $value);
+    }
+
+    /** @param array<int, string|null> $parts */
+    public function formatAddress(array $parts): string
+    {
+        $clean = [];
+        foreach ($parts as $part) {
+            $part = trim((string) $part);
+            if ($part !== '' && !in_array($part, $clean, true)) {
+                $clean[] = $part;
+            }
+        }
+        return $clean === [] ? '-' : implode(', ', $clean);
+    }
+
+    /**
+     * Formata código de tributação nacional para o padrão XX.XX.XX
+     */
+    public function codTribNacional(string $value): string
+    {
+        if ($value === '' || $value === '-') {
+            return '-';
+        }
+
+        $value = preg_replace('/\D/', '', $value);
+
+        if (strlen($value) === 6) {
+            return preg_replace('/(\d{2})(\d{2})(\d{2})/', '$1.$2.$3', $value);
+        }
+
+        return $value;
+    }
+
+    public function codTribNacMun(string $nacional, string $municipal): string
+    {
+        $nac = $this->codTribNacional($nacional);
+        $mun = trim($municipal);
+
+        if ($mun === '' || $mun === '-') {
+            return $nac;
+        }
+
+        if ($nac === '' || $nac === '-') {
+            return $mun;
+        }
+
+        return $nac . ' / ' . $mun;
+    }
+
+    public function limit(string $value, int $limit, string $end = '...'): string
+    {
+        if (mb_strlen($value) <= $limit) {
+            return $value;
+        }
+
+        return mb_substr($value, 0, $limit) . $end;
+    }
+}

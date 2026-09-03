@@ -1,0 +1,337 @@
+<?php
+
+declare(strict_types=1);
+
+namespace GuilhermeViana\Nfsenacional\Danfse;
+
+use CuyZ\Valinor\MapperBuilder;
+use GuilhermeViana\Nfsenacional\Danfse\Exception\NfseException;
+use GuilhermeViana\Nfsenacional\Danfse\Config\DanfseConfig;
+use GuilhermeViana\Nfsenacional\Danfse\Dto\NFSe;
+use GuilhermeViana\Nfsenacional\Danfse\Template\DanfseTemplate;
+use Dompdf\Dompdf;
+use Dompdf\Options;
+use ReflectionClass;
+use ReflectionNamedType;
+use ReflectionType;
+use ReflectionUnionType;
+
+class DanfseGenerator
+{
+    private const OUTPUT_INLINE_STRING = 'string';
+    private const OUTPUT_FILE = 'file';
+    private const WATERMARK_STATUS_CANCELADA = 'cancelada';
+    private const WATERMARK_STATUS_SUBSTITUIDA = 'substituida';
+
+    /**
+     * @param array<string, string> $options
+     */
+    public function generateFromXmlFile(string $xmlPath, array $options = []): string
+    {
+        if (!is_file($xmlPath) || !is_readable($xmlPath)) {
+            throw new NfseException('Arquivo XML nao encontrado ou sem permissao de leitura.');
+        }
+
+        $xmlContent = file_get_contents($xmlPath);
+        if ($xmlContent === false) {
+            throw new NfseException('Nao foi possivel ler o arquivo XML informado.');
+        }
+
+        return $this->generateWithOfficialModel($xmlContent, $options);
+    }
+
+    /**
+     * @param array<string, string> $options
+     */
+    public function generateFromXmlString(string $xmlContent, array $options = []): string
+    {
+        return $this->generateWithOfficialModel($xmlContent, $options);
+    }
+
+    /**
+     * @param array<string, string> $options
+     */
+    public function generate(string $xmlInput, array $options = []): string
+    {
+        if (is_file($xmlInput)) {
+            return $this->generateFromXmlFile($xmlInput, $options);
+        }
+
+        if (str_contains(ltrim($xmlInput), '<')) {
+            return $this->generateFromXmlString($xmlInput, $options);
+        }
+
+        throw new NfseException('Entrada XML invalida. Informe caminho de arquivo ou XML em string.');
+    }
+
+    /**
+     * @param array<string, string> $options
+     */
+    private function generateWithOfficialModel(string $xmlContent, array $options): string
+    {
+        $logoPath = realpath(__DIR__ . '/../../assets/logos/nfse.png');
+        $footerText = trim($options['footerText'] ?? '');
+        $watermarkStatus = $this->normalizeWatermarkStatus($options['watermark'] ?? null);
+        $config = $logoPath !== false
+            ? new DanfseConfig(
+                logoPath: $logoPath,
+                footerText: $footerText !== '' ? $footerText : null,
+                watermarkStatus: $watermarkStatus,
+            )
+            : new DanfseConfig(
+                footerText: $footerText !== '' ? $footerText : null,
+                watermarkStatus: $watermarkStatus,
+            );
+
+        $rawPdf = $this->generateFromXml($xmlContent, $config);
+
+        $outputType = $options['output'] ?? self::OUTPUT_INLINE_STRING;
+        if ($outputType === self::OUTPUT_FILE) {
+            $outputPath = $options['outputPath'] ?? '';
+            if ($outputPath === '') {
+                throw new NfseException('Para output=file, informe outputPath.');
+            }
+
+            $directory = dirname($outputPath);
+            if (!is_dir($directory)) {
+                mkdir($directory, 0775, true);
+            }
+
+            file_put_contents($outputPath, $rawPdf);
+
+            return $outputPath;
+        }
+
+        return $rawPdf;
+    }
+
+    private function normalizeWatermarkStatus(mixed $status): ?string
+    {
+        if (!is_string($status)) {
+            return null;
+        }
+
+        $normalized = strtolower(trim($status));
+
+        return match ($normalized) {
+            self::WATERMARK_STATUS_CANCELADA => self::WATERMARK_STATUS_CANCELADA,
+            self::WATERMARK_STATUS_SUBSTITUIDA => self::WATERMARK_STATUS_SUBSTITUIDA,
+            default => null,
+        };
+    }
+
+    public function generateFromXml(string $xml, ?DanfseConfig $config = null): string
+    {
+        $nfse = $this->parseXml($xml);
+
+        return $this->generatePdf($nfse, $config ?? new DanfseConfig());
+    }
+
+    public function parseXml(string $xml): NFSe
+    {
+        $converter = new XmlToArray();
+        $array = $converter->convert($xml);
+        $array = $this->normalizeForDtoArray($array, NFSe::class);
+
+        $mapper = (new MapperBuilder())
+            ->allowSuperfluousKeys()
+            ->allowPermissiveTypes()
+            ->mapper();
+
+        return $mapper->map(NFSe::class, $array);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function normalizeForDtoArray(array $data, string $dtoClass): array
+    {
+        if (!class_exists($dtoClass) || !$this->isDtoClass($dtoClass)) {
+            return $data;
+        }
+
+        $reflection = new ReflectionClass($dtoClass);
+        $constructor = $reflection->getConstructor();
+        if ($constructor === null) {
+            return $data;
+        }
+
+        foreach ($constructor->getParameters() as $parameter) {
+            $name = $parameter->getName();
+            if (!array_key_exists($name, $data)) {
+                continue;
+            }
+
+            $data[$name] = $this->normalizeValueForType($data[$name], $parameter->getType());
+        }
+
+        return $data;
+    }
+
+    private function normalizeValueForType(mixed $value, ?ReflectionType $type): mixed
+    {
+        if ($type === null) {
+            return $value;
+        }
+
+        if ($type instanceof ReflectionUnionType) {
+            $dtoType = null;
+            $allowsNull = false;
+
+            foreach ($type->getTypes() as $unionType) {
+                $name = $unionType->getName();
+                if ($name === 'null') {
+                    $allowsNull = true;
+                    continue;
+                }
+
+                if ($this->isDtoClass($name)) {
+                    $dtoType = $name;
+                }
+            }
+
+            if ($value === '' && $allowsNull && $dtoType !== null) {
+                return null;
+            }
+
+            if (is_array($value) && $dtoType !== null) {
+                return $this->normalizeForDtoArray($value, $dtoType);
+            }
+
+            return $value;
+        }
+
+        if (!$type instanceof ReflectionNamedType) {
+            return $value;
+        }
+
+        $typeName = $type->getName();
+        if (!$this->isDtoClass($typeName)) {
+            return $value;
+        }
+
+        if ($value === '' && $type->allowsNull()) {
+            return null;
+        }
+
+        if (is_array($value)) {
+            return $this->normalizeForDtoArray($value, $typeName);
+        }
+
+        return $value;
+    }
+
+    private function isDtoClass(string $className): bool
+    {
+        return str_starts_with($className, 'GuilhermeViana\\Nfsenacional\\Danfse\\Dto\\')
+            && class_exists($className);
+    }
+
+    public function generateHtml(NFSe $nfse, ?DanfseConfig $config = null): string
+    {
+        $template = new DanfseTemplate();
+
+        return $template->render($nfse, $config ?? new DanfseConfig());
+    }
+
+    public function generatePdf(NFSe $nfse, ?DanfseConfig $config = null): string
+    {
+        $resolvedConfig = $config ?? new DanfseConfig();
+        $html = $this->generateHtml($nfse, $resolvedConfig);
+
+        $options = new Options();
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', false);
+        $options->set('defaultFont', 'Arial');
+        // Fontes locais completas evitam espaçamento irregular em glifos acentuados.
+        $options->set('isFontSubsettingEnabled', false);
+        $options->set('isUnicodeEnabled', true);
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html, 'UTF-8');
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        $footerRaw = trim((string) ($resolvedConfig->footerText ?? ''));
+        if ($footerRaw !== '') {
+            $linkUrl = null;
+            $linkLabel = null;
+
+            $anchorPattern = '~<a\s[^>]*href\s*=\s*(["\'])(.*?)\1[^>]*>(.*?)</a>~is';
+            if (preg_match($anchorPattern, $footerRaw, $anchorMatch) === 1) {
+                $candidateUrl = html_entity_decode(trim((string) ($anchorMatch[2] ?? '')), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                if (filter_var($candidateUrl, FILTER_VALIDATE_URL) !== false) {
+                    $linkUrl = $candidateUrl;
+                    $linkLabel = trim(html_entity_decode(strip_tags((string) ($anchorMatch[3] ?? '')), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+                    if ($linkLabel === '') {
+                        $linkLabel = $linkUrl;
+                    }
+                }
+
+                $footerRaw = (string) preg_replace_callback(
+                    $anchorPattern,
+                    static fn(array $m): string => (string) ($m[3] ?? $m[2] ?? ''),
+                    $footerRaw,
+                    1,
+                );
+            }
+
+            $footerText = trim((string) preg_replace(
+                '/\s+/u',
+                ' ',
+                html_entity_decode(strip_tags($footerRaw), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            ));
+
+            if ($footerText === '') {
+                return $dompdf->output();
+            }
+
+            if ($linkUrl === null && preg_match('~https?://[^\s]+~i', $footerText, $urlMatch) === 1) {
+                $candidateUrl = trim((string) ($urlMatch[0] ?? ''));
+                if (filter_var($candidateUrl, FILTER_VALIDATE_URL) !== false) {
+                    $linkUrl = $candidateUrl;
+                    $linkLabel = $candidateUrl;
+                }
+            }
+
+            $canvas = $dompdf->getCanvas();
+            $fontMetrics = $dompdf->getFontMetrics();
+            $font = $fontMetrics->getFont('Helvetica', 'normal');
+            $fontSize = 7;
+            $textWidth = $fontMetrics->getTextWidth($footerText, $font, $fontSize);
+            $pageWidth = $canvas->get_width();
+            $pageHeight = $canvas->get_height();
+
+            $x = max(14.0, $pageWidth - 14.0 - $textWidth);
+            $y = $pageHeight - 12.0;
+
+            $linkPos = null;
+            if ($linkUrl !== null && $linkLabel !== null) {
+                $linkPos = strpos($footerText, $linkLabel);
+                if ($linkPos === false) {
+                    $linkPos = strpos($footerText, $linkUrl);
+                    if ($linkPos !== false) {
+                        $linkLabel = $linkUrl;
+                    }
+                }
+            }
+
+            $canvas->page_script(function (int $pageNumber, int $pageCount, $pageCanvas, $pageFontMetrics) use ($footerText, $font, $fontSize, $x, $y, $linkUrl, $linkLabel, $linkPos): void {
+                $pageCanvas->text($x, $y, $footerText, $font, $fontSize, [0, 0, 0]);
+
+                if ($linkUrl !== null && $linkLabel !== null && $linkPos !== false && $linkPos !== null) {
+                    $fontHeight = $pageFontMetrics->getFontHeight($font, $fontSize);
+                    $prefix = substr($footerText, 0, $linkPos);
+                    $linkX = $x + $pageFontMetrics->getTextWidth($prefix, $font, $fontSize);
+                    $linkWidth = $pageFontMetrics->getTextWidth($linkLabel, $font, $fontSize);
+
+                    $pageCanvas->add_link($linkUrl, $linkX, $y, $linkWidth, $fontHeight);
+                    $pageCanvas->text($linkX, $y, $linkLabel, $font, $fontSize, [0, 0, 1]);
+                }
+            });
+        }
+
+        return $dompdf->output();
+    }
+}

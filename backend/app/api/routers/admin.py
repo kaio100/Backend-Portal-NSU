@@ -262,10 +262,9 @@ def erros(limit: int = 50, db: Session = Depends(get_db)):
 @router.get("/arquivamento")
 def status_arquivamento(ano: int = 2026, db: Session = Depends(get_db)):
     preview = arquivar_notas_anos_anteriores(db, get_storage_service(), ano_operacional=ano, executar=False)
-    arquivadas = db.query(Nota).filter(Nota.arquivada.is_(True)).count()
     backups = (
         db.query(Arquivo)
-        .filter(Arquivo.tipo == "BACKUP_NOTAS")
+        .filter(Arquivo.tipo.in_(["BACKUP_NOTAS", "MANIFESTO_NOTAS_EXCLUIDAS"]))
         .order_by(Arquivo.created_at.desc())
         .limit(100)
         .all()
@@ -274,7 +273,7 @@ def status_arquivamento(ano: int = 2026, db: Session = Depends(get_db)):
         "ano_operacional": ano,
         "notas_elegiveis": preview["notas"],
         "empresas": preview["empresas"],
-        "notas_arquivadas": arquivadas,
+        "notas_arquivadas": 0,
         "execucao": dict(_arquivamento_estado),
         "backups": [
             {
@@ -292,8 +291,9 @@ def status_arquivamento(ano: int = 2026, db: Session = Depends(get_db)):
 
 @router.post("/arquivamento", status_code=202)
 def executar_arquivamento(payload: ArquivamentoExecutar, background_tasks: BackgroundTasks):
-    if payload.confirmacao.strip().upper() != f"ARQUIVAR {payload.ano}":
-        raise HTTPException(status_code=422, detail=f'Digite "ARQUIVAR {payload.ano}" para confirmar.')
+    confirmacao = f"EXCLUIR ANTERIORES A {payload.ano}"
+    if payload.confirmacao.strip().upper() != confirmacao:
+        raise HTTPException(status_code=422, detail=f'Digite "{confirmacao}" para confirmar.')
     if _arquivamento_estado["status"] == "executando":
         raise HTTPException(status_code=409, detail="Ja existe um arquivamento em execucao.")
     _arquivamento_estado.update(status="agendado", iniciado_em=None, finalizado_em=None, resultado=None, erro=None)

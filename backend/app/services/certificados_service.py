@@ -431,7 +431,14 @@ def listar_certificados(
     ativo: bool | None = None,
     grupo: str | None = None,
 ) -> list[Certificado]:
-    return certificados_repo.list_certificados(db, empresa_id=empresa_id, ativo=ativo, grupo=grupo)
+    certificados = certificados_repo.list_certificados(db, empresa_id=empresa_id, ativo=ativo, grupo=grupo)
+
+    # O ID e uma chave tecnica e pode conter lacunas apos exclusoes ou tentativas
+    # de cadastro. O portal deve usar esta ordem continua apenas para exibicao.
+    for indice, certificado in enumerate(certificados, start=1):
+        certificado.numero_ordem = indice
+
+    return certificados
 
 
 def obter_certificado_no_grupo(db: Session, certificado_id: int, grupo: str) -> Certificado:

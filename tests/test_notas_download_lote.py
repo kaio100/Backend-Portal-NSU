@@ -138,8 +138,8 @@ def test_download_lote_com_nota_ids_inclui_xml_e_pdf_original_sem_espelho():
     assert response.headers["content-type"] == "application/zip"
     assert ".zip" in response.headers["content-disposition"]
     names = _zip_names(response)
-    assert "notas_nfse/CANOPUS CONSTRUCOES BELEM LTDA/xml/9D STUDIO COMERCIO E SERVICOS LTDA NFS-e 1370.xml" in names
-    assert "notas_nfse/CANOPUS CONSTRUCOES BELEM LTDA/pdf/9D STUDIO COMERCIO E SERVICOS LTDA NFS-e 1370.pdf" in names
+    assert "notas_nfse/CANOPUS CONSTRUCOES BELEM LTDA/xml/NFS-e 1370.xml" in names
+    assert "notas_nfse/CANOPUS CONSTRUCOES BELEM LTDA/pdf/NFS-e 1370.pdf" in names
     assert not any("/NFS-e_1370/" in name for name in names)
     assert not any("50227393000149" in name for name in names)
     assert not any(name.endswith("espelho.pdf") for name in names)
@@ -192,9 +192,36 @@ def test_download_lote_por_filtros_inclui_pdf_espelho_quando_nao_ha_original():
 
     assert response.status_code == 200
     names = _zip_names(response)
-    assert any(name.endswith("/pdf/JORGE LUIS DINIZ SILVA NFS-e 5.pdf") for name in names)
-    assert any(name.endswith("/xml/JORGE LUIS DINIZ SILVA NFS-e 5.xml") for name in names)
+    assert any(name.endswith("/pdf/NFS-e 5.pdf") for name in names)
+    assert any(name.endswith("/xml/NFS-e 5.xml") for name in names)
     assert not any("OUTRO" in name for name in names)
+
+
+def test_download_lote_prefixa_status_cancelado_e_substituido():
+    _reset_db()
+    storage = get_storage_service()
+    with SessionLocal() as db:
+        empresa, processo = _empresa_processo(db, cnpj="22333444000156")
+        cancelada = _nota(db, empresa, processo, "32725", "PRESTADOR CANCELADO", status="cancelada")
+        substituida = _nota(db, empresa, processo, "32726", "PRESTADOR SUBSTITUIDO", status="substituida")
+        for nota, prefixo in ((cancelada, "CANCELADO"), (substituida, "SUBSTITUIDO")):
+            _arquivo(db, storage, empresa, processo, nota, "XML", f"{prefixo.lower()}.xml", b"<xml/>")
+            _arquivo(db, storage, empresa, processo, nota, "PDF_ESPELHO", f"{prefixo.lower()}.pdf", b"%PDF")
+        nota_ids = [cancelada.id, substituida.id]
+        db.commit()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/notas/download-lote",
+            json={"nota_ids": nota_ids, "incluir_xml": True, "incluir_pdf": True},
+        )
+
+    assert response.status_code == 200
+    names = _zip_names(response)
+    assert any(name.endswith("/xml/CANCELADO NFS-e 32725.xml") for name in names)
+    assert any(name.endswith("/pdf/CANCELADO NFS-e 32725.pdf") for name in names)
+    assert any(name.endswith("/xml/SUBSTITUIDO NFS-e 32726.xml") for name in names)
+    assert any(name.endswith("/pdf/SUBSTITUIDO NFS-e 32726.pdf") for name in names)
 
 
 def test_download_lote_get_compatibilidade_com_botao_frontend():
@@ -212,7 +239,7 @@ def test_download_lote_get_compatibilidade_com_botao_frontend():
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
-    assert any(name.endswith("/xml/PRESTADOR GET NFS-e 77.xml") for name in _zip_names(response))
+    assert any(name.endswith("/xml/NFS-e 77.xml") for name in _zip_names(response))
 
 
 def test_download_lote_get_aceita_nota_ids_para_lotes_em_partes():
@@ -232,8 +259,8 @@ def test_download_lote_get_aceita_nota_ids_para_lotes_em_partes():
 
     assert response.status_code == 200
     names = _zip_names(response)
-    assert any(name.endswith("/xml/PRESTADOR UM NFS-e 1.xml") for name in names)
-    assert not any("PRESTADOR DOIS" in name for name in names)
+    assert any(name.endswith("/xml/NFS-e 1.xml") for name in names)
+    assert not any("NFS-e 2" in name for name in names)
 
 
 def test_download_lote_com_pdf_original_e_espelho_quando_nao_prefere_original():
@@ -255,8 +282,8 @@ def test_download_lote_com_pdf_original_e_espelho_quando_nao_prefere_original():
 
     assert response.status_code == 200
     names = _zip_names(response)
-    assert any(name.endswith("/pdf/PRESTADOR TESTE NFS-e 10.pdf") for name in names)
-    assert any(name.endswith("/pdf/PRESTADOR TESTE NFS-e 10 (2).pdf") for name in names)
+    assert any(name.endswith("/pdf/NFS-e 10.pdf") for name in names)
+    assert any(name.endswith("/pdf/NFS-e 10 (2).pdf") for name in names)
 
 
 def test_download_lote_estrutura_empresa_xml_pdf_sem_pastas_por_nota_ou_prestador():
@@ -279,10 +306,10 @@ def test_download_lote_estrutura_empresa_xml_pdf_sem_pastas_por_nota_ou_prestado
     assert response.status_code == 200
     names = _zip_names(response)
     prefix = _zip_empresa_prefix("CANOPUS CONSTRUCOES BELEM LTDA")
-    assert f"{prefix}/xml/JORGE LUIS DINIZ SILVA NFS-e 5.xml" in names
-    assert f"{prefix}/xml/DANY ESCORCIO SILVA SOUSA NFS-e 19.xml" in names
-    assert f"{prefix}/pdf/JORGE LUIS DINIZ SILVA NFS-e 5.pdf" in names
-    assert f"{prefix}/pdf/DANY ESCORCIO SILVA SOUSA NFS-e 19.pdf" in names
+    assert f"{prefix}/xml/NFS-e 5.xml" in names
+    assert f"{prefix}/xml/NFS-e 19.xml" in names
+    assert f"{prefix}/pdf/NFS-e 5.pdf" in names
+    assert f"{prefix}/pdf/NFS-e 19.pdf" in names
     assert not any("/NFS-e_5/" in name or "/NFS-e_19/" in name for name in names)
     assert not any("50227393000149" in name or "55666777000188" in name for name in names)
 
@@ -305,7 +332,7 @@ def test_download_lote_sanitiza_nomes_e_impede_path_traversal():
 
     assert response.status_code == 200
     names = _zip_names(response)
-    assert names == ["notas_nfse/CANOPUS CONSTRUCOES BELEM LTDA/xml/JORGE LUIS DINIZ NFS-e 33 x.xml"]
+    assert names == ["notas_nfse/CANOPUS CONSTRUCOES BELEM LTDA/xml/NFS-e 33 x.xml"]
     for name in names:
         assert ".." not in name
         assert "\\" not in name
@@ -329,8 +356,8 @@ def test_download_lote_arquivos_duplicados_recebem_sufixo_sem_sobrescrever():
 
     assert response.status_code == 200
     names = _zip_names(response)
-    assert "notas_nfse/EMPRESA DUPLICADA/xml/PRESTADOR IGUAL NFS-e 5.xml" in names
-    assert "notas_nfse/EMPRESA DUPLICADA/xml/PRESTADOR IGUAL NFS-e 5 (2).xml" in names
+    assert "notas_nfse/EMPRESA DUPLICADA/xml/NFS-e 5.xml" in names
+    assert "notas_nfse/EMPRESA DUPLICADA/xml/NFS-e 5 (2).xml" in names
 
 
 def test_download_lote_continua_com_arquivo_ausente_e_relatorio():

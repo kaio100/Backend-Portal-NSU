@@ -40,8 +40,15 @@ def _chave_curta(chave: str | None) -> str:
 
 
 def build_nota_base_filename(nota: Any) -> str:
-    prestador = safe_file_name(getattr(nota, "prestador_nome", None), fallback="PRESTADOR")
     numero = safe_file_name(getattr(nota, "numero_nfse", None), fallback="")
     if not numero:
         numero = _chave_curta(getattr(nota, "chave", None))
-    return safe_file_name(f"{prestador} NFS-e {numero}", fallback=f"PRESTADOR NFS-e {numero}")
+    status = str(getattr(nota, "status_documento", None) or "").strip().lower()
+    prefixo = {
+        "cancelada": "CANCELADO",
+        "cancelado": "CANCELADO",
+        "substituida": "SUBSTITUIDO",
+        "substituido": "SUBSTITUIDO",
+    }.get(status, "")
+    base = f"NFS-e {numero}"
+    return safe_file_name(f"{prefixo} {base}" if prefixo else base, fallback=base)

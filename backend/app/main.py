@@ -17,6 +17,7 @@ from backend.app.api.routers import (
     certificados,
     cnpj,
     consultas,
+    danfse,
     db_health,
     empresas,
     eventos,
@@ -31,6 +32,7 @@ from backend.app.api.routers import (
     storage,
 )
 from backend.app.core.config import settings
+from backend.app.core.observability import configure_logging
 from backend.app.db.models import Empresa, Job, LockProcessamento, MonitoramentoConfig, Processo
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.services import consultas_service
@@ -38,6 +40,9 @@ from backend.app.services.notas_download_service import limpar_zips_temporarios
 from backend.app.services.valor_liquido_backfill_service import recalcular_notas_salvas
 from backend.app.scripts.revalidar_status_pdfs import executar as revalidar_status_pdfs
 from backend.app.worker.worker import processar_proximo_job
+
+
+configure_logging()
 
 
 def _worker_groups() -> list[str]:
@@ -184,7 +189,8 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_api_worker(slot, worker_id, grupo))
             for slot, (grupo, worker_id) in enumerate(api_workers, start=1)
         ]
-        scheduler_task = asyncio.create_task(_run_consultas_scheduler())
+        if settings.embedded_scheduler_enabled:
+            scheduler_task = asyncio.create_task(_run_consultas_scheduler())
 
     try:
         yield
@@ -297,3 +303,4 @@ app.include_router(notas.router)
 app.include_router(eventos.router)
 app.include_router(relatorios.router)
 app.include_router(arquivos.router)
+app.include_router(danfse.router)

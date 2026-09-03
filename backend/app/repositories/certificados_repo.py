@@ -23,7 +23,7 @@ def list_certificados(
     ativo: bool | None = None,
     grupo: str | None = None,
 ) -> list[Certificado]:
-    query = db.query(Certificado).order_by(Certificado.id.desc())
+    query = db.query(Certificado).order_by(Certificado.id.asc())
     if grupo is not None:
         query = query.join(Empresa, Empresa.id == Certificado.empresa_id).filter(Empresa.grupo == grupo)
     if empresa_id is not None:

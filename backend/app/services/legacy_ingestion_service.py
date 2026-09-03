@@ -13,9 +13,10 @@ from xml.etree import ElementTree
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
+from backend.app.core.observability import alert_failure
 from backend.app.db.models import Evento, Nota, Processo
 from backend.app.repositories import arquivos_repo, notas_repo
-from backend.app.services.nfse_pdf_service import NfsePdfService, friendly_pdf_filename
+from backend.app.services.danfse_service import DanfseService, friendly_pdf_filename
 from backend.app.services.pdf_status_service import aplicar_status_pdf_oficial
 from backend.app.services.nfse_xml_parser import extrair_dados_nfse
 from backend.app.services.operational_fields_service import (
@@ -127,9 +128,9 @@ def _gerar_pdf_espelho_path(
     output_dir = Path(settings.worker_temp_dir) / "pdf_espelho"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / filename
-    dados = extrair_dados_nfse(xml_path, prefeitura_info=None)
-    dados["status_documento"] = status_documento or row.get("status_documento") or dados.get("status_documento")
-    return NfsePdfService().gerar_danfse_espelho(dados, output_path)
+    pdf_bytes, _ = DanfseService().generate(xml_path.read_bytes(), watermark=status_documento)
+    output_path.write_bytes(pdf_bytes)
+    return output_path
 
 
 def _local_name(tag: str) -> str:
@@ -573,7 +574,7 @@ def _registrar_evento_xml(
     resumo: dict[str, str],
     xml_storage_key: str | None,
     nsu: int | None,
-) -> None:
+) -> Nota | None:
     chave_evento = resumo.get("chave") or None
     chave_afetada = resumo.get("chave_afetada") or None
     status_documento = resumo.get("status_documento") or None
@@ -619,6 +620,55 @@ def _registrar_evento_xml(
             )
         )
         db.flush()
+    return nota
+
+
+def _regenerar_pdf_espelho_evento(
+    db: Session,
+    storage: StorageService,
+    processo: Processo,
+    nota: Nota,
+    status_documento: str,
+) -> None:
+    """Regrava o espelho existente assim que um evento muda seu status."""
+    if not nota.xml_storage_key:
+        raise LegacyIngestionError("Nota afetada pelo evento nao possui XML armazenado.")
+
+    xml_bytes = storage.get_bytes(nota.xml_storage_key)
+    with tempfile.TemporaryDirectory(prefix="danfse_evento_") as temp_dir:
+        xml_path = Path(temp_dir) / "nota.xml"
+        xml_path.write_bytes(xml_bytes)
+        dados_pdf = extrair_dados_nfse(xml_path, prefeitura_info=None)
+        filename = friendly_pdf_filename(dados_pdf)
+        pdf_bytes, _ = DanfseService().generate(xml_bytes, watermark=status_documento)
+
+    storage_key = nota.pdf_espelho_storage_key
+    if not storage_key:
+        competencia = nota.competencia or nota.data_emissao or date.today()
+        empresa_cnpj = str(processo.empresa.cnpj if processo.empresa else processo.empresa_id)
+        storage_key = build_pdf_espelho_key(
+            empresa_cnpj,
+            str(competencia.year),
+            f"{competencia.month:02d}",
+            filename,
+        )
+        nota.pdf_espelho_storage_key = storage_key
+
+    meta = storage.put_bytes(storage_key, pdf_bytes, content_type="application/pdf")
+    nota.pdf_espelho_storage_key = storage_key
+    _registrar_arquivo(
+        db,
+        storage,
+        processo.empresa_id,
+        processo.id,
+        nota.id,
+        "pdf_espelho",
+        storage_key,
+        "application/pdf",
+        int(meta.get("size") or len(pdf_bytes)),
+        _sha256(pdf_bytes),
+        filename,
+    )
 
 
 def _aplicar_campos_fiscais_xml(nota_data: dict[str, Any], resumo: dict[str, Any]) -> None:
@@ -759,6 +809,7 @@ def ingerir_saida_legado(
     only_chaves: set[str] | None = None,
     commit_every: int | None = None,
     start_row: int = 0,
+    gerar_pdf_espelho: bool = True,
 ) -> dict[str, Any]:
     base_dir = Path(pasta_saida)
     index_path = base_dir / "index_nfse.csv"
@@ -778,7 +829,15 @@ def ingerir_saida_legado(
         "erros_detalhes": [],
     }
     if not index_path.exists():
-        return _ingerir_por_varredura(db, storage, processo, base_dir, counters, updated_after=updated_after)
+        return _ingerir_por_varredura(
+            db,
+            storage,
+            processo,
+            base_dir,
+            counters,
+            updated_after=updated_after,
+            gerar_pdf_espelho=gerar_pdf_espelho,
+        )
 
     rows = _read_index_rows(index_path)
     # Eventos de cancelamento/substituicao podem aparecer depois da linha da
@@ -867,7 +926,32 @@ def ingerir_saida_legado(
                         xml_path.name,
                     ):
                         counters["arquivos_registrados"] += 1
-                _registrar_evento_xml(db, processo, xml_resumo, xml_storage_key, nsu_evento)
+                nota_evento = _registrar_evento_xml(db, processo, xml_resumo, xml_storage_key, nsu_evento)
+                if (
+                    gerar_pdf_espelho
+                    and nota_evento is not None
+                    and xml_resumo.get("status_documento") in {"cancelada", "substituida"}
+                ):
+                    try:
+                        _regenerar_pdf_espelho_evento(
+                            db,
+                            storage,
+                            processo,
+                            nota_evento,
+                            str(xml_resumo["status_documento"]),
+                        )
+                        counters["pdfs_espelho_regenerados"] = int(counters.get("pdfs_espelho_regenerados", 0)) + 1
+                    except Exception as exc:
+                        alert_failure("event_pdf_regeneration", exc, nota_id=nota_evento.id)
+                        counters["avisos_pdf"] += 1
+                        if len(counters["erros_detalhes"]) < 20:
+                            counters["erros_detalhes"].append(
+                                {
+                                    "chave": xml_resumo.get("chave") or "",
+                                    "etapa": "pdf_espelho_evento",
+                                    "erro": str(exc)[:500],
+                                }
+                            )
                 counters["eventos_importados"] = int(counters.get("eventos_importados", 0)) + 1
                 continue
             status_documento = row.get("status_documento") or xml_resumo.get("status_documento") or None
@@ -883,7 +967,7 @@ def ingerir_saida_legado(
                 status_documento = status_existente
                 status_rotulo = getattr(nota_existente, "status_rotulo", None) or status_existente.capitalize()
             pdf_espelho_path = None
-            if pdf_storage_key is None:
+            if pdf_storage_key is None and gerar_pdf_espelho:
                 try:
                     pdf_tipo = "pdf_espelho"
                     dados_pdf = extrair_dados_nfse(xml_path, prefeitura_info=None)
@@ -1072,6 +1156,7 @@ def _ingerir_por_varredura(
     base_dir: Path,
     counters: dict[str, Any],
     updated_after: datetime | None = None,
+    gerar_pdf_espelho: bool = True,
 ) -> dict[str, Any]:
     xml_files = [path for path in sorted(base_dir.rglob("*.xml")) if _recent_file(path, updated_after)]
     pdf_files = [path for path in sorted(base_dir.rglob("*.pdf")) if _recent_file(path, updated_after)]
@@ -1119,7 +1204,32 @@ def _ingerir_por_varredura(
                     xml_path.name,
                 ):
                     counters["arquivos_registrados"] += 1
-                _registrar_evento_xml(db, processo, resumo, xml_storage_key, None)
+                nota_evento = _registrar_evento_xml(db, processo, resumo, xml_storage_key, None)
+                if (
+                    gerar_pdf_espelho
+                    and nota_evento is not None
+                    and resumo.get("status_documento") in {"cancelada", "substituida"}
+                ):
+                    try:
+                        _regenerar_pdf_espelho_evento(
+                            db,
+                            storage,
+                            processo,
+                            nota_evento,
+                            str(resumo["status_documento"]),
+                        )
+                        counters["pdfs_espelho_regenerados"] = int(counters.get("pdfs_espelho_regenerados", 0)) + 1
+                    except Exception as exc:
+                        alert_failure("event_pdf_regeneration", exc, nota_id=nota_evento.id)
+                        counters["avisos_pdf"] += 1
+                        if len(counters["erros_detalhes"]) < 20:
+                            counters["erros_detalhes"].append(
+                                {
+                                    "chave": resumo.get("chave") or "",
+                                    "etapa": "pdf_espelho_evento",
+                                    "erro": str(exc)[:500],
+                                }
+                            )
                 counters["eventos_importados"] = int(counters.get("eventos_importados", 0)) + 1
                 continue
             chave = (resumo.get("chave") or "").strip()
@@ -1143,7 +1253,7 @@ def _ingerir_por_varredura(
             pdf_path = _find_pdf_for_chave(pdf_files, chave)
             pdf_storage_key = build_pdf_oficial_key(empresa_cnpj, ano, mes, pdf_path.name) if pdf_path else None
             pdf_espelho_path = None
-            if pdf_storage_key is None:
+            if pdf_storage_key is None and gerar_pdf_espelho:
                 dados_pdf = extrair_dados_nfse(xml_path, prefeitura_info=None)
                 pdf_filename = friendly_pdf_filename(dados_pdf)
                 pdf_storage_key = build_pdf_espelho_key(empresa_cnpj, ano, mes, pdf_filename)

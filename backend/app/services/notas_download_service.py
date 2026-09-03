@@ -15,6 +15,7 @@ from typing import Iterable
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
+from backend.app.core.observability import alert_failure, metrics
 from backend.app.db.models import Arquivo, Nota
 from backend.app.repositories import arquivos_repo, notas_repo
 from backend.app.schemas.notas import NotasDownloadFiltros, NotasDownloadLoteRequest
@@ -201,6 +202,7 @@ def gerar_zip_notas(
     payload: NotasDownloadLoteRequest,
     grupo: str | None = None,
 ) -> DownloadLoteResult:
+    metrics.inc("download_batches_started")
     if not payload.incluir_xml and not payload.incluir_pdf:
         raise NotasDownloadLoteError("Selecione XML, PDF ou ambos para gerar o ZIP.")
 
@@ -297,7 +299,8 @@ def gerar_zip_notas(
                     compress_type=zipfile.ZIP_DEFLATED,
                     compresslevel=1,
                 )
-    except Exception:
+    except Exception as exc:
+        alert_failure("download_batch", exc, notas_count=len(notas))
         temp_path.unlink(missing_ok=True)
         raise
 
@@ -313,6 +316,9 @@ def gerar_zip_notas(
         len(erros),
         temp_path.stat().st_size,
     )
+    metrics.inc("download_batches_completed")
+    if erros:
+        metrics.inc("download_missing_files", len(erros))
     return DownloadLoteResult(
         filename=filename,
         path=temp_path,

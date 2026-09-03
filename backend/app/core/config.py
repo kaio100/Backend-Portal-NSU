@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     worker_pdf_official_delay_seconds: float = 0.5
     worker_temp_dir: str = "data/tmp_worker"
     api_worker_enabled: bool = True
+    embedded_scheduler_enabled: bool = True
     api_worker_sleep: float = 0.2
     api_worker_concurrency: int = 1
     consultas_scheduler_sleep: float = 1
@@ -53,6 +54,10 @@ class Settings(BaseSettings):
     pdf_status_revalidation_enabled: bool = True
     pdf_status_revalidation_batch_size: int = 200
     certificado_upload_max_bytes: int = 5 * 1024 * 1024
+    danfse_library_root: str = "backend/danfse"
+    danfse_php_binary: str = "php"
+    danfse_xml_max_bytes: int = 5 * 1024 * 1024
+    danfse_timeout_seconds: int = 60
     secrets_key: str | None = None
     api_key: str | None = None
     jwt_secret: str | None = None
@@ -65,6 +70,8 @@ class Settings(BaseSettings):
     invertexto_cache_days: int = 30
     cnpj_receita_db_path: str = "data/cnpj_receita.sqlite3"
     cnpj_receita_cache_days: int = 30
+    alert_webhook_url: str | None = None
+    log_level: str = "INFO"
 
     @field_validator("database_url", mode="before")
     @classmethod

@@ -9,9 +9,9 @@ from backend.app.services.storage_service import get_storage_service
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Backup e arquivamento reversivel de notas antigas")
+    parser = argparse.ArgumentParser(description="Manifesto no Storage e exclusao de notas antigas do banco")
     parser.add_argument("--ano", type=int, default=2026, help="Ano mantido nas telas operacionais")
-    parser.add_argument("--executar", action="store_true", help="Sem esta opcao apenas mostra o que seria arquivado")
+    parser.add_argument("--executar", action="store_true", help="Sem esta opcao apenas mostra o que seria excluido")
     args = parser.parse_args()
     init_db()
     with SessionLocal() as db:

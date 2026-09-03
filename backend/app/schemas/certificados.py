@@ -13,6 +13,7 @@ class CertificadoRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    numero_ordem: int | None = None
     empresa_id: int
     empresa_nome: str | None = None
     empresa_cnpj: str | None = None

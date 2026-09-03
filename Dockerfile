@@ -10,7 +10,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     ca-certificates \
+    unzip \
+    php-cli \
+    php-gd \
+    php-xml \
+    php-mbstring \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 COPY requirements.txt .
 
@@ -18,6 +25,8 @@ RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
 COPY . .
+
+RUN composer install --no-dev --optimize-autoloader --working-dir=/app/backend/danfse
 
 RUN mkdir -p /app/storage /app/data /app/data/tmp_worker
 
