@@ -583,6 +583,16 @@ def patch_conferencia_nota(
 ):
     try:
         require_nota_grupo(db, nota_id, usuario)
+        if (nota := notas_service.obter_nota(db, nota_id)).responsavel and not payload.retificar:
+            raise HTTPException(
+                status_code=409,
+                detail="Esta nota ja possui uma analise. Clique em Retificar analise para alterar o registro.",
+            )
+        usuario_nome = (usuario.nome or usuario.email or "").strip()
+        if payload.retificar:
+            payload.responsavel = usuario_nome or payload.responsavel
+            payload.atualizado_por = usuario_nome or payload.atualizado_por
+            payload.operator_name = usuario_nome or payload.operator_name
         if not payload.responsavel:
             payload.responsavel = (x_responsavel or x_usuario_nome or "").strip() or None
         nota = notas_service.atualizar_conferencia(db, nota_id, payload)

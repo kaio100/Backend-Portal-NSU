@@ -183,6 +183,7 @@ class NotaConferenciaUpdate(BaseModel):
     operator_name: str | None = None
     operator_id: str | None = None
     device_id: str | None = None
+    retificar: bool = False
 
     @model_validator(mode="before")
     @classmethod

@@ -567,11 +567,18 @@ def test_conferencia_pendente_reabre_status_calculado_automaticamente():
             headers={"X-Usuario-Nome": "Luana Assis"},
             json={"conferencia_status": "ok"},
         )
+        bloqueada = client.patch(
+            f"/notas/{nota_id}/conferencia",
+            headers={"X-Usuario-Nome": "Luana Assis"},
+            json={"conferencia_status": "corrigir"},
+        )
+        assert bloqueada.status_code == 409
         reaberta = client.patch(
             f"/notas/{nota_id}/conferencia",
             headers={"X-Usuario-Nome": "Luana Assis"},
-            json={"conferencia_status": "pendente"},
+            json={"conferencia_status": "pendente", "retificar": True},
         )
         assert reaberta.status_code == 200
+        assert reaberta.json()["responsavel"] == "Portal Test"
         assert reaberta.json()["status_fila_final"] == "divergente"
         assert reaberta.json()["divergencia_fila_final"] is True
