@@ -36,7 +36,15 @@ def money(value: Decimal | None) -> Decimal | None:
 
 
 def calcular_liquido_com_retencoes_salvas(nota: Any) -> Decimal:
-    """Recalcula o liquido usando os valores informados e esperados persistidos."""
+    """Recalcula o liquido usando os valores informados e esperados persistidos.
+
+    Espelha `calcular_retencoes_esperadas`: PIS, COFINS e CSLL sao abatidos
+    componente a componente (o maior entre informado e calculado de cada um).
+    A versao anterior tratava o CSRF como um unico valor, o que divergia da
+    analise fiscal (ex.: PIS+COFINS informados e CSLL devida mas nao retida)
+    e, rodando a cada startup, reescrevia o valor da analise sem atualizar os
+    alertas -- o resumo da nota ficava contraditorio.
+    """
     def decimal_campo(*nomes: str) -> Decimal:
         for nome in nomes:
             valor = parse_decimal_xml(getattr(nota, nome, None))
@@ -44,13 +52,25 @@ def calcular_liquido_com_retencoes_salvas(nota: Any) -> Decimal:
                 return valor
         return Decimal("0")
 
+    def presente(*nomes: str) -> bool:
+        return any(parse_decimal_xml(getattr(nota, nome, None)) is not None for nome in nomes)
+
     def maior(informado: Decimal, calculado: Decimal) -> Decimal:
         return max(informado, calculado)
 
     valor_servico = decimal_campo("valor_servico", "valor_base")
     irrf = maior(decimal_campo("irrf"), decimal_campo("irrf_calculado"))
     inss = maior(decimal_campo("inss"), decimal_campo("inss_calculado"))
-    csrf = maior(decimal_campo("csrf", "valor_csrf"), decimal_campo("csrf_calculado"))
+
+    if presente("valor_pis", "valor_cofins", "valor_csll", "pis_calculado", "cofins_calculado", "csll_calculado"):
+        csrf = (
+            maior(decimal_campo("valor_pis"), decimal_campo("pis_calculado"))
+            + maior(decimal_campo("valor_cofins"), decimal_campo("cofins_calculado"))
+            + maior(decimal_campo("valor_csll"), decimal_campo("csll_calculado"))
+        )
+    else:
+        # Notas antigas sem os componentes persistidos: unico valor disponivel.
+        csrf = maior(decimal_campo("csrf", "valor_csrf"), decimal_campo("csrf_calculado"))
 
     iss = Decimal("0")
     if bool(getattr(nota, "iss_retido", False)) or decimal_campo("valor_iss_retido") > 0:

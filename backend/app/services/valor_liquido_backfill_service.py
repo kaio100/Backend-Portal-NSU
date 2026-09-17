@@ -27,6 +27,11 @@ def recalcular_notas_salvas(batch_size: int = 500) -> dict[str, int]:
             for nota in notas:
                 analisadas += 1
                 ultimo_id = int(nota.id)
+                # A conferencia humana e a decisao final sobre o liquido correto
+                # (upsert_nota_by_chave tambem a preserva). Este backfill roda a
+                # cada startup e sobrescrevia o valor informado pelo revisor.
+                if str(nota.conferencia_status or "").strip().lower() not in {"", "pendente"}:
+                    continue
                 calculado = calcular_liquido_com_retencoes_salvas(nota)
                 informado = money(Decimal(str(nota.valor_liquido))) if nota.valor_liquido is not None else None
                 status = "Correto" if informado is not None and abs(informado - calculado) <= Decimal("0.01") else "Divergente"

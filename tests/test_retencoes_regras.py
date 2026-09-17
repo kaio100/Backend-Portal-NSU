@@ -201,3 +201,66 @@ def test_liquido_salvo_deduz_csrf_informado_e_irrf_calculado():
         valor_outras_retencoes="0", valor_desconto_incondicionado="0", valor_desconto_condicionado="0",
     )
     assert calcular_liquido_com_retencoes_salvas(nota) == Decimal("13430.76")
+
+
+def test_planilha_ausente_nao_fica_cacheada_como_vazia(monkeypatch, tmp_path):
+    # Regressao: com lru_cache, uma falha de leitura na inicializacao do
+    # container deixava todas as notas do deploy com "Regra fiscal nao
+    # encontrada" mesmo com a regra na planilha.
+    from backend.app.services import retencoes_regras_service as svc
+
+    monkeypatch.setattr(svc, "_REGRAS_CACHE", None)
+    monkeypatch.setattr(svc, "REGRAS_XLSX_PATH", tmp_path / "nao_existe.xlsx")
+    assert svc.carregar_regras_retencao() == {}
+    assert svc._REGRAS_CACHE is None  # nada cacheado
+
+    # Planilha volta a estar disponivel: proxima chamada carrega de verdade.
+    monkeypatch.setattr(svc, "REGRAS_XLSX_PATH", svc.PROJECT_ROOT / "RETENCOES_REGRAS.xlsx")
+    regras = svc.carregar_regras_retencao()
+    assert "17.02" in regras and "7.10" in regras
+    assert svc._REGRAS_CACHE is regras
+
+
+def test_liquido_com_retencoes_salvas_abate_pis_cofins_csll_por_componente():
+    # Regressao: o backfill de startup tratava o CSRF como bloco unico e
+    # divergia da analise fiscal (componente a componente), reescrevendo o
+    # valor_liquido_correto a cada deploy sem atualizar os alertas.
+    from decimal import Decimal
+    from types import SimpleNamespace
+    from backend.app.services.retencoes_calculo_service import calcular_liquido_com_retencoes_salvas
+
+    nota = SimpleNamespace(
+        valor_servico=Decimal("550.66"), irrf=None, irrf_calculado=Decimal("8.26"),
+        inss=None, inss_calculado=Decimal("0"),
+        valor_pis=Decimal("9.09"), valor_cofins=Decimal("41.85"), valor_csll=None,
+        pis_calculado=Decimal("3.58"), cofins_calculado=Decimal("16.52"), csll_calculado=Decimal("5.51"),
+        csrf=Decimal("50.94"), csrf_calculado=Decimal("25.61"), iss_retido=False,
+    )
+    # 550.66 - 8.26 - max(9.09,3.58) - max(41.85,16.52) - max(0,5.51) = 485.95
+    assert calcular_liquido_com_retencoes_salvas(nota) == Decimal("485.95")
+
+    antiga = SimpleNamespace(valor_servico=Decimal("100"), csrf=Decimal("4.65"), csrf_calculado=Decimal("0"), iss_retido=False)
+    assert calcular_liquido_com_retencoes_salvas(antiga) == Decimal("95.35")
+
+
+def test_backfill_de_startup_nao_toca_nota_conferida(monkeypatch):
+    from backend.app.services import valor_liquido_backfill_service as svc
+    from backend.app.db.session import SessionLocal, init_db
+    from backend.app.db.models import Empresa, Nota
+    from decimal import Decimal
+
+    init_db()
+    with SessionLocal() as db:
+        db.query(Nota).delete(); db.query(Empresa).delete(); db.commit()
+        empresa = Empresa(nome="Backfill LTDA", cnpj="22333444000157", ambiente="producao", ativo=True, grupo="planning_hub")
+        db.add(empresa); db.flush()
+        conferida = Nota(empresa_id=empresa.id, chave="C" * 44, valor_servico=Decimal("100"), valor_liquido=Decimal("100"), valor_liquido_correto=Decimal("77.00"), conferencia_status="ok", responsavel="Revisor")
+        pendente = Nota(empresa_id=empresa.id, chave="P" * 44, valor_servico=Decimal("100"), valor_liquido=Decimal("100"), valor_liquido_correto=Decimal("77.00"), conferencia_status="pendente")
+        db.add_all([conferida, pendente]); db.commit()
+        ids = (conferida.id, pendente.id)
+
+    svc.recalcular_notas_salvas()
+    with SessionLocal() as db:
+        assert db.get(Nota, ids[0]).valor_liquido_correto == Decimal("77.00")   # preservada
+        assert db.get(Nota, ids[1]).valor_liquido_correto == Decimal("100.00")  # recalculada
+        db.query(Nota).delete(); db.query(Empresa).delete(); db.commit()

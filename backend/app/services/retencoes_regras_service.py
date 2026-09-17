@@ -3,11 +3,14 @@ from __future__ import annotations
 import re
 import unicodedata
 from decimal import Decimal, InvalidOperation
-from functools import lru_cache
+import logging
 from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+
+
+logger = logging.getLogger(__name__)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -97,19 +100,50 @@ def _regra_from_row(row: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-@lru_cache(maxsize=1)
-def carregar_regras_retencao() -> dict[str, dict[str, Any]]:
-    if not REGRAS_XLSX_PATH.exists():
-        return {}
+_REGRAS_CACHE: dict[str, dict[str, Any]] | None = None
+
+
+def _ler_planilha() -> dict[str, dict[str, Any]]:
     wb = load_workbook(REGRAS_XLSX_PATH, data_only=True, read_only=True)
-    ws = wb["Planilha2"]
-    rows = list(ws.iter_rows(values_only=True))
+    try:
+        ws = wb["Planilha2"]
+        rows = list(ws.iter_rows(values_only=True))
+    finally:
+        wb.close()
     headers = [str(value or "").strip() for value in rows[0]]
     regras: dict[str, dict[str, Any]] = {}
     for row in rows[1:]:
         regra = _regra_from_row(dict(zip(headers, row)))
         if regra:
             regras[regra["subitem"]] = regra
+    return regras
+
+
+def carregar_regras_retencao() -> dict[str, dict[str, Any]]:
+    """Carrega a planilha uma vez por processo.
+
+    Um resultado vazio (arquivo ausente, aba renomeada, falha de leitura) NAO
+    e cacheado e e logado como erro: a versao anterior usava lru_cache e uma
+    unica falha na inicializacao do container deixava TODAS as notas daquele
+    deploy com "Regra fiscal nao encontrada" mesmo com a regra na planilha
+    (milhares de notas em producao).
+    """
+    global _REGRAS_CACHE
+    if _REGRAS_CACHE:
+        return _REGRAS_CACHE
+    if not REGRAS_XLSX_PATH.exists():
+        logger.error("Planilha de regras fiscais nao encontrada em %s", REGRAS_XLSX_PATH)
+        return {}
+    try:
+        regras = _ler_planilha()
+    except Exception:
+        logger.exception("Falha ao ler a planilha de regras fiscais %s", REGRAS_XLSX_PATH)
+        return {}
+    if not regras:
+        logger.error("Planilha de regras fiscais %s carregou 0 regras", REGRAS_XLSX_PATH)
+        return {}
+    _REGRAS_CACHE = regras
+    logger.info("Planilha de regras fiscais carregada: %s subitens de %s", len(regras), REGRAS_XLSX_PATH)
     return regras
 
 
