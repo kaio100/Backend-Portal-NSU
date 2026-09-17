@@ -34,15 +34,25 @@
             font-family: Arial, "Microsoft Sans Serif", sans-serif;
             font-size: 7pt;
             color: #000;
-            /* Margem mínima para a moldura não ser cortada na borda do papel. */
+            margin: 0;
+        }
+
+        /* Moldura do documento. Fica em um div, e não no body, porque o dompdf
+           ignora `width` no body e o dimensiona pela página inteira: o conteúdo
+           ficava 6pt deslocado à direita, as divisórias terminavam fora do papel
+           (601pt em 595pt) e a borda esquerda caía em meio pixel na tela,
+           apagada em 100% de zoom. A4 = 595.28pt; com margem de 2pt, 591pt. */
+        .page {
             margin: 2pt;
+            width: 591pt;
             /* Ocupa a altura da página para que a borda inferior fique no fim
                da folha, abaixo do texto do rodapé. */
-            min-height: 838pt;
+            min-height: 788pt;
             /* Espaçamento interno em branco: evita que as linhas divisórias
                encostem na borda da margem (conforme NT). */
             padding: 4pt 6pt 42pt;
-            border: var(--danfse-border-width) solid var(--danfse-border-color);
+            /* Moldura externa em 1.5pt (2px em 96dpi): nunca vira meio pixel. */
+            border: 1.5pt solid var(--danfse-border-color);
         }
 
         table {
@@ -194,12 +204,20 @@
             top: 8pt;
         }
 
-        .receipt {
+        /* O dompdf ignora `right` (e `width`) em tabela com position fixed e
+           usa a largura da página: a tabela vazava 6pt para fora do papel à
+           direita. O wrapper fixo com largura explícita resolve. */
+        .receipt-wrap {
             position: fixed;
             left: 6pt;
-            right: 6pt;
-            /* Dompdf ancora o inicio da tabela ao usar bottom em elementos fixos. */
-            bottom: 48pt;
+            width: 583.28pt;
+            /* Antes, `bottom: 48pt` na própria tabela compensava o dompdf
+               ancorar o topo da tabela fixa; no div o bottom é o real. */
+            bottom: 8pt;
+        }
+
+        .receipt {
+            width: 100%;
             border-top: var(--danfse-border-width) solid var(--danfse-border-color);
             border-bottom: var(--danfse-border-width) solid var(--danfse-border-color);
             page-break-inside: avoid;
@@ -257,6 +275,7 @@
     <div class="watermark_homologacao">HOMOLOGAÇÃO</div>
     <?php endif; ?>
 
+    <div class="page">
     <!-- Header -->
     <table class="header-table shaded">
         <tr>
@@ -919,6 +938,9 @@
             </table>
         </div>
 
+    </div><!-- .page -->
+
+    <div class="receipt-wrap">
     <table class="receipt">
         <tr>
             <td style="width: 25%;">
@@ -934,6 +956,7 @@
             </td>
         </tr>
     </table>
+    </div>
 
 </body>
 </html>
