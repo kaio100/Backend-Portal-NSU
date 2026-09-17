@@ -20,19 +20,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import threading
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
-from backend.app.db.models import Empresa, Nota
-from backend.app.db.session import SessionLocal, init_db
-from backend.app.services import eventos_sync_service
-from backend.app.services.storage_service import get_storage_service
+
+def _garantir_pool_para(workers: int) -> None:
+    """Cada worker segura uma conexao; o pool e criado ao importar a sessao.
+
+    Precisa rodar antes de qualquer import de backend.app.* (o .env de producao
+    fixa DATABASE_POOL_SIZE=2 para nao disputar o pooler com o Railway).
+    """
+    atual = int(os.environ.get("DATABASE_POOL_SIZE") or 5)
+    if atual < workers + 1:
+        os.environ["DATABASE_POOL_SIZE"] = str(workers + 1)
 
 
 def _ids_alvo(db, empresa_id: int | None, desde: date | None, ate: date | None, limite: int | None) -> list[tuple[int, int]]:
+    from backend.app.db.models import Empresa, Nota
+
     query = (
         db.query(Nota.id, Nota.empresa_id)
         .join(Empresa, Empresa.id == Nota.empresa_id)
@@ -56,6 +65,11 @@ def _ids_alvo(db, empresa_id: int | None, desde: date | None, ate: date | None, 
 
 def _processar_empresa(empresa_id: int, nota_ids: list[int], pausa: float, progresso, lock: threading.Lock) -> dict:
     """Roda em uma thread: uma sessao de banco, um certificado, notas em sequencia."""
+    from backend.app.db.models import Empresa, Nota
+    from backend.app.db.session import SessionLocal
+    from backend.app.services import eventos_sync_service
+    from backend.app.services.storage_service import get_storage_service
+
     storage = get_storage_service()
     contadores: Counter = Counter()
     alteradas: list[dict] = []
@@ -105,7 +119,13 @@ def executar(
     ate: date | None = None,
     workers: int = 1,
 ) -> dict:
+    from backend.app.db.session import SessionLocal, engine, init_db
+
     init_db()
+    capacidade = int(engine.pool.size() + getattr(engine.pool, "_max_overflow", 0)) if hasattr(engine.pool, "size") else workers
+    if workers > capacidade:
+        print(f"Aviso: pool de banco comporta {capacidade} conexoes; reduzindo workers de {workers} para {capacidade}", flush=True)
+        workers = capacidade
     with SessionLocal() as db:
         alvo = _ids_alvo(db, empresa_id, desde, ate, limite)
     por_empresa: dict[int, list[int]] = defaultdict(list)
@@ -160,6 +180,7 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=1, help="Empresas processadas em paralelo")
     parser.add_argument("--executar", action="store_true", help="Sem esta opcao apenas conta as notas alvo")
     args = parser.parse_args()
+    _garantir_pool_para(max(1, args.workers))
     relatorio = executar(
         empresa_id=args.empresa_id,
         desde=args.desde,
