@@ -53,7 +53,6 @@ def executar(confirmar: bool = False, grupo: str = "planning_hub") -> dict:
         limite=1000,
         pausa=0.6,
         gerar_pdf_espelho=True,
-        baixar_pdf_oficial=True,
         forcar=True,
     )
     with SessionLocal() as db:

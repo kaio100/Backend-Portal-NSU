@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -13,6 +14,8 @@ from backend.app.repositories import jobs_repo, processos_repo
 from backend.app.schemas.consultas import ConsultaIniciarRequest
 from backend.app.services import secrets_service
 
+
+logger = logging.getLogger(__name__)
 
 PENDENTE_STATUSES = ("pendente", "queued", "queue", "aguardando", "em_fila")
 RODANDO_STATUSES = ("rodando", "running", "processando", "em_execucao", "executando")
@@ -173,7 +176,16 @@ def list_certificados_elegiveis(
     for certificado in certificados:
         try:
             secrets_service.get_secret_value(db, str(certificado.senha_secret_ref))
-        except secrets_service.SecretsServiceError:
+        except secrets_service.SecretsServiceError as exc:
+            # Sem este log o certificado simplesmente some da fila: nenhuma
+            # consulta e enfileirada e o portal fica parado sem explicacao.
+            # A causa tipica e SECRETS_KEY trocada sem recadastrar as senhas.
+            logger.error(
+                "Certificado %s ignorado na consulta: senha nao pode ser lida (%s). "
+                "Verifique a SECRETS_KEY ou recadastre a senha do certificado.",
+                certificado.id,
+                exc,
+            )
             continue
         elegiveis.append(certificado)
     return elegiveis
@@ -193,7 +205,6 @@ def _create_consulta_job(db: Session, certificado: Certificado, options: Consult
             "limite": limite,
             "pausa": pausa,
             "gerar_pdf_espelho": options.gerar_pdf_espelho,
-            "baixar_pdf_oficial": options.baixar_pdf_oficial,
         },
     )
     jobs_repo.create_job(
@@ -214,7 +225,6 @@ def _create_consulta_job(db: Session, certificado: Certificado, options: Consult
                 "limite": limite,
                 "pausa": pausa,
                 "gerar_pdf_espelho": options.gerar_pdf_espelho,
-                "baixar_pdf_oficial": options.baixar_pdf_oficial,
             },
         },
     )
@@ -244,9 +254,10 @@ def enqueue_consultas_pendentes(
         else _active_consulta_certificado_ids(db, [int(certificado.id) for certificado in certificados])
     )
 
+    # `options.limite` e o teto de consultas NSU de cada job, nao a quantidade
+    # de certificados do ciclo. Usa-lo aqui fazia um limite pequeno (ex.: 1)
+    # enfileirar um unico certificado e deixar os demais sem consulta.
     for certificado in certificados:
-        if len(processos_criados) >= _effective_limite(options.limite):
-            break
         if not options.forcar and int(certificado.id) in certificados_ativos:
             certificados_ignorados += 1
             continue

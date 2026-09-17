@@ -14,6 +14,7 @@ Path("data/test_auth_account.db").unlink(missing_ok=True)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from backend.app.core.config import settings
 from backend.app.core.security import create_access_token, hash_password  # noqa: E402
 from backend.app.db.models import Empresa, Usuario  # noqa: E402
 from backend.app.db.session import SessionLocal, init_db  # noqa: E402
@@ -91,13 +92,20 @@ def test_administrador_pode_listar_grupos_e_login_existente_continua_funcionando
     assert login.json()["usuario"]["email"] == usuario.email
 
 
-def test_login_local_entra_sem_senha_com_usuario_ativo():
+def test_login_local_entra_sem_senha_com_usuario_ativo(monkeypatch):
+    # O login automatico e parte do perfil local explicito, a mesma chave do
+    # autocadastro. Nao depende de ENVIRONMENT: iniciar_local.py roda como
+    # production e antes disso o frontend em localhost recebia 404 aqui.
     _reset_db()
     usuario, _token = _criar_usuario(email="admin-local@example.com", is_admin=True)
 
     with TestClient(app) as client:
-        response = client.post("/auth/local")
+        fechado = client.post("/auth/local")
+        monkeypatch.setattr(settings, "local_signup_enabled", True)
+        monkeypatch.setattr(settings, "environment", "production")
+        aberto = client.post("/auth/local")
 
-    assert response.status_code == 200
-    assert response.json()["access_token"]
-    assert response.json()["usuario"]["email"] == usuario.email
+    assert fechado.status_code == 404
+    assert aberto.status_code == 200
+    assert aberto.json()["access_token"]
+    assert aberto.json()["usuario"]["email"] == usuario.email

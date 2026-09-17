@@ -8,9 +8,8 @@ import uuid
 from backend.app.core.config import settings
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.repositories import empresas_repo, jobs_repo, processos_repo
-from backend.app.services import consultas_service
-from backend.app.worker.jobs import processar_job
 
+from backend.app.worker.jobs import processar_job
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="NFS-e backend worker")
@@ -19,7 +18,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--worker-id", default="", help="Identificador do worker")
     parser.add_argument("--grupo", default="", help="Processa somente a fila deste grupo")
     return parser
-
 
 def processar_proximo_job(worker_id: str, grupo_worker: str | None = None) -> dict:
     with SessionLocal() as db:
@@ -32,13 +30,17 @@ def processar_proximo_job(worker_id: str, grupo_worker: str | None = None) -> di
             jobs_repo.mark_job_pending(db, job)
             db.commit()
             return {"ok": False, "job_id": job.id, "motivo": "grupo_incorreto"}
-        if job.tipo == "consulta_nfse" and not consultas_service.is_enabled(db, grupo=grupo):
-            jobs_repo.mark_job_cancelado(db, job, "Consultas desativadas.")
+        # O que decide se um job roda e o status do proprio processo, nao o
+        # flag global de monitoramento automatico. Desativar as consultas ja
+        # cancela processos e jobs explicitamente (desativar_consultas_auto-
+        # maticas). Olhar so o flag matava tambem a consulta pontual, aquela
+        # disparada com automatico=false, antes de ela chegar a executar.
+        if job.tipo == "consulta_nfse":
             processo = processos_repo.get_processo(db, int(job.processo_id))
-            if processo is not None:
-                processos_repo.cancelar_processo(db, processo)
-            db.commit()
-            return {"ok": False, "job_id": job.id, "motivo": "consultas_desativadas"}
+            if processo is None or processo.status == "cancelado":
+                jobs_repo.mark_job_cancelado(db, job, "Processo cancelado.")
+                db.commit()
+                return {"ok": False, "job_id": job.id, "motivo": "processo_cancelado"}
         print(
             "Job reservado",
             {
@@ -51,7 +53,6 @@ def processar_proximo_job(worker_id: str, grupo_worker: str | None = None) -> di
             },
         )
         return processar_job(db, job, worker_id)
-
 
 def main() -> None:
     args = build_parser().parse_args()
@@ -69,7 +70,6 @@ def main() -> None:
                 time.sleep(args.sleep)
     except KeyboardInterrupt:
         print("Worker interrompido.")
-
 
 if __name__ == "__main__":
     main()

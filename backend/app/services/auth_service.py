@@ -21,7 +21,14 @@ def autenticar(db: Session, email: str, senha: str) -> tuple[Usuario, str]:
     return usuario, token
 
 
-def criar_usuario(db: Session, empresa_id: int, email: str, senha: str, nome: str | None = None) -> Usuario:
+def criar_usuario(
+    db: Session,
+    empresa_id: int,
+    email: str,
+    senha: str,
+    nome: str | None = None,
+    grupo: str = "planning_hub",
+) -> Usuario:
     email_normalizado = (email or "").strip().lower()
     if usuarios_repo.get_usuario_by_email(db, email_normalizado) is not None:
         raise AuthError("Ja existe um usuario com este email.")
@@ -33,6 +40,7 @@ def criar_usuario(db: Session, empresa_id: int, email: str, senha: str, nome: st
             "senha_hash": hash_password(senha),
             "nome": nome,
             "ativo": True,
+            "grupo": grupo,
             "papel": "operador",
         },
     )

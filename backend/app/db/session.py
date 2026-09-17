@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
+import time
 
 from sqlalchemy import create_engine, event, inspect, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.core.config import settings
 
 
 def _connect_args() -> dict:
     if settings.database_url.startswith("sqlite"):
-        return {"check_same_thread": False}
+        # O worker e a ingestao incremental podem gravar em threads distintas.
+        # Um timeout maior, combinado com o lock abaixo, evita falhas transitorias
+        # quando o SQLite esta alternando entre esses escritores.
+        return {"check_same_thread": False, "timeout": 60}
     return {}
 
 
@@ -25,6 +31,55 @@ def _ensure_sqlite_parent() -> None:
 _ensure_sqlite_parent()
 
 _is_sqlite = settings.database_url.startswith("sqlite")
+
+
+def executar_escrita_com_retry(operacao, tentativas: int = 5, pausa_base: float = 0.3):
+    """Reexecuta uma escrita curta que falhou por concorrencia no SQLite.
+
+    O SQLite recusa na hora, sem respeitar busy_timeout, a escrita de uma
+    transacao cujo snapshot de leitura ficou defasado (SQLITE_BUSY_SNAPSHOT).
+    Como `operacao` abre a propria sessao e e idempotente, repeti-la resolve:
+    a tentativa seguinte le um snapshot novo.
+    """
+    for tentativa in range(1, tentativas + 1):
+        try:
+            return operacao()
+        except OperationalError as exc:
+            if "database is locked" not in str(exc).lower() or tentativa == tentativas:
+                raise
+            time.sleep(pausa_base * tentativa)
+
+
+def renovar_snapshot(db: Session) -> None:
+    """Encerra a transacao de leitura pendente de uma sessao longa.
+
+    No SQLite, uma sessao que leu ha muito tempo e so agora vai escrever tem
+    snapshot defasado se outra sessao gravou nesse intervalo, e a escrita e
+    recusada na hora (SQLITE_BUSY_SNAPSHOT). Chame isto imediatamente antes
+    de um bloco de escrita em sessao de vida longa. Sem mudancas pendentes o
+    rollback nao descarta nada; apenas forca a proxima query a abrir snapshot
+    novo. Com mudancas pendentes nao faz nada, para nao perde-las.
+    """
+    if not _is_sqlite:
+        return
+    if db.in_transaction() and not (db.new or db.dirty or db.deleted):
+        db.rollback()
+
+
+@contextmanager
+def sqlite_write_lock():
+    """Mantido por compatibilidade; hoje nao serializa nada.
+
+    A versao anterior envolvia cada flush() e commit() em um RLock. Isso
+    causava um deadlock cruzado com o lock de escrita do proprio SQLite: a
+    thread A entrava em flush() segurando o RLock e esperava (busy_timeout) o
+    lock do SQLite que a thread B segurava desde o seu flush; B, para liberar,
+    precisava de commit(), que precisava do RLock. Cada tentativa expirava em
+    60 s e o job de consulta morria com "database is locked". A coordenacao
+    entre escritores fica a cargo do busy_timeout do SQLite, das sessoes
+    curtas com retry (executar_escrita_com_retry) e de renovar_snapshot().
+    """
+    yield
 
 _engine_options = {
     "connect_args": _connect_args(),
@@ -53,11 +108,15 @@ if _is_sqlite:
         try:
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA synchronous=NORMAL")
-            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute("PRAGMA busy_timeout=60000")
             cursor.execute("PRAGMA temp_store=MEMORY")
         finally:
             cursor.close()
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+class PortalSession(Session):
+    """Session do portal. Ver sqlite_write_lock() sobre por que nao ha lock aqui."""
+
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=PortalSession)
 
 
 def get_db():

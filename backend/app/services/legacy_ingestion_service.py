@@ -7,7 +7,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from xml.etree import ElementTree
 
 from sqlalchemy.orm import Session
@@ -17,7 +17,6 @@ from backend.app.core.observability import alert_failure
 from backend.app.db.models import Evento, Nota, Processo
 from backend.app.repositories import arquivos_repo, notas_repo
 from backend.app.services.danfse_service import DanfseService, friendly_pdf_filename
-from backend.app.services.pdf_status_service import aplicar_status_pdf_oficial
 from backend.app.services.nfse_xml_parser import extrair_dados_nfse
 from backend.app.services.operational_fields_service import (
     calcular_status_simples_nacional_xml,
@@ -810,6 +809,7 @@ def ingerir_saida_legado(
     commit_every: int | None = None,
     start_row: int = 0,
     gerar_pdf_espelho: bool = True,
+    should_stop: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     base_dir = Path(pasta_saida)
     index_path = base_dir / "index_nfse.csv"
@@ -882,7 +882,15 @@ def ingerir_saida_legado(
     empresa_cnpj = str(processo.empresa.cnpj if processo.empresa else processo.empresa_id)
 
     linhas_processadas = 0
-    for row in rows:
+    for indice_linha, row in enumerate(rows):
+        # A ingestao incremental roda em thread separada enquanto o motor
+        # legado consulta o ADN. Sem um ponto de parada aqui ela sobrevive ao
+        # fim do job e passa a gravar em paralelo com a sessao principal, o
+        # que no SQLite estoura "database is locked".
+        if should_stop is not None and should_stop():
+            counters["interrompido"] = True
+            counters["proxima_linha_index"] = safe_start_row + indice_linha
+            break
         try:
             chave = (row.get("chave") or "").strip()
             if not chave:
@@ -967,18 +975,28 @@ def ingerir_saida_legado(
                 status_documento = status_existente
                 status_rotulo = getattr(nota_existente, "status_rotulo", None) or status_existente.capitalize()
             pdf_espelho_path = None
+            pdf_espelho_reutilizado = False
+            pdf_filename = ""
             if pdf_storage_key is None and gerar_pdf_espelho:
                 try:
                     pdf_tipo = "pdf_espelho"
                     dados_pdf = extrair_dados_nfse(xml_path, prefeitura_info=None)
                     pdf_filename = friendly_pdf_filename(dados_pdf)
                     pdf_storage_key = build_pdf_espelho_key(empresa_cnpj, ano, mes, pdf_filename)
-                    pdf_espelho_path = _gerar_pdf_espelho_path(
-                        xml_path,
-                        row,
-                        pdf_filename,
-                        status_documento=status_documento,
-                    )
+                    precisa_carimbo = str(status_documento or "").strip().lower() in {"cancelada", "substituida"}
+                    if not precisa_carimbo and storage.exists(pdf_storage_key):
+                        # A ingestao pos-processamento revisita todas as linhas
+                        # da corrida, quase todas ja ingeridas pela incremental.
+                        # Gerar o PDF via PHP (1-2 s cada) para descarta-lo em
+                        # seguida custava ~40 min por job de 1.600 notas.
+                        pdf_espelho_reutilizado = True
+                    else:
+                        pdf_espelho_path = _gerar_pdf_espelho_path(
+                            xml_path,
+                            row,
+                            pdf_filename,
+                            status_documento=status_documento,
+                        )
                 except Exception as exc:
                     # Falha ao montar o PDF nao pode impedir que a nota e o
                     # XML, que sao os documentos fiscais de origem, entrem
@@ -1073,8 +1091,6 @@ def ingerir_saida_legado(
 
             if pdf_path is not None and pdf_storage_key is not None:
                 pdf_bytes = pdf_path.read_bytes()
-                if pdf_tipo == "pdf_oficial":
-                    aplicar_status_pdf_oficial(nota, pdf_bytes, xml_resumo.get("status_documento"))
                 meta, imported = _put_file_if_needed(storage, pdf_storage_key, pdf_path, "application/pdf")
                 counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
                 if _registrar_arquivo(
@@ -1089,6 +1105,23 @@ def ingerir_saida_legado(
                     int(meta["size"]),
                     _sha256(pdf_bytes),
                     pdf_path.name,
+                ):
+                    counters["arquivos_registrados"] += 1
+            elif pdf_espelho_reutilizado and pdf_storage_key is not None:
+                pdf_bytes = storage.get_bytes(pdf_storage_key)
+                counters["arquivos_existentes"] += 1
+                if _registrar_arquivo(
+                    db,
+                    storage,
+                    processo.empresa_id,
+                    processo.id,
+                    nota.id,
+                    pdf_tipo,
+                    pdf_storage_key,
+                    "application/pdf",
+                    len(pdf_bytes),
+                    _sha256(pdf_bytes),
+                    pdf_filename or Path(pdf_storage_key).name,
                 ):
                     counters["arquivos_registrados"] += 1
             elif pdf_espelho_path is not None and pdf_storage_key is not None:
@@ -1132,6 +1165,9 @@ def ingerir_saida_legado(
             if commit_every and linhas_processadas % max(1, commit_every) == 0:
                 db.commit()
         except Exception as exc:
+            # Uma falha de uma linha nao pode deixar a sessao em transacao
+            # quebrada e contaminar os documentos seguintes do lote.
+            db.rollback()
             counters["erros"] += 1
             if len(counters["erros_detalhes"]) < 20:
                 counters["erros_detalhes"].append(
@@ -1325,7 +1361,6 @@ def _ingerir_por_varredura(
 
             if pdf_path is not None and pdf_storage_key is not None:
                 pdf_bytes = pdf_path.read_bytes()
-                aplicar_status_pdf_oficial(nota, pdf_bytes, status_documento)
                 meta, imported = _put_file_if_needed(storage, pdf_storage_key, pdf_path, "application/pdf")
                 counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
                 if _registrar_arquivo(
@@ -1374,6 +1409,7 @@ def _ingerir_por_varredura(
                 ):
                     counters["arquivos_registrados"] += 1
         except Exception:
+            db.rollback()
             counters["erros"] += 1
 
     return counters

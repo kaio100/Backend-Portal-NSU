@@ -46,7 +46,6 @@ def criar_processo_com_job(db: Session, payload: ProcessoCreate, grupo: str | No
                 "limite": payload.limite,
                 "pausa": payload.pausa,
                 "gerar_pdf_espelho": payload.gerar_pdf_espelho,
-                "baixar_pdf_oficial": payload.baixar_pdf_oficial,
             },
         )
         jobs_repo.create_job(

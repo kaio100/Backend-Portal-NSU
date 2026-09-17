@@ -31,11 +31,10 @@ class Settings(BaseSettings):
     worker_real_max_pausa: float = 0.0
     worker_consulta_lote_tamanho: int = 1000
     worker_adn_lote: bool = True
-    worker_pdf_official_max_per_job: int = 25
-    worker_pdf_official_delay_seconds: float = 0.5
     worker_temp_dir: str = "data/tmp_worker"
     api_worker_enabled: bool = True
     embedded_scheduler_enabled: bool = True
+    local_signup_enabled: bool = False
     api_worker_sleep: float = 0.2
     api_worker_concurrency: int = 1
     consultas_scheduler_sleep: float = 1
@@ -51,8 +50,6 @@ class Settings(BaseSettings):
     download_lote_max_notas: int = 10000
     download_storage_workers: int = 16
     download_temp_max_age_hours: int = 24
-    pdf_status_revalidation_enabled: bool = True
-    pdf_status_revalidation_batch_size: int = 200
     certificado_upload_max_bytes: int = 5 * 1024 * 1024
     danfse_library_root: str = "backend/danfse"
     danfse_php_binary: str = "php"

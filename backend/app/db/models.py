@@ -130,6 +130,9 @@ class Processo(TimestampMixin, Base):
     limite: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pausa: Mapped[float | None] = mapped_column(Float, nullable=True)
     gerar_pdf_espelho: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Legado: o download do PDF oficial do ADN foi desativado. Mantida por
+    # compatibilidade com bancos existentes (NOT NULL sem default no servidor);
+    # o backend sempre grava False e nao a le.
     baixar_pdf_oficial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     erro_resumo: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)

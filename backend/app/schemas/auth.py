@@ -20,6 +20,26 @@ class LoginRequest(BaseModel):
         return email
 
 
+class LocalSignupRequest(BaseModel):
+    nome: str = Field(min_length=1, max_length=255)
+    email: str
+    senha: str = Field(min_length=8)
+    grupo: str = Field(default="planning_hub", min_length=1, max_length=40)
+
+    @field_validator("email")
+    @classmethod
+    def validar_email_cadastro(cls, value: str) -> str:
+        email = (value or "").strip().lower()
+        if not _EMAIL_RE.match(email):
+            raise ValueError("Email invalido.")
+        return email
+
+    @field_validator("grupo")
+    @classmethod
+    def validar_grupo(cls, value: str) -> str:
+        return (value or "").strip()
+
+
 class UsuarioRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

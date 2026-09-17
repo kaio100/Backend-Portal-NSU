@@ -702,18 +702,20 @@ def test_execucao_real_aplica_nsu_inicio_usuario_no_motor_e_estado(monkeypatch):
         def salvar_estado(self, cnpj, ultimo_nsu):
             self.estados.append((cnpj, int(ultimo_nsu)))
 
-        def executar_baixa_empresa(self, **kwargs):
-            self.chamadas.append(kwargs)
-            return {
-                "empresa": kwargs["config"].cnpj,
-                "cnpj": kwargs["config"].cnpj,
-                "pasta_saida": None,
-                "status": "finalizado",
-                "ultimo_nsu": kwargs["inicio"],
-            }
-
     fake_legacy = FakeLegacy()
+
+    def fake_baixa(**kwargs):
+        fake_legacy.chamadas.append(kwargs)
+        return {
+            "empresa": kwargs["config"].cnpj,
+            "cnpj": kwargs["config"].cnpj,
+            "pasta_saida": None,
+            "status": "finalizado",
+            "ultimo_nsu": kwargs["inicio"],
+        }
+
     monkeypatch.setattr(legacy_processing_service, "_load_legacy_module", lambda processo_id: fake_legacy)
+    monkeypatch.setattr(legacy_processing_service, "_executar_baixa_empresa_compat", fake_baixa)
     monkeypatch.setattr(
         legacy_processing_service.cnpj_enrichment_service,
         "enriquecer_cnpjs_do_processo",
@@ -748,7 +750,6 @@ def test_execucao_real_aplica_nsu_inicio_usuario_no_motor_e_estado(monkeypatch):
             limite=1,
             pausa=0,
             gerar_pdf_espelho=True,
-            baixar_pdf_oficial=False,
         )
         db.add(processo)
         db.flush()
@@ -765,7 +766,6 @@ def test_execucao_real_aplica_nsu_inicio_usuario_no_motor_e_estado(monkeypatch):
                 "limite": 1,
                 "pausa": 0,
                 "gerar_pdf_espelho": True,
-                "baixar_pdf_oficial": False,
             },
         )
         db.add(job)

@@ -13,6 +13,13 @@
 storage/
 data/
 saida_adn_nfse/
+.runlogs/
+.deploy.env
+*.db
+*.sqlite
+*.sqlite3
+*-shm
+*-wal
 *.pfx
 *.p12
 

@@ -15,7 +15,6 @@ class ConsultaIniciarRequest(BaseModel):
     limite: int = Field(default_factory=lambda: settings.consultas_default_limite, ge=1)
     pausa: float = Field(default_factory=lambda: settings.consultas_default_pausa, ge=0)
     gerar_pdf_espelho: bool = True
-    baixar_pdf_oficial: bool = True
     forcar: bool = False
 
     @field_validator("empresa_ids", "certificado_ids")

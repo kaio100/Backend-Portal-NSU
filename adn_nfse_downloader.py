@@ -56,7 +56,6 @@ except Exception:  # pragma: no cover
 ROOT_OUT = Path("saida_adn_nfse")
 DIR_JSON = ROOT_OUT / "json"
 DIR_XML = ROOT_OUT / "xml"
-DIR_DANFSE = ROOT_OUT / "danfse"
 DIR_RAW = ROOT_OUT / "raw"
 DIR_ESTADO = ROOT_OUT / "estado"
 
@@ -66,7 +65,7 @@ INDEX_UNICO_FILE = ROOT_OUT / "index_nfse.csv"
 # ocorrencias_nsu.csv = trilha completa de distribuição por NSU, inclusive chave repetida.
 OCORRENCIAS_FILE = ROOT_OUT / "ocorrencias_nsu.csv"
 
-for folder in [ROOT_OUT, DIR_JSON, DIR_XML, DIR_DANFSE, DIR_RAW, DIR_ESTADO]:
+for folder in [ROOT_OUT, DIR_JSON, DIR_XML, DIR_RAW, DIR_ESTADO]:
     folder.mkdir(parents=True, exist_ok=True)
 
 
@@ -125,7 +124,6 @@ class Config:
     cnpj: str
     verify_ssl: bool
     base_contribuintes: str
-    base_danfse: str
 
     @staticmethod
     def from_env(ambiente_cli: Optional[str] = None) -> "Config":
@@ -135,10 +133,8 @@ class Config:
 
         if ambiente == "producao":
             base_contribuintes = "https://adn.nfse.gov.br/contribuintes"
-            base_danfse = "https://adn.nfse.gov.br/danfse"
         else:
             base_contribuintes = "https://adn.producaorestrita.nfse.gov.br/contribuintes"
-            base_danfse = "https://adn.producaorestrita.nfse.gov.br/danfse"
 
         cfg = Config(
             ambiente=ambiente,
@@ -147,7 +143,6 @@ class Config:
             cnpj=so_digitos(os.getenv("NFSE_CNPJ", "")),
             verify_ssl=str_bool(os.getenv("NFSE_VERIFY_SSL", "true"), default=True),
             base_contribuintes=base_contribuintes,
-            base_danfse=base_danfse,
         )
         cfg.validar()
         return cfg
@@ -872,39 +867,6 @@ def cmd_eventos(args: argparse.Namespace) -> None:
         print(json.dumps(resultado.get("Erros"), ensure_ascii=False, indent=2))
 
 
-def cmd_danfse(args: argparse.Namespace) -> None:
-    cfg = Config.from_env(args.ambiente)
-    chave = so_digitos(args.chave)
-    if not chave:
-        raise RuntimeError("Informe --chave")
-
-    url = f"{cfg.base_danfse}/{chave}"
-    print("Baixando DANFSe")
-
-    resp = mtls_get(
-        cfg,
-        url,
-        accept="application/pdf, application/json, text/plain, */*",
-        timeout=240,
-    )
-    ctype = resp.headers.get("content-type", "")
-    print(f"HTTP {resp.status_code} | {ctype}")
-
-    if resp.status_code in TEMPORARY_STATUS:
-        print("Erro temporário do ADN/DANFSe. Tente novamente com pausa.")
-        return
-
-    if "pdf" in ctype.lower() or resp.content[:4] == b"%PDF":
-        path = DIR_DANFSE / f"{chave}.pdf"
-        path.write_bytes(resp.content)
-        print("PDF oficial salvo com sucesso")
-        return
-
-    path = DIR_DANFSE / f"{chave}.txt"
-    path.write_text(resp.text or "", encoding="utf-8", errors="ignore")
-    print("Resposta inesperada do DANFSe salva para diagnóstico local")
-
-
 def cmd_decode(args: argparse.Namespace) -> None:
     print(f"Decodificando JSONs em: {DIR_JSON}")
     total = 0
@@ -976,11 +938,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ambiente", choices=["producao", "restrita"], default=None)
     p.add_argument("--chave", required=True)
     p.set_defaults(func=cmd_eventos)
-
-    p = sub.add_parser("danfse", help="Tenta baixar DANFSe PDF por chave usando mTLS")
-    p.add_argument("--ambiente", choices=["producao", "restrita"], default=None)
-    p.add_argument("--chave", required=True)
-    p.set_defaults(func=cmd_danfse)
 
     p = sub.add_parser("decode", help="Reprocessa JSONs salvos e gera XML/index")
     p.set_defaults(func=cmd_decode)

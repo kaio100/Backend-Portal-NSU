@@ -87,6 +87,11 @@ class DanfseService:
             except subprocess.TimeoutExpired as exc:
                 alert_failure("danfse_generation", exc, numero_nfse=numero)
                 raise DanfseError("Tempo limite excedido na geracao do DANFSe.") from exc
+            except OSError as exc:
+                # Falhas de permissao ou de criacao do subprocesso nao podem
+                # escapar como HTTP 500 na rota de geracao do DANFSe.
+                alert_failure("danfse_generation", exc, numero_nfse=numero)
+                raise DanfseError("Nao foi possivel executar o PHP do DANFSe no ambiente do backend.") from exc
 
             if completed.returncode != 0:
                 detail = (completed.stderr or "").strip().splitlines()

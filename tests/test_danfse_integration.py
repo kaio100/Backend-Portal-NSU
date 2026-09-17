@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from backend.app.services.danfse_service import DanfseService
+from backend.app.services.danfse_service import DanfseError, DanfseService
 
 
 XML = b"<NFSe><infNFSe><nNFSe>12345</nNFSe></infNFSe></NFSe>"
@@ -28,3 +28,13 @@ def test_danfse_gera_pdf_e_envia_carimbo(monkeypatch, watermark):
     assert filename == "DANFSe-12345.pdf"
     assert comandos
     assert comandos[0][-1] == watermark if watermark else len(comandos[0]) == 4
+
+
+def test_danfse_trata_falha_ao_iniciar_php(monkeypatch):
+    def fail_run(*_args, **_kwargs):
+        raise PermissionError("acesso negado")
+
+    monkeypatch.setattr(subprocess, "run", fail_run)
+
+    with pytest.raises(DanfseError, match="Nao foi possivel executar o PHP"):
+        DanfseService().generate(XML)

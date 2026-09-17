@@ -6,7 +6,6 @@ import sys
 import threading
 import time
 import uuid
-from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -15,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
 from backend.app.db.models import Empresa, Job, Nota, Processo
-from backend.app.db.session import SessionLocal
+from backend.app.db.session import SessionLocal, executar_escrita_com_retry, renovar_snapshot
 from backend.app.repositories import certificados_repo, empresas_repo
 from backend.app.services import cnpj_enrichment_service, legacy_ingestion_service, logs_service, nsu_control_service, secrets_service
 from backend.app.services.storage_service import StorageService, get_storage_service
@@ -23,6 +22,12 @@ from backend.app.services.storage_service import StorageService, get_storage_ser
 
 class LegacyProcessingError(RuntimeError):
     pass
+
+
+# Tempo de espera pela parada da ingestao incremental. Passado o prazo, o
+# processamento aguarda indefinidamente em vez de seguir com duas threads
+# gravando no mesmo banco.
+INGESTAO_JOIN_TIMEOUT = 60
 
 
 def _maior_nsu_importado_por_cnpj(cnpj: str) -> int:
@@ -79,7 +84,6 @@ def _configure_legacy_output(legacy: Any, root_out: Path) -> None:
     legacy.ROOT_OUT = root_out
     legacy.DIR_JSON = root_out / "json"
     legacy.DIR_XML = root_out / "xml"
-    legacy.DIR_DANFSE = root_out / "danfse"
     legacy.DIR_RAW = root_out / "raw"
     legacy.DIR_ESTADO = root_out / "estado"
     legacy.INDEX_UNICO_FILE = root_out / "index_nfse.csv"
@@ -88,7 +92,6 @@ def _configure_legacy_output(legacy: Any, root_out: Path) -> None:
         legacy.ROOT_OUT,
         legacy.DIR_JSON,
         legacy.DIR_XML,
-        legacy.DIR_DANFSE,
         legacy.DIR_RAW,
         legacy.DIR_ESTADO,
     ]:
@@ -117,7 +120,6 @@ def _safe_legacy_result(result: Any) -> dict[str, Any] | str:
         "ultimo_nsu",
         "xmls_baixados",
         "xmls_evento",
-        "pdfs_gerados",
     }
     return {key: value for key, value in result.items() if key in allowed}
 
@@ -179,6 +181,7 @@ def _loop_ingestao_incremental(
                         commit_every=20,
                         start_row=proxima_linha_index,
                         gerar_pdf_espelho=bool(processo.gerar_pdf_espelho),
+                        should_stop=stop_event.is_set,
                     )
                     proxima_linha_index = int(ingestao.get("proxima_linha_index") or proxima_linha_index)
                     if _ingestao_tem_movimento(ingestao):
@@ -227,10 +230,8 @@ def _build_legacy_config(legacy: Any, empresa_item: dict[str, Any]) -> Any:
     ambiente = (empresa_item.get("ambiente") or "producao").lower().strip()
     if ambiente == "producao":
         base_contribuintes = "https://adn.nfse.gov.br/contribuintes"
-        base_danfse = "https://adn.nfse.gov.br/danfse"
     elif ambiente in {"restrita", "homologacao"}:
         base_contribuintes = "https://adn.producaorestrita.nfse.gov.br/contribuintes"
-        base_danfse = "https://adn.producaorestrita.nfse.gov.br/danfse"
     else:
         raise LegacyProcessingError("Ambiente deve ser 'producao' ou 'restrita'.")
 
@@ -252,10 +253,37 @@ def _build_legacy_config(legacy: Any, empresa_item: dict[str, Any]) -> Any:
         cnpj=cnpj,
         verify_ssl=bool(empresa_item.get("verify_ssl", True)),
         base_contribuintes=base_contribuintes,
-        base_danfse=base_danfse,
     )
     cfg.validar()
     return cfg
+
+
+def _gravar_nsu_em_sessao_curta(
+    empresa_id: int,
+    certificado_id: int | None,
+    cnpj: str,
+    ultimo_nsu: int,
+    origem: str,
+) -> None:
+    """Persiste o avanco do NSU fora da transacao longa do job.
+
+    A gravacao e idempotente (so avanca o NSU), entao pode ser repetida com
+    seguranca quando o SQLite recusa a escrita por concorrencia.
+    """
+
+    def operacao() -> None:
+        with SessionLocal() as session:
+            nsu_control_service.atualizar_ultimo_nsu(
+                session,
+                empresa_id=empresa_id,
+                certificado_id=certificado_id,
+                cnpj=cnpj,
+                ultimo_nsu=ultimo_nsu,
+                origem=origem,
+            )
+            session.commit()
+
+    executar_escrita_com_retry(operacao)
 
 
 def _executar_baixa_empresa_compat(
@@ -264,17 +292,11 @@ def _executar_baixa_empresa_compat(
     limite: int,
     pausa: float,
     inicio: int | None,
-    gerar_pdf: bool,
-    baixar_pdf: bool,
     consulta_lote_tamanho: int,
     empresa_id: int | None = None,
     certificado_id: int | None = None,
     processo_id: int | None = None,
 ) -> dict[str, Any]:
-    for field in ("pdf_path", "pdf_tipo"):
-        if field not in legacy.INDEX_FIELDS:
-            legacy.INDEX_FIELDS.append(field)
-
     estado = legacy.carregar_estado(config.cnpj)
     nsu_estado = int(estado.get("ultimo_nsu", 0) or 0)
     if inicio is not None:
@@ -286,22 +308,12 @@ def _executar_baixa_empresa_compat(
         if nsu_atual > nsu_estado:
             legacy.salvar_estado(config.cnpj, nsu_atual)
         if empresa_id is not None:
-            with SessionLocal() as session:
-                nsu_control_service.atualizar_ultimo_nsu(
-                    session,
-                    empresa_id=empresa_id,
-                    certificado_id=certificado_id,
-                    cnpj=config.cnpj,
-                    ultimo_nsu=nsu_atual,
-                    origem="inicio_consulta",
-                )
-                session.commit()
+            _gravar_nsu_em_sessao_curta(
+                empresa_id, certificado_id, config.cnpj, nsu_atual, "inicio_consulta"
+            )
     vazios = 0
     max_vazios = max(1, int(settings.nsu_max_vazios_consecutivos or 5))
     xmls_baixados = 0
-    pdfs_gerados = 0
-    pdfs_pendentes: deque[str] = deque()
-    chaves_pdf_enfileiradas: set[str] = set()
     ultimo_nsu = nsu_atual
     consultas_realizadas = 0
     consulta_lote_tamanho = max(1, int(consulta_lote_tamanho or 1))
@@ -339,20 +351,12 @@ def _executar_baixa_empresa_compat(
             vazios = 0
             maior_nsu = nsu_atual
             for doc in lote_dfe:
-                chave = str(doc.get("ChaveAcesso") or "").strip()
                 nsu_doc, documento_persistido = legacy.processar_documento(doc)
                 if nsu_doc is not None:
                     if documento_persistido:
                         xmls_baixados += 1
                     if nsu_doc > maior_nsu:
                         maior_nsu = nsu_doc
-                # O espelho e produzido pela ingestao a partir do XML. A busca
-                # do PDF oficial fica enfileirada para aproveitar as pausas do
-                # ciclo, sem concorrer com a consulta ADN nem disparar uma
-                # rajada de requisicoes ao endpoint DANFSe.
-                if documento_persistido and chave and baixar_pdf and chave not in chaves_pdf_enfileiradas:
-                    pdfs_pendentes.append(chave)
-                    chaves_pdf_enfileiradas.add(chave)
 
             if maior_nsu <= nsu_atual:
                 parar = True
@@ -362,26 +366,14 @@ def _executar_baixa_empresa_compat(
             ultimo_nsu = nsu_atual
             legacy.salvar_estado(config.cnpj, nsu_atual)
             if empresa_id is not None:
-                with SessionLocal() as session:
-                    nsu_control_service.atualizar_ultimo_nsu(
-                        session,
-                        empresa_id=empresa_id,
-                        certificado_id=certificado_id,
-                        cnpj=config.cnpj,
-                        ultimo_nsu=nsu_atual,
-                        origem="processamento",
-                    )
-                    session.commit()
+                _gravar_nsu_em_sessao_curta(
+                    empresa_id, certificado_id, config.cnpj, nsu_atual, "processamento"
+                )
 
-        if not parar and consultas_realizadas < limite:
-            baixados_na_pausa = _processar_pdfs_durante_pausa(
-                legacy,
-                config,
-                pdfs_pendentes,
-                pausa,
-                processo_id=processo_id,
-            )
-            pdfs_gerados += baixados_na_pausa
+        if not parar and consultas_realizadas < limite and pausa > 0:
+            # Ritmo entre blocos de consulta ao ADN. O PDF espelho e produzido
+            # pela ingestao a partir do XML; nao ha mais busca de PDF oficial.
+            time.sleep(pausa)
 
     return {
         "empresa": config.cnpj,
@@ -390,123 +382,10 @@ def _executar_baixa_empresa_compat(
         "status": "finalizado",
         "ultimo_nsu": ultimo_nsu,
         "xmls_baixados": xmls_baixados,
-        "pdfs_gerados": pdfs_gerados,
-        "pdfs_oficiais_pendentes": len(pdfs_pendentes),
         "consultas_realizadas": consultas_realizadas,
         "consulta_lote_tamanho": consulta_lote_tamanho,
         "cancelado": parar and processo_id is not None and _processo_cancelado(processo_id),
     }
-
-
-def _processar_pdfs_durante_pausa(
-    legacy: Any,
-    config: Any,
-    fila: deque[str],
-    pausa: float,
-    processo_id: int | None = None,
-) -> int:
-    """Usa apenas a janela da pausa para buscar DANFSe oficiais pendentes."""
-    if pausa <= 0:
-        return 0
-
-    inicio = time.monotonic()
-    prazo = inicio + pausa
-    baixados = 0
-    # Cada chave recebe no maximo uma tentativa por pausa. As que falharem
-    # voltam ao fim da fila para o proximo intervalo, evitando insistencia
-    # imediata no mesmo documento quando o servico responde 429 ou 503.
-    tentativas_disponiveis = len(fila)
-
-    while fila and tentativas_disponiveis > 0 and time.monotonic() < prazo:
-        if processo_id is not None and _processo_cancelado(processo_id):
-            break
-
-        chave = fila.popleft()
-        tentativas_disponiveis -= 1
-        restante = prazo - time.monotonic()
-        timeout = max(1.0, min(30.0, restante))
-        if _baixar_pdf_danfse_compat(legacy, config, chave, timeout=timeout):
-            baixados += 1
-        else:
-            # Mantem a chave para outra pausa; indisponibilidade e limite de
-            # requisicoes do endpoint oficial sao normalmente temporarios.
-            fila.append(chave)
-
-        restante = prazo - time.monotonic()
-        if fila and restante > 0:
-            time.sleep(min(2.0, restante))
-
-    # Se as requisicoes terminaram antes da janela, preserva a pausa original
-    # para nao acelerar inadvertidamente as consultas por NSU.
-    restante = prazo - time.monotonic()
-    if restante > 0:
-        time.sleep(restante)
-    return baixados
-
-
-def _processar_pdfs_ao_final(
-    legacy: Any,
-    config: Any,
-    fila: deque[str],
-    processo_id: int | None = None,
-) -> int:
-    limite = max(0, int(settings.worker_pdf_official_max_per_job or 0))
-    delay = max(0.0, float(settings.worker_pdf_official_delay_seconds or 0))
-    baixados = 0
-    for _ in range(min(limite, len(fila))):
-        if processo_id is not None and _processo_cancelado(processo_id):
-            break
-        chave = fila.popleft()
-        try:
-            if _baixar_pdf_danfse_compat(legacy, config, chave, timeout=30):
-                baixados += 1
-        except Exception:
-            # Falha do endpoint de DANFSe nao invalida XMLs ja baixados. O
-            # backfill pode tentar novamente depois sem repetir a consulta NSU.
-            pass
-        if delay:
-            time.sleep(delay)
-    return baixados
-
-
-def _baixar_pdf_danfse_compat(legacy: Any, config: Any, chave: str, timeout: float = 240) -> bool:
-    pdf_dir = legacy.DIR_DANFSE / "pdf_gerado"
-    pdf_dir.mkdir(parents=True, exist_ok=True)
-    pdf_path = pdf_dir / f"{chave}.pdf"
-    if pdf_path.exists():
-        _registrar_pdf_no_index(legacy, chave, pdf_path, "oficial")
-        return True
-
-    response = legacy.mtls_get(
-        config,
-        f"{config.base_danfse}/{chave}",
-        accept="application/pdf, application/json, text/plain, */*",
-        timeout=timeout,
-    )
-    content_type = response.headers.get("content-type", "")
-    is_pdf = response.status_code == 200 and (
-        "pdf" in content_type.lower() or response.content[:4] == b"%PDF"
-    )
-    if not is_pdf:
-        txt_path = pdf_dir / f"{chave}.txt"
-        txt_path.write_text(response.text or "", encoding="utf-8", errors="ignore")
-        return False
-
-    pdf_path.write_bytes(response.content)
-    _registrar_pdf_no_index(legacy, chave, pdf_path, "oficial")
-    return True
-
-
-def _registrar_pdf_no_index(legacy: Any, chave: str, pdf_path: Path, pdf_tipo: str) -> None:
-    index_rows = legacy.carregar_csv_por_chave(legacy.INDEX_UNICO_FILE, "chave")
-    row = index_rows.get(chave)
-    if not row:
-        return
-    row["pdf_path"] = str(pdf_path)
-    row["pdf_tipo"] = pdf_tipo
-    row["atualizado_em"] = legacy.agora_iso()
-    index_rows[chave] = row
-    legacy.salvar_index_unico(index_rows)
 
 
 def executar_consulta_nfse_legado(
@@ -552,7 +431,6 @@ def executar_consulta_nfse_legado(
     )
     nsu_inicio = payload.get("nsu_inicio")
     gerar_pdf_espelho = bool(_payload_value(payload, "gerar_pdf_espelho", True))
-    baixar_pdf_oficial = bool(_payload_value(payload, "baixar_pdf_oficial", False))
 
     try:
         temp_pfx_path.write_bytes(pfx_bytes)
@@ -571,7 +449,6 @@ def executar_consulta_nfse_legado(
                 "consulta_lote_tamanho": consulta_lote_tamanho,
                 "adn_lote": bool(settings.worker_adn_lote),
                 "gerar_pdf_espelho": gerar_pdf_espelho,
-                "baixar_pdf_oficial": baixar_pdf_oficial,
             },
         )
         logs_service.registrar_log(
@@ -708,36 +585,41 @@ def executar_consulta_nfse_legado(
             db.commit()
 
         try:
-            if hasattr(legacy, "executar_baixa_empresa"):
-                result = legacy.executar_baixa_empresa(
-                    config=config,
-                    limite=limite,
-                    pausa=pausa,
-                    inicio=nsu_inicio_efetivo,
-                    gerar_pdf_xml=gerar_pdf_espelho,
-                    baixar_pdf=baixar_pdf_oficial,
-                    fallback_pdf_xml=gerar_pdf_espelho,
-                    sobrescrever_pdf=False,
-                )
-            else:
-                result = _executar_baixa_empresa_compat(
-                    legacy=legacy,
-                    config=config,
-                    limite=limite,
-                    pausa=pausa,
-                    inicio=nsu_inicio_efetivo,
-                    gerar_pdf=gerar_pdf_espelho,
-                    baixar_pdf=baixar_pdf_oficial,
-                    consulta_lote_tamanho=consulta_lote_tamanho,
-                    empresa_id=int(empresa.id),
-                    certificado_id=int(certificado.id),
-                    processo_id=int(processo.id),
-                )
+            result = _executar_baixa_empresa_compat(
+                legacy=legacy,
+                config=config,
+                limite=limite,
+                pausa=pausa,
+                inicio=nsu_inicio_efetivo,
+                consulta_lote_tamanho=consulta_lote_tamanho,
+                empresa_id=int(empresa.id),
+                certificado_id=int(certificado.id),
+                processo_id=int(processo.id),
+            )
         finally:
+            # A thread precisa estar comprovadamente parada antes que o fluxo
+            # principal volte a escrever. Uma thread sobrevivente grava em
+            # paralelo com esta sessao e derruba o job com "database is
+            # locked" no SQLite.
             if ingestao_stop_event is not None:
                 ingestao_stop_event.set()
             if ingestao_thread is not None:
-                ingestao_thread.join(timeout=10)
+                ingestao_thread.join(timeout=INGESTAO_JOIN_TIMEOUT)
+                if ingestao_thread.is_alive():
+                    logs_service.registrar_log(
+                        db,
+                        processo.id,
+                        empresa.id,
+                        "warning",
+                        "Ingestao incremental nao parou no prazo; ingestao final adiada",
+                        {"timeout_segundos": INGESTAO_JOIN_TIMEOUT},
+                    )
+                    db.commit()
+                    ingestao_thread.join()
+        # O motor legado rodou por minutos com esta sessao parada enquanto a
+        # thread de ingestao e as gravacoes de NSU escreviam. Renova o snapshot
+        # antes de voltar a gravar por aqui.
+        renovar_snapshot(db)
         if _processo_cancelado(int(processo.id)):
             logs_service.registrar_log(
                 db,
@@ -784,8 +666,16 @@ def executar_consulta_nfse_legado(
                 processo,
                 pasta_saida,
                 updated_after=run_started_at,
+                # Sem commits parciais, centenas de linhas ficavam flushadas
+                # em uma unica transacao desta sessao, que assim segurava o
+                # lock de escrita do SQLite ate o fim. A gravacao final do
+                # NSU (em sessao propria, na mesma thread) esperava por esse
+                # lock e o job morria com "database is locked".
+                commit_every=20,
                 gerar_pdf_espelho=bool(processo.gerar_pdf_espelho),
             )
+            # Garante que nada desta ingestao fique pendente antes do fecho.
+            db.commit()
             logs_service.registrar_log(
                 db,
                 processo.id,
@@ -809,6 +699,9 @@ def executar_consulta_nfse_legado(
                     "erros": ingestao.get("erros"),
                 },
             )
+        # A ingestao pos-processamento acabou de fazer varios commits e a
+        # geracao de PDF (PHP) entre eles; recomeca limpo para o fecho.
+        renovar_snapshot(db)
         ultimo_nsu_result = None
         if isinstance(safe_result, dict):
             try:
@@ -820,16 +713,38 @@ def executar_consulta_nfse_legado(
             nsu_control_service.maior_nsu_importado(db, int(empresa.id)),
         )
         if ultimo_nsu_final:
+            # Em sessao curta, e nao nesta transacao longa: o scheduler e a
+            # ingestao gravam em paralelo durante o job, e no SQLite isso
+            # invalida o snapshot da sessao principal. A escrita direta aqui
+            # falhava com "database is locked" e derrubava o processo ja no
+            # fim, perdendo o avanco do NSU.
+            _gravar_nsu_em_sessao_curta(
+                int(empresa.id),
+                int(certificado.id),
+                str(empresa.cnpj),
+                ultimo_nsu_final,
+                "final_processo",
+            )
+        if reconciliacao_profunda and janela_reconciliacao is not None:
+            # Mesma tabela que acabou de ser gravada acima; tambem em sessao
+            # propria para nao reescrever nsu_controle com snapshot antigo.
+            def _marcar() -> None:
+                with SessionLocal() as session:
+                    nsu_control_service.marcar_reconciliacao_concluida(
+                        session,
+                        empresa_id=int(empresa.id),
+                        certificado_id=int(certificado.id),
+                        janela=janela_reconciliacao,
+                    )
+                    session.commit()
+
+            executar_escrita_com_retry(_marcar)
+        # As gravacoes acima aconteceram fora desta sessao: recomeca com
+        # snapshot novo antes de tocar processo e logs por aqui.
+        renovar_snapshot(db)
+        if ultimo_nsu_final:
             processo.nsu_final = ultimo_nsu_final
             db.add(processo)
-            nsu_control_service.atualizar_ultimo_nsu(
-                db,
-                empresa_id=int(empresa.id),
-                certificado_id=int(certificado.id),
-                cnpj=str(empresa.cnpj),
-                ultimo_nsu=ultimo_nsu_final,
-                origem="final_processo",
-            )
             logs_service.registrar_log(
                 db,
                 processo.id,
@@ -839,12 +754,6 @@ def executar_consulta_nfse_legado(
                 {"ultimo_nsu": ultimo_nsu_final},
             )
         if reconciliacao_profunda and janela_reconciliacao is not None:
-            nsu_control_service.marcar_reconciliacao_concluida(
-                db,
-                empresa_id=int(empresa.id),
-                certificado_id=int(certificado.id),
-                janela=janela_reconciliacao,
-            )
             logs_service.registrar_log(
                 db,
                 processo.id,
@@ -912,11 +821,17 @@ def executar_consulta_nfse_legado(
         senha = ""
         if temp_pfx_path.exists():
             temp_pfx_path.unlink()
-            logs_service.registrar_log(
-                db,
-                processo.id,
-                empresa.id,
-                "info",
-                "PFX temporario removido",
-            )
-            db.commit()
+            try:
+                logs_service.registrar_log(
+                    db,
+                    processo.id,
+                    empresa.id,
+                    "info",
+                    "PFX temporario removido",
+                )
+                db.commit()
+            except Exception:
+                # O PFX ja saiu do disco, que e o que importa nesta limpeza.
+                # Falhar so ao gravar a linha de log nao pode transformar uma
+                # consulta bem-sucedida em job com erro.
+                db.rollback()

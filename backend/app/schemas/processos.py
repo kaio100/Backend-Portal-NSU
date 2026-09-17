@@ -18,7 +18,6 @@ class ProcessoCreate(BaseModel):
     limite: int = Field(default=100, ge=1)
     pausa: float = Field(default=8, ge=0)
     gerar_pdf_espelho: bool = True
-    baixar_pdf_oficial: bool = False
 
     @field_validator("nsu_inicio")
     @classmethod
@@ -41,7 +40,9 @@ class ProcessoRead(BaseModel):
     limite: int | None = None
     pausa: float | None = None
     gerar_pdf_espelho: bool
-    baixar_pdf_oficial: bool
+    # Legado: o download do PDF oficial do ADN foi desativado. A coluna
+    # permanece no banco (sempre False) e e exposta so para compatibilidade.
+    baixar_pdf_oficial: bool = False
     erro_resumo: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None

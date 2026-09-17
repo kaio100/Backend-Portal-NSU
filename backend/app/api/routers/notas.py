@@ -19,7 +19,9 @@ from backend.app.schemas.notas import (
     NotasDownloadLoteRequest,
     NotasTodasResponse,
 )
-from backend.app.services import notas_service
+from backend.app.services import eventos_sync_service, notas_service
+from backend.app.services.eventos_sync_service import EventosSyncError
+from backend.app.services.secrets_service import SecretsServiceError
 from backend.app.services import notas_download_service
 from backend.app.services import portal_support_service
 from backend.app.services.notas_download_service import NotasDownloadLoteError
@@ -570,6 +572,27 @@ def get_tributos_comparativo(nota_id: int, db: Session = Depends(get_db), usuari
         return portal_support_service.comparar_tributos_nota(db, nota_id)
     except NotaServiceError as exc:
         _handle_error(exc)
+
+
+@router.post("/{nota_id}/sincronizar-eventos", dependencies=[Depends(require_operator)])
+def sincronizar_eventos_nota(
+    nota_id: int,
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage),
+    usuario: Usuario = Depends(get_current_usuario),
+):
+    """Consulta os eventos desta NFS-e no ADN e aplica cancelamento/substituicao.
+
+    Cobre o que a consulta por NSU nao alcanca: nota antiga, empresa que ficou
+    sem consulta ou duvida pontual do operador. Usa o certificado da empresa.
+    """
+    nota = require_nota_grupo(db, nota_id, usuario)
+    try:
+        return eventos_sync_service.sincronizar_eventos_nota(db, storage, nota)
+    except SecretsServiceError as exc:
+        raise HTTPException(status_code=409, detail=f"Senha do certificado indisponivel: {exc}") from exc
+    except EventosSyncError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.patch("/{nota_id}/conferencia", response_model=NotaDetail, dependencies=[Depends(require_operator)])

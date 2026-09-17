@@ -7,13 +7,33 @@ from backend.app.api.deps import get_current_usuario, get_db, require_admin, req
 from backend.app.core.config import settings
 from backend.app.core.rate_limit import RateLimiter
 from backend.app.core.security import create_access_token
-from backend.app.db.models import AcessoUsuario, Grupo, Usuario
-from backend.app.schemas.auth import LoginRequest, LoginResponse, UsuarioRead
+from backend.app.db.models import AcessoUsuario, Empresa, Grupo, Usuario
+from backend.app.schemas.auth import LocalSignupRequest, LoginRequest, LoginResponse, UsuarioRead
 from backend.app.schemas.usuarios import UsuarioCreate
 from backend.app.services import auth_service
 from backend.app.services.auth_service import AuthError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _perfil_local_request(request: Request) -> bool:
+    """Perfil local explicito: SQLite + storage em disco + chamada desta maquina.
+
+    `LOCAL_SIGNUP_ENABLED` e a unica chave que liga o autocadastro e o login
+    automatico do frontend. `ENVIRONMENT` nao entra na conta de proposito:
+    `iniciar_local.py` roda com ENVIRONMENT=production para manter as
+    validacoes de chaves, e antes disso o /auth/local devolvia 404 nele.
+    """
+    host = request.client.host if request.client else ""
+    return (
+        settings.local_signup_enabled
+        and settings.database_url.startswith("sqlite")
+        and settings.storage_backend == "local"
+        and host in {"127.0.0.1", "::1", "localhost", "testclient"}
+    )
+
+
+_local_signup_request = _perfil_local_request
 
 # Freio contra tentativas de login (forca bruta de senha): no maximo 8
 # tentativas a cada 5 minutos, por IP + email.
@@ -23,8 +43,7 @@ _login_rate_limiter = RateLimiter(max_attempts=8, window_seconds=300)
 @router.post("/local", response_model=LoginResponse, include_in_schema=False)
 def login_local(request: Request, db: Session = Depends(get_db)):
     """Autentica automaticamente apenas o frontend executado nesta maquina."""
-    client_host = request.client.host if request.client else ""
-    if settings.is_production or client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+    if not _perfil_local_request(request):
         raise HTTPException(status_code=404, detail="Not found")
 
     usuario = (
@@ -64,6 +83,41 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         user_agent=(request.headers.get("user-agent") or "")[:512] or None,
     ))
     db.commit()
+
+    return LoginResponse(
+        access_token=token,
+        expires_in_minutes=settings.jwt_expire_minutes,
+        usuario=usuario,
+    )
+
+
+@router.post("/criar-conta", response_model=LoginResponse, include_in_schema=False)
+def criar_conta_local(payload: LocalSignupRequest, request: Request, db: Session = Depends(get_db)):
+    """Permite cadastro apenas no perfil local explicitamente habilitado."""
+    if not _local_signup_request(request):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    empresa = (
+        db.query(Empresa)
+        .filter(Empresa.ativo.is_(True), Empresa.grupo == payload.grupo)
+        .order_by(Empresa.id.asc())
+        .first()
+    )
+    if empresa is None:
+        raise HTTPException(status_code=400, detail="Nenhuma empresa ativa encontrada para este grupo.")
+
+    try:
+        usuario = auth_service.criar_usuario(
+            db,
+            empresa_id=int(empresa.id),
+            email=payload.email,
+            senha=payload.senha,
+            nome=payload.nome.strip(),
+            grupo=payload.grupo,
+        )
+        token = create_access_token(usuario.id, usuario.empresa_id)
+    except AuthError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return LoginResponse(
         access_token=token,

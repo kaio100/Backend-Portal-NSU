@@ -38,11 +38,13 @@ from backend.app.db.session import SessionLocal, init_db
 from backend.app.services import consultas_service
 from backend.app.services.notas_download_service import limpar_zips_temporarios
 from backend.app.services.valor_liquido_backfill_service import recalcular_notas_salvas
-from backend.app.scripts.revalidar_status_pdfs import executar as revalidar_status_pdfs
 from backend.app.worker.worker import processar_proximo_job
 
 
 configure_logging()
+
+# Intervalo da varredura por grupos novos sem worker dedicado.
+SUPERVISOR_GRUPOS_INTERVALO = 60
 
 
 def _worker_groups() -> list[str]:
@@ -117,6 +119,33 @@ async def _run_api_worker(slot: int, worker_id: str, grupo: str) -> None:
             print(f"API worker {slot} ({grupo}): {result}")
 
 
+async def _supervisionar_grupos(
+    worker_tasks: list[asyncio.Task],
+    grupos_cobertos: set[str],
+    workers_per_group: int,
+) -> None:
+    """Sobe workers para grupos criados depois da inicializacao da API.
+
+    Os grupos sao lidos uma unica vez no startup. Sem esta supervisao, uma
+    empresa cadastrada em um grupo novo nunca tem quem consuma sua fila: os
+    jobs ficam pendentes ate alguem reiniciar a API.
+    """
+    while True:
+        await asyncio.sleep(SUPERVISOR_GRUPOS_INTERVALO)
+        try:
+            novos = [g for g in await asyncio.to_thread(_worker_groups) if g not in grupos_cobertos]
+        except Exception as exc:
+            print(f"Supervisor de grupos falhou e continuara ativo: {exc}")
+            continue
+        for grupo in novos:
+            grupos_cobertos.add(grupo)
+            for slot, (_g, worker_id) in enumerate(
+                _build_api_workers([grupo], workers_per_group), start=1
+            ):
+                print(f"Supervisor de grupos: iniciando worker para o grupo novo {grupo}")
+                worker_tasks.append(asyncio.create_task(_run_api_worker(slot, worker_id, grupo)))
+
+
 async def _run_consultas_scheduler() -> None:
     print("Agendador de consultas automaticas iniciado")
 
@@ -143,21 +172,6 @@ def _enqueue_consultas_automaticas() -> dict:
         }
 
 
-async def _revalidar_status_pdfs_salvos() -> None:
-    try:
-        relatorio = await asyncio.to_thread(
-            revalidar_status_pdfs,
-            None,
-            False,
-            max(1, int(settings.pdf_status_revalidation_batch_size)),
-        )
-        print(f"Revalidacao de status por PDF oficial finalizada: {relatorio}")
-    except Exception as exc:
-        # A API continua disponivel mesmo se um storage externo estiver
-        # temporariamente indisponivel; a proxima inicializacao tenta de novo.
-        print(f"Revalidacao de status por PDF oficial falhou: {exc}")
-
-
 async def _recalcular_valores_liquidos_salvos() -> None:
     try:
         relatorio = await asyncio.to_thread(recalcular_notas_salvas)
@@ -174,10 +188,7 @@ async def lifespan(app: FastAPI):
         print(f"Limpeza de downloads temporarios: {zips_removidos} ZIP(s) removido(s)")
     worker_tasks: list[asyncio.Task] = []
     scheduler_task: asyncio.Task | None = None
-    pdf_revalidation_task: asyncio.Task | None = None
     liquid_recalculation_task = asyncio.create_task(_recalcular_valores_liquidos_salvos())
-    if settings.api_worker_enabled and settings.pdf_status_revalidation_enabled:
-        pdf_revalidation_task = asyncio.create_task(_revalidar_status_pdfs_salvos())
     if settings.api_worker_enabled:
         workers_per_group = max(1, int(settings.api_worker_concurrency))
         api_workers = _build_api_workers(_worker_groups(), workers_per_group)
@@ -189,6 +200,10 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_api_worker(slot, worker_id, grupo))
             for slot, (grupo, worker_id) in enumerate(api_workers, start=1)
         ]
+        supervisor_task = asyncio.create_task(
+            _supervisionar_grupos(worker_tasks, {grupo for grupo, _id in api_workers}, workers_per_group)
+        )
+        worker_tasks.append(supervisor_task)
         if settings.embedded_scheduler_enabled:
             scheduler_task = asyncio.create_task(_run_consultas_scheduler())
 
@@ -208,10 +223,6 @@ async def lifespan(app: FastAPI):
         for worker_task in worker_tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await worker_task
-        if pdf_revalidation_task is not None and not pdf_revalidation_task.done():
-            pdf_revalidation_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await pdf_revalidation_task
 
 
 def _documentation_options(production: bool) -> dict[str, str | None]:
