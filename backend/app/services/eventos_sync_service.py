@@ -19,6 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import requests
 import requests_pkcs12
 from sqlalchemy.orm import Session
 
@@ -54,30 +55,64 @@ def _certificado_da_empresa(db: Session, empresa_id: int) -> Certificado:
     return certificado
 
 
-def consultar_eventos_adn(
-    *,
-    chave: str,
-    cnpj: str,
-    ambiente: str,
-    pfx_path: str,
-    pfx_password: str,
-    timeout: int = 120,
-) -> dict[str, Any]:
+_HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "User-Agent": "Mozilla/5.0 ADN-NFSe-Portal/2.0",
+}
+
+
+def _base_adn(ambiente: str) -> str:
     base = ADN_BASES.get((ambiente or "producao").lower().strip())
     if base is None:
         raise EventosSyncError("Ambiente da empresa deve ser 'producao' ou 'restrita'.")
-    response = requests_pkcs12.get(
-        f"{base}/NFSe/{chave}/Eventos",
-        params={"cnpjConsulta": cnpj},
-        headers={
-            "Accept": "application/json, text/plain, */*",
-            "User-Agent": "Mozilla/5.0 ADN-NFSe-Portal/2.0",
-        },
-        pkcs12_filename=pfx_path,
-        pkcs12_password=pfx_password,
-        timeout=timeout,
-        verify=True,
-    )
+    return base
+
+
+class SessaoCertificado:
+    """PFX temporario + conexao HTTPS mTLS reaproveitados para varias consultas.
+
+    Por nota, o caminho simples baixava o PFX do R2, decifrava a senha e abria
+    um handshake TLS novo (~7 s por nota na varredura). Uma sessao por empresa
+    reduz isso a uma unica preparacao e mantem a conexao viva (keep-alive).
+    """
+
+    def __init__(self, db: Session, storage: StorageService, empresa: Empresa) -> None:
+        certificado = _certificado_da_empresa(db, int(empresa.id))
+        self.empresa = empresa
+        self.cnpj = re.sub(r"\D", "", str(empresa.cnpj or ""))
+        self.base = _base_adn(str(empresa.ambiente or "producao"))
+        temp_dir = Path(settings.worker_temp_dir)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        self.pfx_path = temp_dir / f"eventos_cert_{certificado.id}_{uuid.uuid4().hex}.pfx"
+        self.pfx_path.write_bytes(storage.get_bytes(certificado.storage_key))
+        senha = secrets_service.get_secret_value(db, str(certificado.senha_secret_ref))
+        self.http = requests.Session()
+        self.http.mount(self.base, requests_pkcs12.Pkcs12Adapter(pkcs12_filename=str(self.pfx_path), pkcs12_password=senha))
+        senha = ""
+
+    def consultar(self, chave: str, timeout: int = 120) -> dict[str, Any]:
+        response = self.http.get(
+            f"{self.base}/NFSe/{chave}/Eventos",
+            params={"cnpjConsulta": self.cnpj},
+            headers=_HEADERS,
+            timeout=timeout,
+        )
+        return _payload_eventos(response)
+
+    def fechar(self) -> None:
+        try:
+            self.http.close()
+        finally:
+            self.pfx_path.unlink(missing_ok=True)
+
+    def __enter__(self) -> "SessaoCertificado":
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.fechar()
+
+
+def _payload_eventos(response) -> dict[str, Any]:
     try:
         payload = response.json()
     except ValueError as exc:
@@ -89,10 +124,39 @@ def consultar_eventos_adn(
     return payload if isinstance(payload, dict) else {}
 
 
-def sincronizar_eventos_nota(db: Session, storage: StorageService, nota: Nota) -> dict[str, Any]:
+def consultar_eventos_adn(
+    *,
+    chave: str,
+    cnpj: str,
+    ambiente: str,
+    pfx_path: str,
+    pfx_password: str,
+    timeout: int = 120,
+) -> dict[str, Any]:
+    base = _base_adn(ambiente)
+    response = requests_pkcs12.get(
+        f"{base}/NFSe/{chave}/Eventos",
+        params={"cnpjConsulta": cnpj},
+        headers=_HEADERS,
+        pkcs12_filename=pfx_path,
+        pkcs12_password=pfx_password,
+        timeout=timeout,
+        verify=True,
+    )
+    return _payload_eventos(response)
+
+
+def sincronizar_eventos_nota(
+    db: Session,
+    storage: StorageService,
+    nota: Nota,
+    sessao: SessaoCertificado | None = None,
+) -> dict[str, Any]:
     empresa = db.get(Empresa, int(nota.empresa_id))
     if empresa is None:
         raise EventosSyncError("Empresa da nota nao encontrada.")
+    if sessao is not None:
+        return aplicar_eventos_payload(db, storage, nota, empresa, sessao.consultar(str(nota.chave)))
     certificado = _certificado_da_empresa(db, int(empresa.id))
     senha = secrets_service.get_secret_value(db, str(certificado.senha_secret_ref))
     pfx_bytes = storage.get_bytes(certificado.storage_key)
