@@ -152,3 +152,36 @@ def test_rota_sincronizar_eventos_exige_operador_e_usa_o_servico(monkeypatch):
     finally:
         app.dependency_overrides.pop(get_current_usuario, None)
     get_storage_service().delete(xml_key)
+
+
+def test_regenerar_pdf_espelho_evento_gera_carimbo_de_verdade(monkeypatch):
+    # Regressao: faltava `import tempfile` em legacy_ingestion_service e toda
+    # regeneracao disparada por evento morria com NameError, engolido como
+    # "aviso de PDF" (10.632 ocorrencias em producao entre 06/08 e 17/09).
+    # Nenhuma nota cancelada por evento posterior recebia o carimbo.
+    from types import SimpleNamespace
+    from backend.app.services import legacy_ingestion_service as svc
+
+    empresa_id, nota_id, xml_key = _criar_nota_autorizada()
+    storage = get_storage_service()
+    gerados: list[tuple[bytes, str | None]] = []
+
+    class FakeDanfse:
+        def generate(self, xml_bytes, watermark=None):
+            gerados.append((xml_bytes, watermark))
+            return b"%PDF-1.4\n%carimbado\n", "x.pdf"
+
+    monkeypatch.setattr(svc, "DanfseService", lambda: FakeDanfse())
+    monkeypatch.setattr(svc, "extrair_dados_nfse", lambda *_a, **_k: {"emit_nome": "P", "numero_nfse": "77"})
+
+    with SessionLocal() as db:
+        nota = db.get(Nota, nota_id)
+        empresa = db.get(Empresa, empresa_id)
+        contexto = SimpleNamespace(id=None, empresa_id=empresa_id, empresa=empresa)
+        svc._regenerar_pdf_espelho_evento(db, storage, contexto, nota, "cancelada")
+        db.commit()
+        assert gerados and gerados[0][1] == "cancelada"
+        assert nota.pdf_espelho_storage_key
+        assert storage.get_bytes(nota.pdf_espelho_storage_key).startswith(b"%PDF")
+        storage.delete(nota.pdf_espelho_storage_key)
+    storage.delete(xml_key)

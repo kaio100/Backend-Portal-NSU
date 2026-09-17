@@ -43,3 +43,7 @@ backend/danfse/vendor/
 *.zip
 .DS_Store
 Thumbs.db
+
+# Ambiente de producao local (nunca versionar)
+.env.producao
+run_prod.sh

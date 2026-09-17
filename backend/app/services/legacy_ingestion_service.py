@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import re
+import tempfile
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path

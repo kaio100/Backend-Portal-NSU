@@ -18,19 +18,30 @@ from backend.app.services.storage_service import build_pdf_espelho_key, get_stor
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Gera PDFs espelho ausentes para notas com XML armazenado.")
-    parser.add_argument("--processo-id", type=int, required=True)
+    alvo = parser.add_mutually_exclusive_group(required=True)
+    alvo.add_argument("--processo-id", type=int)
+    alvo.add_argument("--empresa-id", type=int)
+    alvo.add_argument("--all", action="store_true", help="Todas as notas nao arquivadas sem PDF espelho")
+    parser.add_argument("--limite", type=int, default=None, help="Maximo de PDFs a gerar nesta execucao")
     args = parser.parse_args()
 
     init_db()
     storage = get_storage_service()
     total = gerados = falhas = 0
     with SessionLocal() as db:
-        notas = (
-            db.query(Nota)
-            .filter(Nota.processo_id == args.processo_id, Nota.xml_storage_key.isnot(None))
-            .order_by(Nota.id.asc())
-            .all()
-        )
+        query = db.query(Nota).filter(Nota.xml_storage_key.isnot(None))
+        if args.processo_id is not None:
+            query = query.filter(Nota.processo_id == args.processo_id)
+        else:
+            # Varredura ampla: so quem realmente nao tem espelho registrado.
+            query = query.filter(Nota.pdf_espelho_storage_key.is_(None), Nota.arquivada.is_(False))
+            if args.empresa_id is not None:
+                query = query.filter(Nota.empresa_id == args.empresa_id)
+        query = query.order_by(Nota.id.asc())
+        if args.limite:
+            query = query.limit(args.limite)
+        notas = query.all()
+        print(f"Notas alvo: {len(notas)}", flush=True)
         cnpj_por_empresa = {
             empresa.id: empresa.cnpj
             for empresa in db.query(Empresa).filter(Empresa.id.in_({nota.empresa_id for nota in notas})).all()
@@ -55,7 +66,7 @@ def main() -> int:
                 nota.pdf_espelho_storage_key = key
                 arquivo = (
                     db.query(Arquivo)
-                    .filter(Arquivo.nota_id == nota.id, Arquivo.tipo == "pdf_espelho")
+                    .filter(Arquivo.nota_id == nota.id, Arquivo.tipo.in_(("PDF_ESPELHO", "pdf_espelho")))
                     .first()
                 )
                 if arquivo is None:
@@ -63,7 +74,8 @@ def main() -> int:
                         empresa_id=nota.empresa_id,
                         nota_id=nota.id,
                         processo_id=nota.processo_id,
-                        tipo="pdf_espelho",
+                        # Mesmo tipo canonico que a ingestao grava.
+                        tipo="PDF_ESPELHO",
                         storage_backend=settings.storage_backend,
                         storage_bucket=settings.storage_bucket,
                         storage_key=key,
