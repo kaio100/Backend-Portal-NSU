@@ -14,12 +14,14 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import time
 from dataclasses import dataclass
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from backend.app.db.models import Nota
-from backend.app.db.session import SessionLocal, init_db
+from backend.app.db.session import SessionLocal, engine, init_db
 from backend.app.services.legacy_ingestion_service import (
     _aplicar_campos_fiscais_xml,
     _parse_decimal,
@@ -183,14 +185,27 @@ def executar(
     for indice, lote_ids in enumerate(lotes, start=1):
         if not lote_ids:
             continue
-        with SessionLocal() as db:
-            notas = db.query(Nota).filter(Nota.id.in_(lote_ids)).order_by(Nota.id.asc()).all()
-            for nota in notas:
-                recalcular_nota(nota, storage, dry_run, relatorio, subitem=subitem)
-            if dry_run:
-                db.rollback()
-            else:
-                db.commit()
+        # O lote passa minutos lendo XML do storage com a transacao aberta e
+        # ociosa; o pooler derruba a conexao ("server closed the connection
+        # unexpectedly"). Como o lote e idempotente, basta reconectar e
+        # repeti-lo inteiro.
+        for tentativa in range(1, 4):
+            try:
+                with SessionLocal() as db:
+                    notas = db.query(Nota).filter(Nota.id.in_(lote_ids)).order_by(Nota.id.asc()).all()
+                    for nota in notas:
+                        recalcular_nota(nota, storage, dry_run, relatorio, subitem=subitem)
+                    if dry_run:
+                        db.rollback()
+                    else:
+                        db.commit()
+                break
+            except OperationalError as exc:
+                if tentativa == 3:
+                    raise
+                print(f"Lote {indice}: conexao perdida ({str(exc).splitlines()[0][:80]}); reconectando (tentativa {tentativa + 1}/3).", flush=True)
+                engine.dispose()
+                time.sleep(5 * tentativa)
         print(f"Lote {indice}/{total_lotes} processado ({len(notas)} notas, ids {lote_ids[0]}-{lote_ids[-1]}).", flush=True)
 
     return relatorio
