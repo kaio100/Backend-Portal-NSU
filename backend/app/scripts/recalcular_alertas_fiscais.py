@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import time
 from dataclasses import dataclass
+from datetime import date
 
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -75,6 +76,7 @@ def _listar_lotes_de_ids(
     batch_size: int,
     subitem: str | None = None,
     a_partir_de_id: int | None = None,
+    desde: date | None = None,
 ) -> list[list[int]]:
     query = db.query(
         Nota.id,
@@ -89,6 +91,8 @@ def _listar_lotes_de_ids(
         # Retomada apos queda de conexao: o processamento e idempotente e em
         # ordem de id, entao basta continuar de onde o ultimo lote commitou.
         query = query.filter(Nota.id >= a_partir_de_id)
+    if desde is not None:
+        query = query.filter(Nota.data_emissao >= desde)
     # Quando ha filtro de subitem, ainda percorremos todos os XMLs. O codigo
     # salvo em notas pode vir ausente ou de campos municipais diferentes; a
     # confirmacao definitiva e feita pelo parser dentro de recalcular_nota.
@@ -171,13 +175,14 @@ def executar(
     batch_size: int,
     subitem: str | None = None,
     a_partir_de_id: int | None = None,
+    desde: date | None = None,
 ) -> Relatorio:
     init_db()
     storage = get_storage_service()
     relatorio = Relatorio()
 
     with SessionLocal() as db:
-        lotes = _listar_lotes_de_ids(db, empresa_id, batch_size, subitem=subitem, a_partir_de_id=a_partir_de_id)
+        lotes = _listar_lotes_de_ids(db, empresa_id, batch_size, subitem=subitem, a_partir_de_id=a_partir_de_id, desde=desde)
     total_lotes = len(lotes)
     # Uma sessao por lote: o pooler do Supabase encerra sessoes longas e uma
     # unica sessao para 70+ lotes (horas) morria com "server closed the
@@ -230,6 +235,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Quantidade de notas processadas e commitadas por lote (padrao: 200).",
     )
     parser.add_argument("--a-partir-de-id", type=int, default=None, help="Retoma a partir desta nota (inclusive).")
+    parser.add_argument("--desde", type=date.fromisoformat, default=None, help="Somente notas emitidas a partir desta data (AAAA-MM-DD).")
     args = parser.parse_args(argv)
 
     if not args.all and args.empresa_id is None and not args.dry_run:
@@ -244,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         batch_size=max(1, args.batch_size),
         subitem=args.subitem,
         a_partir_de_id=args.a_partir_de_id,
+        desde=args.desde,
     )
     relatorio.imprimir(args.dry_run)
     return 0
