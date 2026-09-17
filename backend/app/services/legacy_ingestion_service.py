@@ -715,6 +715,13 @@ def _aplicar_campos_fiscais_xml(nota_data: dict[str, Any], resumo: dict[str, Any
         value = resumo.get(field)
         if value not in {None, ""}:
             nota_data[field] = value
+    # Alertas sao o resultado completo do calculo: "nenhum alerta" tambem e
+    # um resultado e precisa sobrescrever o texto anterior. Sem isto, uma nota
+    # que um dia recebeu "Regra fiscal nao encontrada" (planilha indisponivel
+    # naquele momento) carregava o aviso para sempre, mesmo com regra_irrf/
+    # regra_pcc ja preenchidos por um recalculo posterior.
+    if "alertas_fiscais" in resumo:
+        nota_data["alertas_fiscais"] = resumo.get("alertas_fiscais") or None
     if "iss_retido" in resumo:
         nota_data["iss_retido"] = bool(resumo.get("iss_retido"))
 

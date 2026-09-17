@@ -193,3 +193,23 @@ def test_ingestao_nao_chama_php_quando_pdf_espelho_ja_existe(tmp_path, monkeypat
     assert result["notas_criadas"] == 1
     assert result["avisos_pdf"] == 0
     assert result["arquivos_existentes"] >= 1
+
+
+def test_recalculo_limpa_alerta_de_regra_nao_encontrada_quando_regra_existe():
+    # Regressao: `_aplicar_campos_fiscais_xml` ignorava texto vazio, entao um
+    # alerta antigo ("Regra fiscal nao encontrada para subitem LC116 17.02")
+    # nunca era apagado quando o recalculo passava a encontrar a regra. Em
+    # producao havia milhares de notas com regra_irrf=SIM e o alerta antigo.
+    from backend.app.services.legacy_ingestion_service import _aplicar_campos_fiscais_xml
+
+    nota_data: dict = {}
+    _aplicar_campos_fiscais_xml(nota_data, {"regra_irrf": "SIM", "alertas_fiscais": ""})
+    assert "alertas_fiscais" in nota_data and nota_data["alertas_fiscais"] is None
+
+    nota_data = {}
+    _aplicar_campos_fiscais_xml(nota_data, {"alertas_fiscais": "Regra fiscal nao encontrada para subitem LC116 99.01."})
+    assert nota_data["alertas_fiscais"].startswith("Regra fiscal nao encontrada")
+
+    nota_data = {}
+    _aplicar_campos_fiscais_xml(nota_data, {"regra_irrf": "SIM"})
+    assert "alertas_fiscais" not in nota_data
