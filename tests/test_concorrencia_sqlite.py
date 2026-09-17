@@ -213,3 +213,23 @@ def test_recalculo_limpa_alerta_de_regra_nao_encontrada_quando_regra_existe():
     nota_data = {}
     _aplicar_campos_fiscais_xml(nota_data, {"regra_irrf": "SIM"})
     assert "alertas_fiscais" not in nota_data
+
+
+def test_lock_orfao_sem_fuso_nao_quebra_aquisicao():
+    """SQLite devolve expires_at sem tzinfo; um lock vencido deve ser retomado."""
+    from datetime import datetime, timedelta
+
+    from backend.app.db.models import LockProcessamento
+    from backend.app.db.session import SessionLocal, init_db
+    from backend.app.repositories import locks_repo
+
+    init_db()
+    with SessionLocal() as db:
+        db.query(LockProcessamento).filter(LockProcessamento.empresa_id == 9901).delete()
+        db.add(LockProcessamento(empresa_id=9901, certificado_id=1, locked_by="morto", locked_at=datetime(2026, 1, 1), expires_at=datetime(2026, 1, 1) + timedelta(hours=1)))
+        db.commit()
+        assert locks_repo.acquire_lock(db, 9901, 1, "novo") is True
+        db.commit()
+        assert locks_repo.get_lock(db, 9901, 1).locked_by == "novo"
+        db.query(LockProcessamento).filter(LockProcessamento.empresa_id == 9901).delete()
+        db.commit()

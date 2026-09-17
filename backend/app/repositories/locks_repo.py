@@ -7,6 +7,12 @@ from sqlalchemy.orm import Session
 from backend.app.db.models import LockProcessamento
 
 
+def _como_utc(valor: datetime | None) -> datetime:
+    if valor is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return valor if valor.tzinfo is not None else valor.replace(tzinfo=timezone.utc)
+
+
 def get_lock(db: Session, empresa_id: int, certificado_id: int) -> LockProcessamento | None:
     return (
         db.query(LockProcessamento)
@@ -27,7 +33,9 @@ def acquire_lock(
     expires_at = now + timedelta(seconds=ttl_seconds)
     lock = get_lock(db, empresa_id, certificado_id)
 
-    if lock is not None and lock.expires_at > now:
+    # No SQLite o DateTime volta sem fuso; comparar com `now` (UTC) lancava
+    # TypeError e o worker nao conseguia retomar apos um lock orfao.
+    if lock is not None and _como_utc(lock.expires_at) > now:
         return False
 
     if lock is None:

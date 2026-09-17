@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import logging
 import traceback
 
 from sqlalchemy.orm import Session
@@ -10,6 +11,8 @@ from backend.app.db.models import Job
 from backend.app.repositories import jobs_repo, processos_repo
 from backend.app.services import legacy_processing_service, locks_service, logs_service
 from backend.app.services.storage_service import get_storage_service
+
+logger = logging.getLogger(__name__)
 
 
 def _job_processavel(job: Job, worker_id: str) -> bool:
@@ -203,6 +206,9 @@ def processar_job_consulta_nfse_real(db: Session, job: Job, worker_id: str) -> d
             return {"ok": False, "job_id": job.id, "processo_id": processo.id, "motivo": "cancelado"}
         erro = str(exc)
         erro_detalhado = traceback.format_exc()
+        # O contexto gravado no banco e sanitizado; sem isto a origem do erro
+        # fica invisivel (so a mensagem chega ao operador).
+        logger.exception("Job %s do processo %s falhou: %s", job.id, processo.id, erro)
         jobs_repo.mark_job_erro(db, job, erro)
         processos_repo.mark_processo_erro(db, processo, erro)
         logs_service.registrar_log(

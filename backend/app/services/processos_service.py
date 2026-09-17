@@ -111,13 +111,12 @@ def listar_jobs_processo(db: Session, processo_id: int) -> list[Job]:
 def cancelar_processo(db: Session, processo_id: int) -> tuple[Processo, str]:
     processo = obter_processo(db, processo_id)
 
-    if processo.status == "rodando":
-        return processo, "Cancelamento solicitado, mas worker ainda nao implementado."
     if processo.status == "cancelado":
         return processo, "Processo ja estava cancelado."
     if processo.status in {"finalizado", "erro"}:
         return processo, "Processo nao pode ser cancelado neste status."
 
+    estava_rodando = processo.status == "rodando"
     try:
         processos_repo.cancelar_processo(db, processo)
         jobs = jobs_repo.list_jobs(db, processo_id=processo.id, status="pendente")
@@ -125,6 +124,10 @@ def cancelar_processo(db: Session, processo_id: int) -> tuple[Processo, str]:
             jobs_repo.update_job(db, job, {"status": "cancelado"})
         db.commit()
         db.refresh(processo)
+        if estava_rodando:
+            # O motor consulta o status entre blocos (_processo_cancelado) e
+            # encerra sozinho; o NSU ja avancado fica gravado.
+            return processo, "Cancelamento solicitado; o motor interrompe no proximo bloco."
         return processo, "Processo cancelado."
     except Exception:
         db.rollback()
