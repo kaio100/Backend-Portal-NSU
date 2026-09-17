@@ -72,6 +72,7 @@ def _listar_lotes_de_ids(
     empresa_id: int | None,
     batch_size: int,
     subitem: str | None = None,
+    a_partir_de_id: int | None = None,
 ) -> list[list[int]]:
     query = db.query(
         Nota.id,
@@ -82,6 +83,10 @@ def _listar_lotes_de_ids(
     ).order_by(Nota.id.asc())
     if empresa_id is not None:
         query = query.filter(Nota.empresa_id == empresa_id)
+    if a_partir_de_id is not None:
+        # Retomada apos queda de conexao: o processamento e idempotente e em
+        # ordem de id, entao basta continuar de onde o ultimo lote commitou.
+        query = query.filter(Nota.id >= a_partir_de_id)
     # Quando ha filtro de subitem, ainda percorremos todos os XMLs. O codigo
     # salvo em notas pode vir ausente ou de campos municipais diferentes; a
     # confirmacao definitiva e feita pelo parser dentro de recalcular_nota.
@@ -163,17 +168,22 @@ def executar(
     dry_run: bool,
     batch_size: int,
     subitem: str | None = None,
+    a_partir_de_id: int | None = None,
 ) -> Relatorio:
     init_db()
     storage = get_storage_service()
     relatorio = Relatorio()
 
     with SessionLocal() as db:
-        lotes = _listar_lotes_de_ids(db, empresa_id, batch_size, subitem=subitem)
-        total_lotes = len(lotes)
-        for indice, lote_ids in enumerate(lotes, start=1):
-            if not lote_ids:
-                continue
+        lotes = _listar_lotes_de_ids(db, empresa_id, batch_size, subitem=subitem, a_partir_de_id=a_partir_de_id)
+    total_lotes = len(lotes)
+    # Uma sessao por lote: o pooler do Supabase encerra sessoes longas e uma
+    # unica sessao para 70+ lotes (horas) morria com "server closed the
+    # connection unexpectedly" no meio do commit.
+    for indice, lote_ids in enumerate(lotes, start=1):
+        if not lote_ids:
+            continue
+        with SessionLocal() as db:
             notas = db.query(Nota).filter(Nota.id.in_(lote_ids)).order_by(Nota.id.asc()).all()
             for nota in notas:
                 recalcular_nota(nota, storage, dry_run, relatorio, subitem=subitem)
@@ -181,7 +191,7 @@ def executar(
                 db.rollback()
             else:
                 db.commit()
-            print(f"Lote {indice}/{total_lotes} processado ({len(notas)} notas).")
+        print(f"Lote {indice}/{total_lotes} processado ({len(notas)} notas, ids {lote_ids[0]}-{lote_ids[-1]}).", flush=True)
 
     return relatorio
 
@@ -204,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         default=200,
         help="Quantidade de notas processadas e commitadas por lote (padrao: 200).",
     )
+    parser.add_argument("--a-partir-de-id", type=int, default=None, help="Retoma a partir desta nota (inclusive).")
     args = parser.parse_args(argv)
 
     if not args.all and args.empresa_id is None and not args.dry_run:
@@ -217,6 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         batch_size=max(1, args.batch_size),
         subitem=args.subitem,
+        a_partir_de_id=args.a_partir_de_id,
     )
     relatorio.imprimir(args.dry_run)
     return 0
