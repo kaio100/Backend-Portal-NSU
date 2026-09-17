@@ -156,6 +156,27 @@ a propria NFS-e (`TipoDocumento=NFSE`) antes dos eventos; a nota e contada em
 - Manutencao local contra producao via `.env.producao` + `run_prod.sh`
   (ambos ignorados pelo Git; PHP local via `php_runtime`).
 
+### Auditoria do resumo da nota (17/09, manha) — commits `e75d3c9` / frontend `060d175`
+
+Cadeia XML -> parser -> banco -> API -> drawer conferida em 300 notas
+aleatorias. Achados corrigidos:
+- **Formulario de analise carregava a nota anterior** (`NotaDrawer` sem `key`;
+  estado inicializado so na montagem). O operador via e podia salvar status,
+  observacao, responsavel e "valor liquido correto" na nota errada.
+- **Duas formulas de liquido**: `calcular_liquido_com_retencoes_salvas`
+  (backfill a cada startup) abatia CSRF em bloco; a analise fiscal abate
+  PIS/COFINS/CSLL por componente. O backfill reescrevia o valor sem os
+  alertas. Alinhado (200/200 iguais) e passa a preservar notas conferidas.
+- **Planilha de regras cacheada vazia** (`lru_cache`): uma falha na
+  inicializacao do container gerava "Regra fiscal nao encontrada" para todo
+  o deploy (6.614 notas). Sem cache de vazio + log de erro.
+- Relatorio XLSX: "Percentual IRRF" como moeda (1,5% -> 0,02); primeira
+  definicao morta de `exportar_conferencia_xlsx` removida (256 linhas).
+- CPF de tomador/prestador, `dCompet`, "Tipo" no drawer (commits anteriores).
+Decisoes pendentes do produto: `data_emissao` = dhEmi (DPS) ou dhProc
+(NFS-e); nomes com encoding quebrado em notas antigas; 103 notas em que a
+empresa nao e prestadora nem tomadora.
+
 Pendente desta rodada: os gargalos acima; aplicar as 7 remocoes em staging
 no Railway; rotacao de segredos (bloco C). O mapa referenciado pelo
 skill do projeto (`docs/MAPA_COMPLETO_DO_CODIGO.md`) nao existe neste clone.
