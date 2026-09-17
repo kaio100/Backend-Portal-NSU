@@ -482,7 +482,8 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
         "motivo_evento": _find_text(root, "xMotivo", "motivo"),
         "numero_nfse": _find_text(root, "Numero", "NumeroNfse", "nNFSe"),
         "data_emissao": _find_text(root, "DataEmissao", "dhEmi", "DataHoraEmissao")[:10],
-        "competencia": _find_text(root, "Competencia", "DataCompetencia")[:10],
+        # NFS-e Nacional usa dCompet; os demais nomes sao do padrao municipal.
+        "competencia": _find_text(root, "dCompet", "Competencia", "DataCompetencia")[:10],
         "prestador_cnpj": prestador_cnpj,
         "prestador_nome": prestador_nome,
         "tomador_cnpj": tomador_cnpj,

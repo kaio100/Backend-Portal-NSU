@@ -404,11 +404,14 @@ def parse_xml_resumo(xml_texto: str) -> Dict[str, str]:
 
     resumo["prestador_nome"] = extract_prestador_nome(root)
 
+    # Pessoa fisica vem em <CPF>; sem o fallback o portal mostrava o tomador
+    # (ou prestador) com nome e sem documento (2.066 notas em producao).
+    documento_tags = ["CNPJ", "Cnpj", "cnpj", "CPF", "Cpf", "cpf"]
     if prest is not None:
-        resumo["prestador_cnpj"] = child_text(prest, ["CNPJ", "Cnpj", "cnpj"])
+        resumo["prestador_cnpj"] = child_text(prest, documento_tags)
 
     if toma is not None:
-        resumo["tomador_cnpj"] = child_text(toma, ["CNPJ", "Cnpj", "cnpj"])
+        resumo["tomador_cnpj"] = child_text(toma, documento_tags)
         resumo["tomador_nome"] = child_text(toma, ["xNome", "RazaoSocial", "Nome", "nome"])
 
     return resumo
