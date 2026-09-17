@@ -181,6 +181,11 @@ def main() -> None:
     parser.add_argument("--executar", action="store_true", help="Sem esta opcao apenas conta as notas alvo")
     args = parser.parse_args()
     _garantir_pool_para(max(1, args.workers))
+    if args.executar:
+        # Cancelamento/substituicao regera o espelho com carimbo via PHP.
+        from backend.app.core.php_runtime import configurar_php
+
+        configurar_php()
     relatorio = executar(
         empresa_id=args.empresa_id,
         desde=args.desde,

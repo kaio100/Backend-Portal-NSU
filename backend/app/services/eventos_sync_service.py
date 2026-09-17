@@ -262,8 +262,14 @@ def aplicar_eventos_payload(
         except Exception as exc:  # um evento invalido nao pode impedir os demais
             resultado["erros"].append(str(exc)[:300])
     if status_final and nota.xml_storage_key:
-        legacy_ingestion_service._regenerar_pdf_espelho_evento(db, storage, contexto, nota, status_final)
-        resultado["pdf_regenerado"] = True
+        # O status e a verdade fiscal; o espelho e derivado e pode ser refeito
+        # depois (regenerar_carimbos_pdfs). Uma falha no PHP nao pode
+        # descartar, no rollback, o cancelamento que o ADN acabou de informar.
+        try:
+            legacy_ingestion_service._regenerar_pdf_espelho_evento(db, storage, contexto, nota, status_final)
+            resultado["pdf_regenerado"] = True
+        except Exception as exc:
+            resultado["erros"].append(f"pdf_espelho: {str(exc)[:300]}")
     db.commit()
     db.refresh(nota)
     resultado["status_atual"] = nota.status_documento

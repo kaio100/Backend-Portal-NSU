@@ -296,3 +296,25 @@ def test_lote_agrupa_por_empresa_e_usa_uma_sessao_por_empresa(monkeypatch):
     assert [e["empresa_id"] for e in relatorio["empresas_sem_certificado"]] == [empresa_id]
     assert relatorio["empresas_sem_certificado"][0]["notas"] == 1
     assert nota_id  # a nota sem certificado nao e contada como erro de consulta
+
+
+def test_aplicar_eventos_mantem_cancelamento_quando_pdf_falha(monkeypatch):
+    """O status vindo do ADN nao pode ser perdido por uma falha do PHP/dompdf."""
+    empresa_id, nota_id, xml_key = _criar_nota_autorizada()
+    storage = get_storage_service()
+
+    def fake_regenerar(*_a, **_k):
+        raise RuntimeError("Call to undefined function mime_content_type()")
+
+    monkeypatch.setattr(eventos_sync_service.legacy_ingestion_service, "_regenerar_pdf_espelho_evento", fake_regenerar)
+    payload = {"LoteDFe": [{"NSU": "916", "TipoDocumento": "EVENTO", "ArquivoXml": _b64gz(XML_EVENTO_CANCELAMENTO)}]}
+    with SessionLocal() as db:
+        resultado = eventos_sync_service.aplicar_eventos_payload(db, storage, db.get(Nota, nota_id), db.get(Empresa, empresa_id), payload)
+        assert resultado["status_atual"] == "cancelada"
+        assert resultado["pdf_regenerado"] is False
+        assert resultado["erros"] and "mime_content_type" in resultado["erros"][0]
+    with SessionLocal() as db:
+        assert db.get(Nota, nota_id).status_documento == "cancelada"
+        evento = db.query(Evento).filter(Evento.nota_id == nota_id).one()
+        storage.delete(evento.xml_storage_key)
+    storage.delete(xml_key)

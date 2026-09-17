@@ -26,6 +26,9 @@ def main() -> int:
     args = parser.parse_args()
 
     init_db()
+    from backend.app.core.php_runtime import configurar_php
+
+    configurar_php()  # dompdf precisa do fileinfo/mbstring; no Windows gera o php.ini
     storage = get_storage_service()
     total = gerados = falhas = 0
     with SessionLocal() as db:

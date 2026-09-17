@@ -123,6 +123,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.apply and not args.all and args.empresa_id is None:
         parser.error("Para aplicar, informe --all ou --empresa-id.")
+    from backend.app.core.php_runtime import configurar_php
+
+    configurar_php()  # dompdf precisa do fileinfo/mbstring; no Windows gera o php.ini
     relatorio = executar(empresa_id=args.empresa_id, dry_run=not args.apply, batch_size=args.batch_size)
     print(asdict(relatorio))
     return 1 if relatorio.erros else 0
