@@ -427,6 +427,7 @@ class DanfseTemplate
                     ? $this->fmt->formatOptionalPercent($tribMun->pAliq)
                     : $this->fmt->formatOptionalPercent($valoresNfse?->pAliqAplic ?? null),
                 'retencao_issqn' => TpRetISSQN::labelFor($tribMun->tpRetISSQN ?? ''),
+                'desconto_incondicionado' => $this->fmt->formatOptionalMoney(($valores?->vDescCondIncond?->vDescIncond ?? '') !== '' ? $valores->vDescCondIncond->vDescIncond : ($tribMun->vDescIncond ?? null)),
                 'issqn_apurado' => ($tribMun->vISSQN ?? '') !== ''
                     ? $this->fmt->currency($tribMun->vISSQN)
                     : ((($valoresNfse?->vISSQN ?? '') !== '') ? $this->fmt->currency($valoresNfse->vISSQN) : '-'),
@@ -444,8 +445,10 @@ class DanfseTemplate
 
             'totais' => [
                 'valor_servico' => $this->fmt->currency($vServPrest?->vServ ?? ''),
-                'desconto_condicionado' => $this->fmt->formatOptionalMoney($tribMun?->vDescCond ?? null),
-                'desconto_incondicionado' => $this->fmt->formatOptionalMoney($tribMun?->vDescIncond ?? null),
+                // Leiaute nacional traz os descontos em valores/vDescCondIncond; o
+                // tribMun e mantido como fallback de versoes anteriores.
+                'desconto_condicionado' => $this->fmt->formatOptionalMoney(($valores?->vDescCondIncond?->vDescCond ?? '') !== '' ? $valores->vDescCondIncond->vDescCond : ($tribMun?->vDescCond ?? null)),
+                'desconto_incondicionado' => $this->fmt->formatOptionalMoney(($valores?->vDescCondIncond?->vDescIncond ?? '') !== '' ? $valores->vDescCondIncond->vDescIncond : ($tribMun?->vDescIncond ?? null)),
                 'issqn_retido' => (($tribMun?->vISSQN ?? '') !== '' || (($valoresNfse?->vISSQN ?? '') !== '')) && ($tribMun?->tpRetISSQN ?? '1') !== '1'
                     ? $this->fmt->currency(($tribMun?->vISSQN ?? '') !== '' ? $tribMun->vISSQN : $valoresNfse->vISSQN)
                     : '-',
