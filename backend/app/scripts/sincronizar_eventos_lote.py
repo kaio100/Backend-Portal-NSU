@@ -25,7 +25,7 @@ from backend.app.services import eventos_sync_service
 from backend.app.services.storage_service import get_storage_service
 
 
-def _notas_alvo(db, empresa_id: int | None, desde: date | None, limite: int | None):
+def _notas_alvo(db, empresa_id: int | None, desde: date | None, ate: date | None, limite: int | None):
     query = (
         db.query(Nota)
         .join(Empresa, Empresa.id == Nota.empresa_id)
@@ -39,6 +39,8 @@ def _notas_alvo(db, empresa_id: int | None, desde: date | None, limite: int | No
         query = query.filter(Nota.empresa_id == empresa_id)
     if desde is not None:
         query = query.filter(Nota.data_emissao >= desde)
+    if ate is not None:
+        query = query.filter(Nota.data_emissao < ate)
     query = query.order_by(Nota.empresa_id.asc(), Nota.id.asc())
     if limite:
         query = query.limit(limite)
@@ -51,6 +53,7 @@ def executar(
     limite: int | None,
     pausa: float,
     executar: bool,
+    ate: date | None = None,
 ) -> dict:
     init_db()
     storage = get_storage_service()
@@ -58,7 +61,7 @@ def executar(
     alteradas: list[dict] = []
     erros: list[dict] = []
     with SessionLocal() as db:
-        notas = _notas_alvo(db, empresa_id, desde, limite)
+        notas = _notas_alvo(db, empresa_id, desde, ate, limite)
         contadores["notas_alvo"] = len(notas)
         if not executar:
             return {"dry_run": True, **contadores}
@@ -84,6 +87,8 @@ def executar(
                     erros.append({"nota_id": nota.id, "empresa_id": nota.empresa_id, "erro": str(exc)[:200]})
             if pausa > 0:
                 time.sleep(pausa)
+            if contadores["consultadas"] % 200 == 0:
+                print(f"Progresso: {contadores['consultadas']}/{len(notas)} consultadas, {contadores['status_alterado']} alteradas, {contadores['erros']} erros", flush=True)
     return {"dry_run": False, **contadores, "alteradas": alteradas, "erros_detalhes": erros}
 
 
@@ -93,6 +98,7 @@ def main() -> None:
     grupo.add_argument("--empresa-id", type=int)
     grupo.add_argument("--todas", action="store_true")
     parser.add_argument("--desde", type=date.fromisoformat, default=None, help="Somente notas emitidas a partir desta data")
+    parser.add_argument("--ate", type=date.fromisoformat, default=None, help="Somente notas emitidas antes desta data (exclusivo)")
     parser.add_argument("--limite", type=int, default=None, help="Maximo de notas a consultar")
     parser.add_argument("--pausa", type=float, default=0.3, help="Segundos entre consultas ao ADN")
     parser.add_argument("--executar", action="store_true", help="Sem esta opcao apenas conta as notas alvo")
@@ -103,6 +109,7 @@ def main() -> None:
         limite=args.limite,
         pausa=args.pausa,
         executar=args.executar,
+        ate=args.ate,
     )
     print(json.dumps(relatorio, ensure_ascii=False, indent=2, default=str))
 

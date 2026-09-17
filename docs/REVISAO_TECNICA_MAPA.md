@@ -132,7 +132,32 @@ a propria NFS-e (`TipoDocumento=NFSE`) antes dos eventos; a nota e contada em
 `nota_retornada` e nao e tratada como evento. Testes em
 `tests/test_eventos_sync.py`.
 
-Pendente desta rodada: os gargalos acima. O mapa referenciado pelo
+### Deploy de 2026-09-17 (Railway `daring-flexibility` / Supabase)
+
+- Commits `44c6e72` e `d6f4b8a` (hotfix) no ar; migracao idempotente em 20 s;
+  worker, agendador e rota nova validados em producao. Frontend `4e94839`.
+- Railway: `NOTAS_DATA_CORTE`, `LOCAL_SIGNUP_ENABLED=false`,
+  `DATABASE_POOL_SIZE=5`, `DATABASE_MAX_OVERFLOW=10` adicionadas. Remocao das
+  7 variaveis mortas (FRONTEND_*, RESEND_*, SUPER_ADMIN_EMAILS_EXTRA) ficou em
+  staging, aplicar pelo painel.
+- **Correcao**: os segredos reais nunca foram commitados; o `.env.docker.example`
+  versionado sempre foi placeholder. A copia com valores reais existia so no
+  working tree. Rotacao segue recomendada por higiene, nao por vazamento.
+- **Bug pre-existente em producao**: `import tempfile` ausente em
+  `legacy_ingestion_service` fazia `_regenerar_pdf_espelho_evento` falhar sempre
+  (10.632 "avisos de PDF" desde 06/08). Status das notas estava certo; o
+  espelho de canceladas/substituidas por evento posterior ficava sem carimbo.
+  Corrigido em `d6f4b8a`; `regenerar_carimbos_pdfs --apply --all` reaplica.
+- Monitor global restaurado (`filtros_json` sem empresa_ids): 76 empresas
+  enfileiradas as 03:59 UTC; a fila roda sequencial em 1 worker.
+- Notas 6221 e 6267: ADN confirmou ausencia de evento; voltaram a
+  `autorizada`. Nota 529: evento real reaplicado e espelho carimbado.
+- `logs_processos`: 10.916 linhas nao-erro com mais de 60 dias apagadas.
+- Manutencao local contra producao via `.env.producao` + `run_prod.sh`
+  (ambos ignorados pelo Git; PHP local via `php_runtime`).
+
+Pendente desta rodada: os gargalos acima; aplicar as 7 remocoes em staging
+no Railway; rotacao de segredos (bloco C). O mapa referenciado pelo
 skill do projeto (`docs/MAPA_COMPLETO_DO_CODIGO.md`) nao existe neste clone.
 
 ## Correcoes aplicadas na primeira rodada (2026-09-16)
