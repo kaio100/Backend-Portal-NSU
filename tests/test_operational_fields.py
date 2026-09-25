@@ -242,7 +242,7 @@ def test_patch_responsavel_e_get_notas_campos_operacionais():
             json={"conferencia_status": "corrigir", "observacao": "divergencia fiscal"},
         )
         assert patch.status_code == 200
-        assert patch.json()["responsavel"] == "Kaio"
+        assert patch.json()["responsavel"] == "Portal Test"  # autor vem do login; corpo/cabecalho sao ignorados
 
         response = client.get("/notas", params={"busca": "CHAVE-OPERACIONAL"})
         assert response.status_code == 200

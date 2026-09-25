@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.deps import PAPEIS_VALIDOS, get_db, require_admin
 from backend.app.core.security import hash_password
-from backend.app.db.models import AcessoUsuario, Arquivo, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, Usuario
+from backend.app.db.models import AcessoUsuario, Arquivo, ConferenciaHistorico, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, Usuario
 from backend.app.db.session import SessionLocal
 from backend.app.services.notas_archive_service import arquivar_notas_anos_anteriores
 from backend.app.services.storage_service import get_storage_service
@@ -161,6 +161,10 @@ def excluir_usuario(usuario_id: int, admin: Usuario = Depends(require_admin), db
     if usuario.id == admin.id:
         raise HTTPException(status_code=400, detail="Voce nao pode excluir sua propria conta.")
     db.query(AcessoUsuario).filter(AcessoUsuario.usuario_id == usuario.id).delete(synchronize_session=False)
+    # O historico da analise continua com o nome e o e-mail do autor.
+    db.query(ConferenciaHistorico).filter(ConferenciaHistorico.usuario_id == usuario.id).update(
+        {ConferenciaHistorico.usuario_id: None}, synchronize_session=False
+    )
     db.delete(usuario)
     db.commit()
     return {"ok": True, "message": "Usuario excluido com sucesso."}

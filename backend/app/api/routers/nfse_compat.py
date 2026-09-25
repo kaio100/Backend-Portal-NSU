@@ -4,13 +4,14 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_empresa_grupo, require_nota_grupo, require_operator
 from backend.app.db.models import Usuario
 from backend.app.schemas.notas import NotaConferenciaUpdate
 from backend.app.services import notas_service, portal_support_service
-from backend.app.services.notas_service import NotaServiceError
+from backend.app.services.notas_service import ConferenciaBloqueada, NotaServiceError
 from backend.app.services.storage_service import StorageService
 
 
@@ -166,8 +167,15 @@ def get_nfse_compat(nota_id: int, db: Session = Depends(get_db), usuario: Usuari
 
 @router.put("/{nota_id}", dependencies=[Depends(require_operator)])
 async def update_nfse_compat(nota_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
+    """Contrato antigo. Mesmas regras do PATCH /notas/{id}/conferencia: trava de
+    retificacao, autor do login e historico."""
     require_nota_grupo(db, nota_id, usuario)
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Corpo da requisicao deve ser JSON.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="Corpo da requisicao deve ser um objeto JSON.")
     campos_somente_sistema = {"observacao_interna", "alertas_fiscais"}
     campos_bloqueados = sorted(campo for campo in campos_somente_sistema if campo in payload)
     if campos_bloqueados:
@@ -179,21 +187,26 @@ async def update_nfse_compat(nota_id: int, request: Request, db: Session = Depen
     try:
         nota_atual = notas_service.obter_nota(db, nota_id)
         conferencia_observacao = payload.get("observacao") if "observacao" in payload else nota_atual.conferencia_observacao
-        nota = notas_service.atualizar_conferencia(
-            db,
-            nota_id,
-            NotaConferenciaUpdate(
-                conferencia_status=status if status in {"pendente", "ok", "corrigir", "observacao"} else "pendente",
-                conferencia_observacao=conferencia_observacao,
-                responsavel=payload.get("responsavel"),
-                prioridade_manual=payload.get("prioridade_manual") or payload.get("prioridade"),
-                status_fila_manual=payload.get("status_fila_manual") or payload.get("status"),
-                divergencia=payload.get("divergencia"),
-            ),
+        dados = NotaConferenciaUpdate(
+            conferencia_status=status if status in {"pendente", "ok", "corrigir", "observacao"} else "pendente",
+            conferencia_observacao=conferencia_observacao,
+            prioridade_manual=payload.get("prioridade_manual") or payload.get("prioridade"),
+            status_fila_manual=payload.get("status_fila_manual") or payload.get("status"),
+            divergencia=payload.get("divergencia"),
+            retificar=bool(payload.get("retificar")),
         )
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors(include_url=False, include_input=False, include_context=False)) from exc
+    except NotaServiceError as exc:
+        _handle_error(exc)
+    try:
+        nota = notas_service.salvar_conferencia(db, nota_id, dados, usuario, retificar=dados.retificar)
         db.commit()
         db.refresh(nota)
-        return _nota_compat_dict(nota)
+        return _nota_compat_dict(notas_service.obter_nota(db, nota_id))
+    except ConferenciaBloqueada as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except NotaServiceError as exc:
         db.rollback()
         _handle_error(exc)

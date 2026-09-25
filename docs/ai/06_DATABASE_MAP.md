@@ -2,6 +2,8 @@
 
 ## Engine e migração
 
+**Desde 2026-09-25 (F2):** `migrate_db()` roda numa transação só, com `pg_advisory_xact_lock` no Postgres (réplicas não disputam DDL): `create_all` → `_ensure_runtime_columns` (CONGELADO, não acrescentar) → Alembic (`backend/app/db/migrations`, `alembic.ini` na raiz). Toda mudança nova de esquema é uma revisão idempotente (helpers `tabela_existe`/`coluna_existe`), porque o banco novo nasce completo pelo `create_all` e o de produção tem sobras da linha de set/2026 (6 tabelas e colunas extras, listadas na `0001_baseline`). Revisões: `0001_baseline`, `0002_historico_conferencia`.
+
 `backend/app/db/session.py` lê `DATABASE_URL`. SQLite usa WAL, `busy_timeout` e `check_same_thread=false`; PostgreSQL usa pool. `init_db()` executa `Base.metadata.create_all` e `_ensure_runtime_columns()` com `ALTER TABLE`/índices idempotentes. `scripts/migrar_banco.py` é o caminho explícito de produção. Alembic está instalado, mas não há `alembic/versions` versionado; o estado real do schema deve ser verificado contra `models.py` e o script de migração antes de deploy.
 
 ## Entidades e colunas críticas
@@ -23,6 +25,7 @@
 | `cnpj_cache` | PK composta `(cnpj, fonte)` | payload, CNAE, status, erro, consulta/expiração | enriquecimento de relatório |
 | `secrets` | `id`; `ref` unique | tipo, `encrypted_value` | senha PFX e outros segredos cifrados |
 | `usuarios` | `id`; email unique; FK empresa | email/hash/nome/ativo/grupo/is_admin/papel | autenticação e RBAC |
+| `notas_conferencia_historico` | `id`; FKs nota (nula após arquivamento), empresa, usuário (nulo após exclusão) | chave, usuario_nome/email, acao, alteracoes JSON, created_at | histórico imutável da análise fiscal |
 | `acessos_usuarios` | `id`; FK usuário | grupo, IP, user-agent, timestamp | auditoria de acessos |
 
 ## Campos de `notas` por domínio

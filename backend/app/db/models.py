@@ -301,6 +301,27 @@ class Nota(TimestampMixin, Base):
     arquivos: Mapped[list["Arquivo"]] = relationship(back_populates="nota")
 
 
+class ConferenciaHistorico(Base):
+    """Cada gravacao da analise fiscal de uma nota: quem, quando e o que mudou.
+
+    Guarda chave e empresa porque o arquivamento apaga notas antigas (nota_id
+    vira nulo) e nome/e-mail porque o usuario pode ser excluido depois.
+    """
+
+    __tablename__ = "notas_conferencia_historico"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    nota_id: Mapped[int | None] = mapped_column(ForeignKey("notas.id"), nullable=True, index=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
+    chave: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True, index=True)
+    usuario_nome: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    usuario_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    acao: Mapped[str] = mapped_column(String(20), nullable=False)  # "analise" ou "retificacao"
+    alteracoes: Mapped[dict] = mapped_column(JSON, nullable=False)  # {campo: {"de": ..., "para": ...}}
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
 class Evento(Base):
     __tablename__ = "eventos"
     __table_args__ = (

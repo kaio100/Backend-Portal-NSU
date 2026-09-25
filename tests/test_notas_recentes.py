@@ -301,7 +301,7 @@ def test_patch_conferencia_persiste_operador_e_filtra():
         assert response.status_code == 200
         payload = response.json()
         assert payload["conferencia_status"] == "ok"
-        assert payload["responsavel"] == "Kaio"
+        assert payload["responsavel"] == "Portal Test"  # autor vem do login; corpo/cabecalho sao ignorados
         assert payload["conferencia_atualizado_em"] is not None
 
         response = client.get("/notas", params={"conferencia_status": "ok"})

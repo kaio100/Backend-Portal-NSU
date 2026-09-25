@@ -166,23 +166,49 @@ class NotasTodasResponse(BaseModel):
     total: int
 
 
+def _valor_da_lista(valor: str | None, permitidos: dict[str, str], campo: str) -> str | None:
+    texto = (valor or "").strip().lower()
+    if not texto:
+        return None
+    if texto not in permitidos:
+        raise ValueError(f"{campo} invalido: use {', '.join(sorted(set(permitidos.values())))}.")
+    return permitidos[texto]
+
+
+PRIORIDADES_MANUAIS = {"alta": "alta", "high": "alta", "media": "media", "média": "media", "medium": "media", "baixa": "baixa", "low": "baixa"}
+STATUS_FILA_MANUAIS = {
+    "correta": "correta", "correto": "correta", "ok": "correta",
+    "divergente": "divergente",
+    "pendente": "pendente",
+    "cancelada": "cancelada", "cancelado": "cancelada",
+    "substituida": "substituida", "substituido": "substituida", "substituída": "substituida",
+}
+
+
 class NotaConferenciaUpdate(BaseModel):
+    """Analise fiscal enviada pela tela.
+
+    responsavel, atualizado_por, atualizado_em e operator_* sao aceitos por
+    compatibilidade e ignorados: autor e data vem do login. Os limites de
+    tamanho seguem as colunas (no Postgres, texto maior virava erro 500).
+    """
+
     conferencia_status: str
-    conferencia_observacao: str | None = None
-    observacao: str | None = None
+    conferencia_observacao: str | None = Field(default=None, max_length=4000)
+    observacao: str | None = Field(default=None, max_length=4000)
     observacao_interna: str | None = None
     responsavel: str | None = None
     prioridade: str | None = None
     prioridade_manual: str | None = None
     status_fila_manual: str | None = None
-    divergencia: str | None = None
-    valor_liquido_correto: Decimal | None = None
+    divergencia: str | None = Field(default=None, max_length=120)
+    valor_liquido_correto: Decimal | None = Field(default=None, ge=0, le=Decimal("9999999999999.99"))
     alertas_fiscais: str | list[str] | None = None
     atualizado_por: str | None = None
     atualizado_em: datetime | None = None
     operator_name: str | None = None
     operator_id: str | None = None
-    device_id: str | None = None
+    device_id: str | None = Field(default=None, max_length=80)
     retificar: bool = False
 
     @model_validator(mode="before")
@@ -216,9 +242,11 @@ class NotaConferenciaUpdate(BaseModel):
         self.observacao = (self.observacao or "").strip() or None
         self.observacao_interna = None
         self.responsavel = (self.responsavel or "").strip() or None
-        self.prioridade = (self.prioridade or "").strip() or None
-        self.prioridade_manual = (self.prioridade_manual or "").strip() or None
-        self.status_fila_manual = (self.status_fila_manual or "").strip() or None
+        self.prioridade = _valor_da_lista(self.prioridade, PRIORIDADES_MANUAIS, "prioridade")
+        self.prioridade_manual = _valor_da_lista(self.prioridade_manual, PRIORIDADES_MANUAIS, "prioridade_manual")
+        # O status manual vence qualquer calculo da fila: um valor digitado
+        # errado virava o status da nota.
+        self.status_fila_manual = _valor_da_lista(self.status_fila_manual, STATUS_FILA_MANUAIS, "status_fila_manual")
         self.divergencia = (self.divergencia or "").strip() or None
         # Alertas fiscais so podem vir da analise automatica (calcular_retencoes_esperadas),
         # nunca de um payload de usuario — mesmo que alguem chame a API direto.

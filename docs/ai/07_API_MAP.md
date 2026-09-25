@@ -90,7 +90,8 @@ Legenda: `JWT` = usuário autenticado; `ADM` = `require_admin`; `OP` = operador/
 | GET | `/notas/{nota_id}` | `notas.py::get_nota` | JWT/TEN | ID → detalhe |
 | GET | `/notas/{nota_id}/eventos` | `notas.py::list_eventos_nota` | JWT/TEN | → eventos |
 | GET | `/notas/{nota_id}/tributos-comparativo` | `notas.py::get_tributos_comparativo` | JWT/TEN | → informado/calculado |
-| PATCH | `/notas/{nota_id}/conferencia` | `notas.py::patch_conferencia_nota` | JWT/OP/TEN | status/obs/retificar → nota |
+| PATCH | `/notas/{nota_id}/conferencia` | `notas.py::patch_conferencia_nota` | JWT/OP/TEN | status/obs/retificar → nota (autor do login, 409 sem retificar, grava histórico) |
+| GET | `/notas/{nota_id}/historico` | `notas.py::get_historico_conferencia` | JWT/TEN | histórico da análise (quem, quando, de→para) |
 | GET | `/notas/{nota_id}/arquivos` | `notas.py::list_arquivos_nota` | JWT/TEN | → arquivos |
 | GET | `/eventos` | `eventos.py` | JWT | filtros/nota → eventos TEN |
 | GET | `/arquivos/{arquivo_id}/download` | `arquivos.py::download_arquivo` | JWT/TEN | ID → FileResponse |

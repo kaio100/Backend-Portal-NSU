@@ -139,17 +139,45 @@ def init_db() -> None:
         migrate_db()
 
 
+# Chave do advisory lock do Postgres que serializa migracoes concorrentes
+# (duas replicas subindo juntas disputavam o mesmo ALTER TABLE).
+_MIGRACAO_LOCK_ID = 802_611_025
+
+
 def migrate_db() -> None:
-    """Cria e atualiza o esquema em uma etapa administrativa explícita."""
+    """Cria e atualiza o esquema em uma etapa administrativa explícita.
+
+    Ordem, numa transacao so:
+    1. create_all: cria tabelas que ainda nao existem (banco novo ou tabela nova).
+    2. _ensure_runtime_columns: ajustes anteriores ao Alembic. CONGELADO: nao
+       acrescente nada aqui.
+    3. Alembic (backend/app/db/migrations): toda mudanca nova de esquema. As
+       revisoes sao idempotentes, porque o banco de producao tem sobras de
+       versoes antigas e o banco novo ja nasce completo pelo create_all.
+    """
     from backend.app.db import models  # noqa: F401
     from backend.app.db.base import Base
 
-    Base.metadata.create_all(bind=engine)
-    _ensure_runtime_columns()
+    with engine.begin() as connection:
+        if connection.dialect.name == "postgresql":
+            connection.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": _MIGRACAO_LOCK_ID})
+        Base.metadata.create_all(bind=connection)
+        _ensure_runtime_columns(connection)
+        _aplicar_migracoes_alembic(connection)
 
 
-def _ensure_runtime_columns() -> None:
-    inspector = inspect(engine)
+def _aplicar_migracoes_alembic(connection) -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    config = Config()
+    config.set_main_option("script_location", str(Path(__file__).resolve().parent / "migrations"))
+    config.attributes["connection"] = connection
+    command.upgrade(config, "head")
+
+
+def _ensure_runtime_columns(connection) -> None:
+    inspector = inspect(connection)
     table_names = set(inspector.get_table_names())
     statements: list[str] = []
     is_sqlite = settings.database_url.startswith("sqlite")
@@ -314,9 +342,5 @@ def _ensure_runtime_columns() -> None:
         if "ultima_reconciliacao_em" not in nsu_columns:
             statements.append("ALTER TABLE nsu_controle ADD COLUMN ultima_reconciliacao_em DATE")
 
-    if not statements:
-        return
-
-    with engine.begin() as connection:
-        for statement in statements:
-            connection.execute(text(statement))
+    for statement in statements:
+        connection.execute(text(statement))

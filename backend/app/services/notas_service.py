@@ -7,7 +7,7 @@ import re
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
-from backend.app.db.models import Arquivo, Empresa, Nota
+from backend.app.db.models import Arquivo, ConferenciaHistorico, Empresa, Nota
 from backend.app.repositories import arquivos_repo, empresas_repo, notas_repo
 from backend.app.services import cnpj_cache_service
 from backend.app.services.operational_fields_service import aplicar_campos_operacionais, definir_valor_exibicao
@@ -711,19 +711,61 @@ def obter_nota_por_chave(db: Session, chave: str, empresa_id: int | None = None)
     return _anotar_detalhe_frontend(nota, consulta_simples_api)
 
 
-def atualizar_conferencia(db: Session, nota_id: int, payload) -> Nota:
+class ConferenciaBloqueada(NotaServiceError):
+    """A nota ja tem analise e o pedido nao veio como retificacao."""
+
+
+# Campos da analise que entram no historico (o horario fica no proprio registro).
+CAMPOS_HISTORICO = (
+    "conferencia_status",
+    "conferencia_observacao",
+    "responsavel",
+    "prioridade",
+    "prioridade_manual",
+    "status_fila_manual",
+    "divergencia",
+    "valor_liquido_correto",
+    "status_valor_liquido",
+)
+
+
+def _valor_historico(valor):
+    if isinstance(valor, Decimal):
+        return str(valor)
+    if isinstance(valor, (datetime, date)):
+        return valor.isoformat()
+    return valor
+
+
+def salvar_conferencia(db: Session, nota_id: int, payload, usuario, retificar: bool = False) -> Nota:
+    """Unico caminho para gravar a analise fiscal (PATCH /notas e PUT /nfse).
+
+    Nota com analise so muda como retificacao explicita; autor e data vem do
+    login, nunca do corpo da requisicao; cada gravacao entra no historico.
+    """
+    nota = notas_repo.get_nota(db, nota_id)
+    if nota is None:
+        raise NotaServiceError("Nota nao encontrada.")
+    if nota.responsavel and not retificar:
+        raise ConferenciaBloqueada(
+            "Esta nota ja possui uma analise. Clique em Retificar analise para alterar o registro."
+        )
+    return atualizar_conferencia(db, nota_id, payload, usuario)
+
+
+def atualizar_conferencia(db: Session, nota_id: int, payload, usuario) -> Nota:
     nota = obter_nota(db, nota_id)
-    responsavel = payload.responsavel or nota.responsavel or payload.operator_name
-    atualizado_por = payload.atualizado_por or payload.operator_name or payload.responsavel
+    autor = (getattr(usuario, "nome", None) or getattr(usuario, "email", None) or "").strip() or None
+    acao = "retificacao" if nota.responsavel else "analise"
     data = {
         "conferencia_status": payload.conferencia_status,
         "conferencia_observacao": payload.conferencia_observacao,
-        "conferencia_atualizado_em": payload.atualizado_em or datetime.now(timezone.utc),
-        "conferencia_por": atualizado_por or nota.conferencia_por,
-        "operator_name": payload.operator_name,
-        "operator_id": payload.operator_id,
+        "conferencia_atualizado_em": datetime.now(timezone.utc),
+        "conferencia_por": autor,
+        "operator_name": autor,
+        "operator_id": str(usuario.id) if getattr(usuario, "id", None) is not None else None,
         "device_id": payload.device_id,
-        "responsavel": responsavel,
+        "responsavel": autor,
     }
     prioridade = payload.prioridade or payload.prioridade_manual
     if prioridade:
@@ -747,21 +789,61 @@ def atualizar_conferencia(db: Session, nota_id: int, payload) -> Nota:
     if payload.divergencia:
         data["divergencia"] = payload.divergencia
     if payload.valor_liquido_correto is not None:
-        data["valor_liquido_correto"] = payload.valor_liquido_correto
-        try:
-            liquido = float(nota.valor_liquido) if nota.valor_liquido is not None else None
-            correto = float(payload.valor_liquido_correto)
-            data["status_valor_liquido"] = "ok" if liquido is not None and abs(liquido - correto) < 0.01 else "divergente"
-        except Exception:
-            data["status_valor_liquido"] = None
+        correto = Decimal(str(payload.valor_liquido_correto))
+        data["valor_liquido_correto"] = correto
+        liquido = Decimal(str(nota.valor_liquido)) if nota.valor_liquido is not None else None
+        data["status_valor_liquido"] = (
+            "ok" if liquido is not None and abs(liquido - correto) < Decimal("0.01") else "divergente"
+        )
+    antes = {campo: getattr(nota, campo, None) for campo in CAMPOS_HISTORICO}
     # `alertas_fiscais` nunca vem do payload de conferencia — e sempre
     # recalculado pela analise fiscal automatica, nunca editado por usuario.
     notas_repo.update_nota(db, nota, data)
+    alteracoes = {
+        campo: {"de": _valor_historico(antes[campo]), "para": _valor_historico(getattr(nota, campo, None))}
+        for campo in CAMPOS_HISTORICO
+        if _valor_historico(antes[campo]) != _valor_historico(getattr(nota, campo, None))
+    }
+    if alteracoes:
+        db.add(
+            ConferenciaHistorico(
+                nota_id=nota.id,
+                empresa_id=nota.empresa_id,
+                chave=nota.chave,
+                usuario_id=getattr(usuario, "id", None),
+                usuario_nome=getattr(usuario, "nome", None),
+                usuario_email=getattr(usuario, "email", None),
+                acao=acao,
+                alteracoes=alteracoes,
+            )
+        )
+        db.flush()
     # Os campos derivados (status_fila_final, divergencia_fila_final, sla, etc.)
     # foram calculados em `obter_nota` acima, ANTES desta atualizacao. Sem
     # reanotar aqui, a resposta do PATCH devolvia o status antigo (ex.:
     # "divergente") mesmo depois da conferencia humana marcar a nota como OK.
     return obter_nota(db, nota_id)
+
+
+def listar_historico_conferencia(db: Session, nota_id: int) -> list[dict]:
+    registros = (
+        db.query(ConferenciaHistorico)
+        .filter(ConferenciaHistorico.nota_id == nota_id)
+        .order_by(ConferenciaHistorico.created_at.desc(), ConferenciaHistorico.id.desc())
+        .all()
+    )
+    return [
+        {
+            "id": registro.id,
+            "acao": registro.acao,
+            "usuario_id": registro.usuario_id,
+            "usuario_nome": registro.usuario_nome,
+            "usuario_email": registro.usuario_email,
+            "alteracoes": registro.alteracoes,
+            "created_at": registro.created_at,
+        }
+        for registro in registros
+    ]
 
 
 def listar_arquivos_nota(db: Session, nota_id: int) -> list[Arquivo]:

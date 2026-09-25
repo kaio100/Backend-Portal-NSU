@@ -11,7 +11,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
-from backend.app.db.models import Arquivo, Empresa, Evento, Nota
+from backend.app.db.models import Arquivo, ConferenciaHistorico, Empresa, Evento, Nota
 from backend.app.repositories import arquivos_repo
 from backend.app.services.storage_service import StorageService
 
@@ -145,6 +145,10 @@ def arquivar_notas_anos_anteriores(
             )
             db.query(Evento).filter(Evento.nota_id.in_(nota_ids)).update(
                 {Evento.nota_id: None}, synchronize_session=False
+            )
+            # O historico da analise sobrevive ao arquivamento (guarda chave e empresa).
+            db.query(ConferenciaHistorico).filter(ConferenciaHistorico.nota_id.in_(nota_ids)).update(
+                {ConferenciaHistorico.nota_id: None}, synchronize_session=False
             )
             excluidas = db.query(Nota).filter(Nota.id.in_(nota_ids)).delete(synchronize_session=False)
             db.commit()

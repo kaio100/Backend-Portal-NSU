@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
@@ -25,7 +25,7 @@ from backend.app.services.secrets_service import SecretsServiceError
 from backend.app.services import notas_download_service
 from backend.app.services import portal_support_service
 from backend.app.services.notas_download_service import NotasDownloadLoteError
-from backend.app.services.notas_service import NotaServiceError
+from backend.app.services.notas_service import ConferenciaBloqueada, NotaServiceError
 from backend.app.services.storage_service import StorageService
 from backend.app.db.models import Usuario
 
@@ -599,32 +599,31 @@ def sincronizar_eventos_nota(
 def patch_conferencia_nota(
     nota_id: int,
     payload: NotaConferenciaUpdate,
-    x_usuario_nome: str | None = Header(default=None, alias="X-Usuario-Nome"),
-    x_responsavel: str | None = Header(default=None, alias="X-Responsavel"),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_usuario),
 ):
+    # Autor e data vem do login; responsavel/atualizado_por/atualizado_em do
+    # corpo e os cabecalhos X-Responsavel/X-Usuario-Nome sao ignorados.
     try:
         require_nota_grupo(db, nota_id, usuario)
-        if (nota := notas_service.obter_nota(db, nota_id)).responsavel and not payload.retificar:
-            raise HTTPException(
-                status_code=409,
-                detail="Esta nota ja possui uma analise. Clique em Retificar analise para alterar o registro.",
-            )
-        usuario_nome = (usuario.nome or usuario.email or "").strip()
-        if payload.retificar:
-            payload.responsavel = usuario_nome or payload.responsavel
-            payload.atualizado_por = usuario_nome or payload.atualizado_por
-            payload.operator_name = usuario_nome or payload.operator_name
-        if not payload.responsavel:
-            payload.responsavel = (x_responsavel or x_usuario_nome or "").strip() or None
-        nota = notas_service.atualizar_conferencia(db, nota_id, payload)
+        nota = notas_service.salvar_conferencia(db, nota_id, payload, usuario, retificar=payload.retificar)
         db.commit()
         db.refresh(nota)
-        return nota
+        return notas_service.obter_nota(db, nota_id)
+    except ConferenciaBloqueada as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except NotaServiceError as exc:
         db.rollback()
         _handle_error(exc)
+
+
+@router.get("/{nota_id}/historico")
+def get_historico_conferencia(nota_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
+    """Quem alterou a analise fiscal da nota, quando e o que mudou."""
+    require_nota_grupo(db, nota_id, usuario)
+    itens = notas_service.listar_historico_conferencia(db, nota_id)
+    return {"nota_id": nota_id, "items": itens, "total": len(itens)}
 
 
 @router.get("/{nota_id}/arquivos")
