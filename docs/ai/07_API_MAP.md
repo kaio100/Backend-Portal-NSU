@@ -126,3 +126,20 @@ Legenda: `JWT` = usuário autenticado; `ADM` = `require_admin`; `OP` = operador/
 ## Consumidores frontend e divergências contratuais
 
 `src/lib/api.ts` é a matriz de consumo: cada método monta rota, query, body e headers. A página `CriarConta` chama `POST /auth/criar-conta`, mas o backend deste snapshot não registra essa rota (bug de integração confirmado). O método `listarGruposPublicos` chama `GET /auth/grupos`, porém o backend exige admin. Antes de alterar um caminho, pesquise em `api.ts`, hooks e componentes para atualizar tratamento de erro, invalidação React Query e download.
+
+### Contas por convite (desde 2026-09-25, F4)
+
+| Método | Rota | Handler | Proteção | Observação |
+|---|---|---|---|---|
+| POST | `/auth/convites` | `auth.py::criar_convite` | JWT/OP | link para o grupo de quem convida; convidado entra como operador |
+| GET | `/auth/convites` | `auth.py::listar_convites` | JWT/OP | convites do grupo |
+| DELETE | `/auth/convites/{id}` | `auth.py::revogar_convite` | JWT/OP | quem criou ou admin do grupo |
+| GET | `/auth/convite/{token}` | `auth.py::ver_convite` | público + limite | tela de cadastro confere o link |
+| POST | `/auth/criar-conta` | `auth.py::criar_conta` | público, exige convite | conta pendente; código por e-mail (Resend) |
+| POST | `/auth/verificar-email` | `auth.py::verificar_email` | público + limite | ativa a conta e devolve o token |
+| POST | `/auth/reenviar-codigo` | `auth.py::reenviar_codigo` | público + limite | resposta igual exista ou não o e-mail |
+| POST | `/auth/recuperar-senha` | `auth.py::recuperar_senha` | público + limite | código por e-mail; resposta igual |
+| POST | `/auth/redefinir-senha` | `auth.py::redefinir_senha` | público + limite | 5 tentativas por código; derruba sessões |
+| POST | `/auth/trocar-senha` | `auth.py::trocar_senha` | JWT | derruba sessões |
+
+Removidas: `/auth/local` (login sem senha no perfil local) e o cadastro local sem convite. `/admin/*` passa a valer só para o grupo do admin; criar/editar/excluir grupo e mover usuário entre grupos exigem admin geral (`SUPER_ADMIN_EMAILS`).

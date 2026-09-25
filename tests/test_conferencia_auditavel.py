@@ -159,6 +159,15 @@ def test_excluir_usuario_mantem_o_historico():
 
 
 def test_migracoes_alembic_ficam_no_head():
+    from pathlib import Path
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    import backend.app.db as pacote_db
+
+    config = Config()
+    config.set_main_option("script_location", str(Path(pacote_db.__file__).parent / "migrations"))
     with engine.connect() as conexao:
         versao = conexao.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert versao == "0002_historico_conferencia"
+    assert versao == ScriptDirectory.from_config(config).get_current_head()

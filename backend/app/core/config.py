@@ -47,7 +47,6 @@ class Settings(BaseSettings):
     jobs_travados_minutos: int = 15
     api_worker_enabled: bool = True
     embedded_scheduler_enabled: bool = True
-    local_signup_enabled: bool = False
     api_worker_sleep: float = 0.2
     api_worker_concurrency: int = 1
     consultas_scheduler_sleep: float = 1
@@ -81,6 +80,16 @@ class Settings(BaseSettings):
     cnpj_receita_db_path: str = "data/cnpj_receita.sqlite3"
     cnpj_receita_cache_days: int = 30
     alert_webhook_url: str | None = None
+    # E-mail transacional (codigo de cadastro e de redefinicao de senha).
+    resend_enabled: bool = False
+    resend_api_key: str | None = None
+    resend_from_email: str | None = None
+    # Endereco publico do frontend, usado no link de convite.
+    frontend_base_url: str | None = None
+    # E-mails que administram todos os grupos; os demais admins so o proprio.
+    super_admin_emails: str = ""
+    convite_validade_dias: int = 7
+    codigo_email_validade_minutos: int = 15
     log_level: str = "INFO"
 
     @field_validator("database_url", mode="before")
@@ -117,7 +126,13 @@ class Settings(BaseSettings):
             Fernet(str(self.secrets_key).encode("utf-8"))
         except (TypeError, ValueError) as exc:
             raise ValueError("SECRETS_KEY deve ser uma chave Fernet valida em producao.") from exc
+        if self.resend_enabled and not (str(self.resend_api_key or "").strip() and str(self.resend_from_email or "").strip()):
+            raise ValueError("RESEND_ENABLED=true exige RESEND_API_KEY e RESEND_FROM_EMAIL.")
         return self
+
+    @property
+    def super_admin_email_set(self) -> set[str]:
+        return {email.strip().lower() for email in self.super_admin_emails.split(",") if email.strip()}
 
     @property
     def is_production(self) -> bool:

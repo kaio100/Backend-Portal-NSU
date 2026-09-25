@@ -14,7 +14,8 @@ def _usuario(papel: str, *, is_admin: bool = False):
     return SimpleNamespace(papel=papel, is_admin=is_admin)
 
 
-def test_leitura_nao_pode_executar_acoes_operacionais():
+def test_papel_fora_da_lista_nao_opera():
+    # Desde 2026-09-25 so existem operador e admin; "leitura" antigo e recusado.
     with pytest.raises(HTTPException) as exc_info:
         require_operator(_usuario("leitura"))
     assert exc_info.value.status_code == 403
@@ -40,7 +41,7 @@ def test_is_admin_legado_continua_compativel_durante_migracao():
     assert require_operator(admin_legado) is admin_legado
 
 
-def test_leitura_enxerga_dados_mas_rotas_de_escrita_retornam_403():
+def test_papel_fora_da_lista_enxerga_dados_mas_nao_escreve():
     leitura = SimpleNamespace(
         id=99,
         empresa_id=1,
@@ -68,25 +69,3 @@ def test_leitura_enxerga_dados_mas_rotas_de_escrita_retornam_403():
     assert criar_empresa.status_code == 403
     assert iniciar_consultas.status_code == 403
     assert alterar_nota.status_code == 403
-
-
-def test_leitura_pode_acessar_cadastro_de_certificado():
-    leitura = SimpleNamespace(
-        id=99,
-        empresa_id=1,
-        email="leitura@example.com",
-        nome="Leitura",
-        ativo=True,
-        grupo="planning_hub",
-        is_admin=False,
-        papel="leitura",
-    )
-    app.dependency_overrides[get_current_usuario] = lambda: leitura
-    try:
-        with TestClient(app) as client:
-            response = client.post("/certificados", data={})
-    finally:
-        app.dependency_overrides.pop(get_current_usuario, None)
-
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Arquivo PFX/P12 e obrigatorio."

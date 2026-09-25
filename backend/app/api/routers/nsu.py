@@ -23,7 +23,13 @@ def _nsu_payload(
     certificado_id: int | None = None,
 ) -> dict:
     empresa = db.get(Empresa, empresa_id)
-    certificado = db.get(Certificado, certificado_id) if certificado_id is not None else None
+    # So certificado da propria empresa: antes o nome de um certificado de
+    # outro grupo aparecia na resposta.
+    certificado = (
+        db.query(Certificado).filter(Certificado.id == certificado_id, Certificado.empresa_id == empresa_id).first()
+        if certificado_id is not None
+        else None
+    )
     query = db.query(NsuControle).filter(NsuControle.empresa_id == empresa_id)
     if certificado_id is None:
         query = query.filter(NsuControle.certificado_id.is_(None))

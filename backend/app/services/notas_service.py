@@ -703,8 +703,8 @@ def obter_nota(db: Session, nota_id: int) -> Nota:
     return _anotar_detalhe_frontend(nota, consulta_simples_api)
 
 
-def obter_nota_por_chave(db: Session, chave: str, empresa_id: int | None = None) -> Nota:
-    nota = notas_repo.get_nota_by_chave_optional_empresa(db, chave, empresa_id=empresa_id)
+def obter_nota_por_chave(db: Session, chave: str, empresa_id: int | None = None, grupo: str | None = None) -> Nota:
+    nota = notas_repo.get_nota_by_chave_optional_empresa(db, chave, empresa_id=empresa_id, grupo=grupo)
     if nota is None:
         raise NotaServiceError("Nota nao encontrada.")
     consulta_simples_api = _consultas_simples_api_lote(db, [nota]).get(int(nota.id))

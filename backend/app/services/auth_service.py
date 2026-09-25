@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from backend.app.core.security import create_access_token, hash_password, verify_password
+from backend.app.core.security import create_access_token, hash_password, verificar_senha_tempo_constante
 from backend.app.db.models import Usuario
 from backend.app.repositories import usuarios_repo
 
@@ -13,11 +13,12 @@ class AuthError(ValueError):
 
 def autenticar(db: Session, email: str, senha: str) -> tuple[Usuario, str]:
     usuario = usuarios_repo.get_usuario_by_email(db, email)
-    if usuario is None or not usuario.ativo or not verify_password(senha, usuario.senha_hash):
-        # Mesma mensagem para email inexistente e senha errada: evita
-        # confirmar para um atacante se o email esta cadastrado.
+    # Mesma mensagem e mesmo tempo (o hash roda mesmo sem usuario) para email
+    # inexistente e senha errada: nao confirma quais e-mails tem conta.
+    senha_ok = verificar_senha_tempo_constante(senha, usuario.senha_hash if usuario else None)
+    if usuario is None or not senha_ok or not usuario.ativo or not getattr(usuario, "email_verificado", True):
         raise AuthError("Email ou senha invalidos.")
-    token = create_access_token(usuario.id, usuario.empresa_id)
+    token = create_access_token(usuario.id, usuario.empresa_id, getattr(usuario, "token_version", 0))
     return usuario, token
 
 

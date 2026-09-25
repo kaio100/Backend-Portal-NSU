@@ -274,6 +274,9 @@ def listar_eventos_nota(db: Session, nota_id: int) -> dict:
 
         db.query(Evento)
 
+        # A mesma chave existe em empresas diferentes (quem emitiu e quem
+        # tomou); sem o filtro de empresa vinham eventos de outro grupo.
+        .filter(Evento.empresa_id == nota.empresa_id)
         .filter(or_(Evento.nota_id == nota_id, Evento.chave_afetada == nota.chave))
 
         .order_by(Evento.data_evento.desc().nullslast(), Evento.created_at.desc(), Evento.id.desc())

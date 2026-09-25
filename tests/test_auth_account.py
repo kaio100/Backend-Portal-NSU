@@ -14,7 +14,6 @@ Path("data/test_auth_account.db").unlink(missing_ok=True)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from backend.app.core.config import settings
 from backend.app.core.security import create_access_token, hash_password  # noqa: E402
 from backend.app.db.models import Empresa, Usuario  # noqa: E402
 from backend.app.db.session import SessionLocal, init_db  # noqa: E402
@@ -51,18 +50,18 @@ def _criar_usuario(*, email: str, is_admin: bool) -> tuple[Usuario, str]:
         return usuario, token
 
 
-def test_rotas_de_autocadastro_nao_existem_e_nao_criam_registros():
+def test_cadastro_sem_convite_valido_nao_cria_registros():
+    # Desde 2026-09-25 o cadastro e por convite: sem convite valido nada e criado.
     _reset_db()
     payload = {"nome": "Atacante", "email": "atacante@example.com", "senha": "senha-forte-123", "grupo": "planning_hub", "cnpj": "22333444000155"}
     with TestClient(app) as client:
-        criar_conta = client.post("/auth/criar-conta", json=payload)
+        sem_convite = client.post("/auth/criar-conta", json=payload)
+        convite_falso = client.post("/auth/criar-conta", json={**payload, "convite": "convite-inventado-123"})
         register = client.post("/auth/register", json=payload)
-        openapi = client.get("/openapi.json").json()
 
-    assert criar_conta.status_code == 404
+    assert sem_convite.status_code == 422
+    assert convite_falso.status_code == 404
     assert register.status_code == 404
-    assert "/auth/criar-conta" not in openapi["paths"]
-    assert "/auth/register" not in openapi["paths"]
     with SessionLocal() as db:
         assert db.query(Usuario).count() == 0
         assert db.query(Empresa).count() == 0
@@ -92,20 +91,11 @@ def test_administrador_pode_listar_grupos_e_login_existente_continua_funcionando
     assert login.json()["usuario"]["email"] == usuario.email
 
 
-def test_login_local_entra_sem_senha_com_usuario_ativo(monkeypatch):
-    # O login automatico e parte do perfil local explicito, a mesma chave do
-    # autocadastro. Nao depende de ENVIRONMENT: iniciar_local.py roda como
-    # production e antes disso o frontend em localhost recebia 404 aqui.
+def test_login_local_sem_senha_nao_existe_mais():
+    # /auth/local entregava o token do primeiro admin para qualquer requisicao
+    # que parecesse local (um tunel ngrok/cloudflared abria isso para fora).
     _reset_db()
-    usuario, _token = _criar_usuario(email="admin-local@example.com", is_admin=True)
-
+    _criar_usuario(email="admin-local@example.com", is_admin=True)
     with TestClient(app) as client:
-        fechado = client.post("/auth/local")
-        monkeypatch.setattr(settings, "local_signup_enabled", True)
-        monkeypatch.setattr(settings, "environment", "production")
-        aberto = client.post("/auth/local")
-
-    assert fechado.status_code == 404
-    assert aberto.status_code == 200
-    assert aberto.json()["access_token"]
-    assert aberto.json()["usuario"]["email"] == usuario.email
+        resposta = client.post("/auth/local")
+    assert resposta.status_code in {404, 405}

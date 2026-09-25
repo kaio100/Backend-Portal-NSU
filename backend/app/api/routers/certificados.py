@@ -8,7 +8,8 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_admin, require_empresa_grupo
 from backend.app.core.config import settings
 from backend.app.core.rate_limit import RateLimiter
-from backend.app.db.models import Certificado, Usuario
+from backend.app.core.rede import ip_cliente
+from backend.app.db.models import Certificado, Empresa, Usuario
 from backend.app.schemas.certificados import (
     CertificadoAutocadastroResponse,
     CertificadoRead,
@@ -41,8 +42,7 @@ async def _ler_certificado_limitado(arquivo: UploadFile) -> bytes:
 
 
 def _limitar_tentativas_senha(certificado_id: int, request: Request) -> None:
-    client_host = request.client.host if request.client else "unknown"
-    if not _senha_rate_limiter.allow(f"{client_host}:{certificado_id}"):
+    if not _senha_rate_limiter.allow(f"{ip_cliente(request)}:{certificado_id}"):
         raise HTTPException(
             status_code=429,
             detail="Muitas tentativas de senha para este certificado. Tente novamente em alguns minutos.",
@@ -100,14 +100,17 @@ def _first_upload_file(form, *names: str) -> UploadFile | None:
     return None
 
 
-def _resolve_certificado_ref(db: Session, certificado_ref: str) -> Certificado:
+def _resolve_certificado_ref(db: Session, certificado_ref: str, grupo: str) -> Certificado:
     ref = str(certificado_ref or "").strip()
     certificado = None
+    no_grupo = db.query(Certificado).join(Empresa, Empresa.id == Certificado.empresa_id).filter(Empresa.grupo == grupo)
     if ref.isdigit():
-        certificado = db.get(Certificado, int(ref))
+        certificado = no_grupo.filter(Certificado.id == int(ref)).first()
     if certificado is None and ref:
+        # Busca por nome so no grupo: antes um nome igual em outro grupo
+        # escondia o certificado do proprio grupo.
         certificado = (
-            db.query(Certificado)
+            no_grupo
             .filter(func.lower(Certificado.nome) == ref.lower())
             .order_by(Certificado.id.desc())
             .first()
@@ -331,8 +334,7 @@ async def update_certificado_compat(
     storage: StorageService = Depends(get_storage),
     usuario: Usuario = Depends(get_current_usuario),
 ):
-    certificado = _resolve_certificado_ref(db, certificado_ref)
-    _garantir_certificado_do_grupo(db, certificado.id, usuario)
+    certificado = _resolve_certificado_ref(db, certificado_ref, usuario.grupo)
     try:
         payload = await request.json()
     except Exception:
@@ -345,7 +347,7 @@ async def update_certificado_compat(
     try:
         if password:
             certificados_service.salvar_senha_certificado(db, storage, certificado.id, password)
-            certificado = _resolve_certificado_ref(db, str(certificado.id))
+            certificado = _resolve_certificado_ref(db, str(certificado.id), usuario.grupo)
         changed = False
         if alias:
             certificado.nome = alias
@@ -488,8 +490,7 @@ def testar_senha_salva(
 @router.delete("/{certificado_ref}", response_model=CertificadoRead, dependencies=[Depends(require_admin)])
 def delete_certificado(certificado_ref: str, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
-        certificado = _resolve_certificado_ref(db, certificado_ref)
-        _garantir_certificado_do_grupo(db, certificado.id, usuario)
+        certificado = _resolve_certificado_ref(db, certificado_ref, usuario.grupo)
         return certificados_service.desativar_certificado(db, certificado.id)
     except CertificadoServiceError as exc:
         _handle_error(exc)

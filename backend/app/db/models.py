@@ -438,6 +438,10 @@ class Usuario(TimestampMixin, Base):
     grupo: Mapped[str] = mapped_column(String(40), nullable=False, default="planning_hub", index=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     papel: Mapped[str] = mapped_column(String(20), nullable=False, default="operador", index=True)
+    # Conta criada por convite so fica ativa depois de confirmar o e-mail.
+    email_verificado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    # Vai no JWT; trocar ou redefinir a senha incrementa e derruba os tokens antigos.
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     empresa: Mapped[Empresa] = relationship(back_populates="usuarios")
 
@@ -450,4 +454,51 @@ class AcessoUsuario(Base):
     grupo: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     ip: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class ConviteCadastro(TimestampMixin, Base):
+    """Link de convite para criar conta num grupo (formato ja existente em producao)."""
+
+    __tablename__ = "convites_cadastro"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    grupo: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    nome: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    max_usos: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    usos_atuais: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    criado_por_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+
+
+class VerificacaoEmailToken(Base):
+    """Codigo enviado por e-mail para confirmar a conta criada por convite."""
+
+    __tablename__ = "verificacoes_email_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    codigo_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    tentativas: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    used_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    convite_id: Mapped[int | None] = mapped_column(ForeignKey("convites_cadastro.id"), nullable=True)
+
+
+class RedefinicaoSenhaToken(Base):
+    """Codigo enviado por e-mail para redefinir a senha."""
+
+    __tablename__ = "redefinicoes_senha_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    expires_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    used_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ip_solicitante: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    tentativas: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

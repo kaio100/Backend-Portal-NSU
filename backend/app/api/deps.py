@@ -6,14 +6,14 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
 from backend.app.core.security import TokenError, decode_access_token
-from backend.app.db.models import Arquivo, Certificado, Empresa, Nota, Processo, Usuario
+from backend.app.db.models import Arquivo, Certificado, Empresa, Grupo, Nota, Processo, Usuario
 from backend.app.db.session import get_db
 from backend.app.services.storage_service import get_storage_service
 
 PAPEL_ADMIN = "admin"
 PAPEL_OPERADOR = "operador"
-PAPEL_LEITURA = "leitura"
-PAPEIS_VALIDOS = frozenset({PAPEL_ADMIN, PAPEL_OPERADOR, PAPEL_LEITURA})
+# Decisao de 2026-09-25: so existem os papeis operador e admin.
+PAPEIS_VALIDOS = frozenset({PAPEL_ADMIN, PAPEL_OPERADOR})
 
 
 def get_storage():
@@ -46,24 +46,47 @@ def get_current_usuario(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nao autenticado.")
     try:
         payload = decode_access_token(credentials.credentials)
-    except TokenError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        usuario_id = int(payload["sub"])
+    except (TokenError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalido ou expirado.") from exc
 
-    usuario = db.get(Usuario, int(payload["sub"]))
-    if usuario is None or not usuario.ativo:
+    usuario = db.get(Usuario, usuario_id)
+    if usuario is None or not usuario.ativo or not getattr(usuario, "email_verificado", True):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario nao encontrado ou inativo.")
+    if int(payload.get("ver") or 0) != int(getattr(usuario, "token_version", 0) or 0):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessao encerrada. Entre novamente.")
+    grupo = db.query(Grupo).filter(Grupo.codigo == usuario.grupo).first()
+    if grupo is not None and not grupo.ativo:
+        # Desativar o grupo no admin nao bloqueava ninguem.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Grupo desativado.")
     return usuario
 
 
+def eh_super_admin(usuario: Usuario) -> bool:
+    """Admin listado em SUPER_ADMIN_EMAILS: administra todos os grupos."""
+    email = str(getattr(usuario, "email", "") or "").strip().lower()
+    return _eh_admin(usuario) and email in settings.super_admin_email_set
+
+
+def _eh_admin(usuario: Usuario) -> bool:
+    return bool(getattr(usuario, "is_admin", False)) or getattr(usuario, "papel", PAPEL_OPERADOR) == PAPEL_ADMIN
+
+
 def require_admin(usuario: Usuario = Depends(get_current_usuario)) -> Usuario:
-    if not usuario.is_admin and getattr(usuario, "papel", PAPEL_OPERADOR) != PAPEL_ADMIN:
+    if not _eh_admin(usuario):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso exclusivo para administradores.")
     return usuario
 
 
+def require_super_admin(usuario: Usuario = Depends(require_admin)) -> Usuario:
+    if not eh_super_admin(usuario):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso exclusivo para o administrador geral.")
+    return usuario
+
+
 def require_operator(usuario: Usuario = Depends(get_current_usuario)) -> Usuario:
-    papel = PAPEL_ADMIN if usuario.is_admin else getattr(usuario, "papel", PAPEL_OPERADOR)
-    if papel not in {PAPEL_ADMIN, PAPEL_OPERADOR}:
+    papel = PAPEL_ADMIN if _eh_admin(usuario) else getattr(usuario, "papel", PAPEL_OPERADOR)
+    if papel not in PAPEIS_VALIDOS:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso exclusivo para operadores.")
     return usuario
 

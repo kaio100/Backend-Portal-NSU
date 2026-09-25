@@ -40,7 +40,19 @@ def verify_password(password: str, encoded_hash: str) -> bool:
     return hmac.compare_digest(actual, expected)
 
 
-def create_access_token(usuario_id: int, empresa_id: int) -> str:
+# Hash de uma senha qualquer, usado quando o e-mail nao existe: o login leva
+# o mesmo tempo nos dois casos e nao revela quais e-mails tem conta.
+_HASH_PARA_TEMPO_CONSTANTE = hash_password("senha-inexistente-para-tempo-constante")
+
+
+def verificar_senha_tempo_constante(password: str, encoded_hash: str | None) -> bool:
+    if not encoded_hash:
+        verify_password(password, _HASH_PARA_TEMPO_CONSTANTE)
+        return False
+    return verify_password(password, encoded_hash)
+
+
+def create_access_token(usuario_id: int, empresa_id: int, versao: int = 0) -> str:
     if not settings.jwt_secret:
         raise TokenError("JWT_SECRET nao configurada. Defina uma chave no .env.")
 
@@ -48,6 +60,9 @@ def create_access_token(usuario_id: int, empresa_id: int) -> str:
     payload = {
         "sub": str(usuario_id),
         "empresa_id": empresa_id,
+        # Trocar ou redefinir a senha incrementa usuarios.token_version e
+        # invalida os tokens emitidos antes.
+        "ver": int(versao or 0),
         "iat": now,
         "exp": now + timedelta(minutes=settings.jwt_expire_minutes),
     }

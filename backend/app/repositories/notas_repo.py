@@ -48,10 +48,13 @@ def get_nota_by_chave_optional_empresa(
     db: Session,
     chave: str,
     empresa_id: int | None = None,
+    grupo: str | None = None,
 ) -> Nota | None:
     query = db.query(Nota).filter(Nota.chave == chave)
     if empresa_id is not None:
         query = query.filter(Nota.empresa_id == empresa_id)
+    if grupo is not None:
+        query = query.join(Empresa, Empresa.id == Nota.empresa_id).filter(Empresa.grupo == grupo)
     return query.order_by(Nota.id.desc()).first()
 
 

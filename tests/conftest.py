@@ -17,9 +17,6 @@ os.environ["API_WORKER_ENABLED"] = "false"
 # O .env do desenvolvedor pode apontar para o R2 de producao; a suite nunca
 # pode gravar ou ler arquivos fora do disco local.
 os.environ["STORAGE_BACKEND"] = "local"
-# O .env do desenvolvedor pode ligar o perfil local; a suite exige o padrao
-# fechado para testar que as rotas locais nao existem fora dele.
-os.environ["LOCAL_SIGNUP_ENABLED"] = "false"
 os.environ["API_KEY"] = "api-key-test-with-at-least-32-bytes"
 os.environ["JWT_SECRET"] = "jwt-secret-test-with-at-least-32-bytes"
 os.environ["SECRETS_KEY"] = Fernet.generate_key().decode("utf-8")

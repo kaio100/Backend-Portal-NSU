@@ -69,9 +69,13 @@ def arquivar_notas_anos_anteriores(
     *,
     ano_operacional: int = 2026,
     executar: bool = False,
+    grupo: str | None = None,
 ) -> dict[str, Any]:
     """Salva um manifesto no Storage e, depois de validado, exclui as notas antigas."""
-    empresas = list(db.query(Empresa).order_by(Empresa.id.asc()).all())
+    query_empresas = db.query(Empresa)
+    if grupo is not None:
+        query_empresas = query_empresas.filter(Empresa.grupo == grupo)
+    empresas = list(query_empresas.order_by(Empresa.id.asc()).all())
     resumo: dict[str, Any] = {
         "ano_operacional": ano_operacional,
         "criterio_data": "competencia; data_emissao quando competencia estiver ausente",

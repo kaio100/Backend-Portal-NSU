@@ -515,7 +515,9 @@ def get_nota_por_chave(
     try:
         if empresa_id is not None:
             require_empresa_grupo(db, empresa_id, usuario)
-        nota = notas_service.obter_nota_por_chave(db, chave, empresa_id=empresa_id)
+        # Busca so no grupo do usuario: antes pegava a nota mais recente com a
+        # chave em qualquer grupo e devolvia 404 falso se fosse de outro.
+        nota = notas_service.obter_nota_por_chave(db, chave, empresa_id=empresa_id, grupo=usuario.grupo)
         require_nota_grupo(db, int(nota.id), usuario)
         return nota
     except NotaServiceError as exc:
