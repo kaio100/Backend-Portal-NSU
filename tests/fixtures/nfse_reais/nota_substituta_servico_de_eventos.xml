@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" versao="1.00">
+    <infNFSe Id="NFS23044001290000000000009000000000211726040721039558">
+        <xLocEmi>FORTALEZA</xLocEmi>
+        <xLocPrestacao>FORTALEZA</xLocPrestacao>
+        <nNFSe>2117</nNFSe>
+        <cLocIncid>2304400</cLocIncid>
+        <xLocIncid>FORTALEZA</xLocIncid>
+        <xTribNac>SERVIÇOS DE ORGANIZAÇÃO DE FEIRAS, CONGRESSOS E EXPOSIÇOES</xTribNac>
+        <xTribMun>SERVIÇOS DE ORGANIZAÇÃO DE FEIRAS, CONGRESSOS E EXPOSIÇOES</xTribMun>
+        <xNBS>0</xNBS>
+        <verAplic>1.00</verAplic>
+        <ambGer>1</ambGer>
+        <tpEmis>2</tpEmis>
+        <cStat>100</cStat>
+        <dhProc>2026-04-14T08:55:20-00:00</dhProc>
+        <nDFSe>534898759</nDFSe>
+        <emit>
+            <CNPJ>90000000000009</CNPJ>
+            <IM>123456</IM>
+            <xNome>ORGANIZACAO DE EVENTOS TESTE LTDA</xNome>
+            <enderNac>
+                <xLgr>RUA TESTE</xLgr>
+                <nro>1</nro>
+                <xCpl>SALA 1</xCpl>
+                <xBairro>CENTRO</xBairro>
+                <cMun>2304400</cMun>
+                <UF>CE</UF>
+                <CEP>01001000</CEP>
+            </enderNac>
+        </emit>
+        <valores>
+            <vBC>39066.52</vBC>
+            <pAliqAplic>4.32</pAliqAplic>
+            <vISSQN>1687.67</vISSQN>
+            <vTotalRet>1687.67</vTotalRet>
+            <vLiq>37378.85</vLiq>
+        </valores>
+        <DPS versao="1.00">
+            <infDPS Id="DPS230440029000000000000900001000000000002117">
+                <tpAmb>1</tpAmb>
+                <dhEmi>2026-04-14T08:55:20-00:00</dhEmi>
+                <verAplic>1.00</verAplic>
+                <serie>1</serie>
+                <nDPS>2117</nDPS>
+                <dCompet>2026-04-01</dCompet>
+                <tpEmit>1</tpEmit>
+                <cLocEmi>2304400</cLocEmi>
+                <subst>
+                    <chSubstda>23044001290000000000009000000000211026040325359074</chSubstda>
+                    <cMotivo>99</cMotivo>
+                    <xMotivo>MOTIVO DE TESTE</xMotivo>
+                </subst>
+                <prest>
+                    <CNPJ>90000000000009</CNPJ>
+                    <IM>123456</IM>
+                    <fone>11999999999</fone>
+                    <email>teste@example.com</email>
+                    <regTrib>
+                        <opSimpNac>3</opSimpNac>
+                        <regApTribSN>2</regApTribSN>
+                        <regEspTrib>0</regEspTrib>
+                    </regTrib>
+                </prest>
+                <toma>
+                    <CNPJ>90000000000006</CNPJ>
+                    <IM>123456</IM>
+                    <xNome>ORGANIZACAO DE EVENTOS TESTE LTDA</xNome>
+                    <end>
+                        <endNac>
+                            <cMun>2304400</cMun>
+                            <CEP>01001000</CEP>
+                        </endNac>
+                        <xLgr>RUA TESTE</xLgr>
+                        <nro>1</nro>
+                        <xCpl>SALA 1</xCpl>
+                        <xBairro>CENTRO</xBairro>
+                    </end>
+                    <fone>11999999999</fone>
+                    <email>teste@example.com</email>
+                </toma>
+                <serv>
+                    <locPrest>
+                        <cLocPrestacao>2304400</cLocPrestacao>
+                    </locPrest>
+                    <cServ>
+                        <cTribNac>171001</cTribNac>
+                        <cTribMun>001</cTribMun>
+                        <xDescServ>ORGANIZACAO DE EVENTO CORPORATIVO (TESTE)</xDescServ>
+                    </cServ>
+                </serv>
+                <valores>
+                    <vServPrest>
+                        <vServ>39066.52</vServ>
+                    </vServPrest>
+                    <trib>
+                        <tribMun>
+                            <tribISSQN>1</tribISSQN>
+                            <tpRetISSQN>2</tpRetISSQN>
+                        </tribMun>
+                        <tribFed>
+                            <piscofins>
+                                <CST>00</CST>
+                                <vPis>0.00</vPis>
+                                <vCofins>0.00</vCofins>
+                            </piscofins>
+                        </tribFed>
+                        <totTrib>
+                            <vTotTrib>
+                                <vTotTribFed>0.00</vTotTribFed>
+                                <vTotTribEst>0.00</vTotTribEst>
+                                <vTotTribMun>1687.67</vTotTribMun>
+                            </vTotTrib>
+                        </totTrib>
+                    </trib>
+                </valores>
+            </infDPS>
+        </DPS>
+    </infNFSe>
+</NFSe>

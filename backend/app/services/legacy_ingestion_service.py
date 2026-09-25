@@ -18,6 +18,12 @@ from backend.app.core.observability import alert_failure
 from backend.app.db.models import Evento, Nota, Processo
 from backend.app.repositories import arquivos_repo, notas_repo
 from backend.app.services.danfse_service import DanfseService, friendly_pdf_filename
+from backend.app.services.nfse_status_service import (
+    ROTULO_SUBSTITUIDA,
+    STATUS_SUBSTITUIDA,
+    classificar_xml,
+    prioridade_status,
+)
 from backend.app.services.nfse_xml_parser import extrair_dados_nfse
 from backend.app.services.operational_fields_service import (
     calcular_status_simples_nacional_xml,
@@ -353,39 +359,6 @@ def _to_text(value) -> str:
     return "" if value is None else str(value)
 
 
-def _xml_contains_text(root: ElementTree.Element, pattern: str) -> bool:
-    wanted = pattern.lower()
-    for element in root.iter():
-        tag = _local_name(element.tag)
-        text = (element.text or "").strip()
-        if wanted in tag or wanted in text.lower():
-            return True
-    return False
-
-
-def _status_from_xml(root: ElementTree.Element) -> tuple[str | None, str | None]:
-    cstat = _find_text(root, "cStat")
-    motivo = _find_text(root, "xMotivo", "motivo", "descEvento", "xEvento", "xDesc")
-    text_blob = " ".join((element.text or "") for element in root.iter()).lower()
-
-    # cStat 100/107 identifica uma NFS-e autorizada. Ele deve prevalecer sobre
-    # palavras soltas na descricao do servico (por exemplo, "substituicao" ou
-    # "cancelamento" em texto fiscal), que antes geravam falso positivo.
-    if cstat in {"100", "107"}:
-        return "autorizada", "Autorizada"
-    if _xml_contains_text(root, "cancel") or "cancelamento" in text_blob:
-        return "cancelada", "Cancelada"
-    if _xml_contains_text(root, "subst") or "substitu" in text_blob:
-        return "substituida", "Substituida"
-    if cstat == "101" or "erro" in motivo.lower():
-        return "erro_emissao", "Erro na emissao"
-    if cstat:
-        return f"cstat_{cstat}", motivo or f"Codigo {cstat}"
-    if motivo:
-        return "evento", motivo
-    return None, None
-
-
 def _text_digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
 
@@ -409,8 +382,8 @@ def _extract_chave_from_xml(xml_path: Path, root: ElementTree.Element | None = N
 
 
 def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[str, str]:
-    root_name = _local_name(root.tag)
-    is_evento = root_name == "evento" or bool(_find_text(root, "chNFSe", "chSubstda")) and _xml_contains_text(root, "evento")
+    classificacao = classificar_xml(root)
+    is_evento = classificacao.tipo == "evento"
     prestador_cnpj = _text_digits(
         _find_scoped_text(root, ("prest", "prestador", "emit"), ("cnpj", "cpf", "cpfcnpj"))
         or _find_text(root, "CnpjPrestador", "CNPJPrestador", "CpfCnpjPrestador", "CpfPrestador")
@@ -427,7 +400,7 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
         _find_scoped_text(root, ("toma", "tomador"), ("xnome", "razaosocial", "nome"))
         or _find_text(root, "RazaoSocialTomador", "NomeTomador")
     )
-    status_documento, status_rotulo = _status_from_xml(root)
+    status_documento, status_rotulo = classificacao.status, classificacao.rotulo
     simples_xml = extrair_simples_nacional_xml(root)
     valor_liquido = _find_text(root, "ValorLiquidoNfse", "ValorLiquido", "vLiq")
     valor_servico = _find_text(root, "ValorServicos", "ValorServico", "vServ")
@@ -477,7 +450,9 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
     return {
         "tipo_xml": "evento" if is_evento else "nota",
         "chave": _extract_chave_from_xml(xml_path, root),
-        "chave_afetada": _text_digits(_find_text(root, "chNFSe", "chSubstda")),
+        "chave_afetada": classificacao.chave_afetada or "",
+        "chave_substituida": classificacao.chave_substituida or "",
+        "codigo_evento": classificacao.codigo_evento or "",
         "descricao_evento": _find_text(root, "xDesc", "descEvento", "xEvento"),
         "motivo_evento": _find_text(root, "xMotivo", "motivo"),
         "numero_nfse": _find_text(root, "Numero", "NumeroNfse", "nNFSe"),
@@ -581,9 +556,17 @@ def _registrar_evento_xml(
     status_documento = resumo.get("status_documento") or None
     status_rotulo = resumo.get("status_rotulo") or None
     nota = None
+    aplicado = False
     if chave_afetada:
         nota = notas_repo.get_nota_by_chave(db, int(processo.empresa_id), chave_afetada)
-        if nota is not None and status_documento in {"cancelada", "substituida"}:
+        # Cancelada prevalece sobre substituida: um evento de substituicao que
+        # chega depois nao desfaz um cancelamento ja registrado.
+        if (
+            nota is not None
+            and status_documento in {"cancelada", "substituida"}
+            and prioridade_status(status_documento) > prioridade_status(nota.status_documento)
+        ):
+            aplicado = True
             observacao = status_rotulo or status_documento
             motivo = resumo.get("motivo_evento") or resumo.get("descricao_evento")
             if motivo:
@@ -614,14 +597,84 @@ def _registrar_evento_xml(
                 nota_id=nota.id if nota is not None else None,
                 chave_evento=chave_evento,
                 chave_afetada=chave_afetada,
-                tipo_evento=status_documento,
+                tipo_evento=status_documento or "evento",
                 descricao=resumo.get("descricao_evento") or resumo.get("motivo_evento"),
                 xml_storage_key=xml_storage_key,
                 nsu=nsu,
             )
         )
         db.flush()
-    return nota
+    # So devolve a nota quando o status mudou: quem chama regenera o espelho
+    # com o carimbo do evento e nao pode carimbar uma nota que nao mudou.
+    return nota if aplicado else None
+
+
+def _prever_status_por_chave(mapa: dict[str, tuple[str, str | None]], resumo: dict[str, Any]) -> None:
+    """Anota o status que um documento impoe a outra nota do mesmo lote.
+
+    Evento de cancelamento/substituicao atinge a nota de chave_afetada; nota
+    substituta (chSubstda) atinge a nota antiga. Vale o status de maior
+    prioridade, independente da ordem das linhas no indice.
+    """
+    status = str(resumo.get("status_documento") or "").strip().lower()
+    if resumo.get("tipo_xml") == "evento":
+        if status not in {"cancelada", "substituida"}:
+            return
+        alvo = str(resumo.get("chave_afetada") or "").strip()
+        previsto = (status, resumo.get("status_rotulo") or status.capitalize())
+    else:
+        alvo = str(resumo.get("chave_substituida") or "").strip()
+        previsto = (STATUS_SUBSTITUIDA, ROTULO_SUBSTITUIDA)
+    if not alvo:
+        return
+    atual = mapa.get(alvo)
+    if atual is None or prioridade_status(previsto[0]) > prioridade_status(atual[0]):
+        mapa[alvo] = previsto
+
+
+def _status_final_nota(
+    status_xml: tuple[str | None, str | None],
+    status_previsto: tuple[str, str | None] | None,
+    nota_existente: Nota | None,
+) -> tuple[str | None, str | None]:
+    """Status gravado na nota: o de maior prioridade entre XML, lote e banco.
+
+    Reprocessar o XML original nunca desfaz um cancelamento ou substituicao ja
+    conhecidos, e um evento do lote prevalece sobre o status "autorizada".
+    """
+    candidatos = [status_xml]
+    if status_previsto is not None:
+        candidatos.append(status_previsto)
+    existente = str(getattr(nota_existente, "status_documento", None) or "").strip().lower()
+    if existente in {"cancelada", "substituida"}:
+        candidatos.append((existente, getattr(nota_existente, "status_rotulo", None) or existente.capitalize()))
+    return max(candidatos, key=lambda item: prioridade_status(item[0]))
+
+
+def _aplicar_substituicao(
+    db: Session,
+    storage: StorageService,
+    processo: Processo,
+    chave_substituida: str | None,
+    gerar_pdf_espelho: bool,
+    counters: dict[str, Any],
+) -> None:
+    """A nota substituta (chSubstda) marca a nota antiga como substituida,
+    mesmo que o evento de substituicao ainda nao tenha chegado."""
+    if not chave_substituida:
+        return
+    antiga = notas_repo.get_nota_by_chave(db, int(processo.empresa_id), chave_substituida)
+    if antiga is None or prioridade_status(antiga.status_documento) >= prioridade_status(STATUS_SUBSTITUIDA):
+        return
+    notas_repo.update_nota(db, antiga, {"status_documento": STATUS_SUBSTITUIDA, "status_rotulo": ROTULO_SUBSTITUIDA})
+    counters["notas_marcadas_substituidas"] = int(counters.get("notas_marcadas_substituidas", 0)) + 1
+    if not gerar_pdf_espelho:
+        return
+    try:
+        _regenerar_pdf_espelho_evento(db, storage, processo, antiga, STATUS_SUBSTITUIDA)
+    except Exception as exc:
+        alert_failure("event_pdf_regeneration", exc, nota_id=antiga.id)
+        counters["avisos_pdf"] += 1
 
 
 def _regenerar_pdf_espelho_evento(
@@ -863,13 +916,7 @@ def ingerir_saida_legado(
             # A leitura principal abaixo continua responsavel por registrar
             # XMLs invalidos nos contadores normais da ingestao.
             continue
-        event_status = str(event_resumo.get("status_documento") or "").strip().lower()
-        chave_afetada = str(event_resumo.get("chave_afetada") or "").strip()
-        if event_resumo.get("tipo_xml") == "evento" and chave_afetada and event_status in {"cancelada", "substituida"}:
-            status_evento_por_chave[chave_afetada] = (
-                event_status,
-                event_resumo.get("status_rotulo") or event_status.capitalize(),
-            )
+        _prever_status_por_chave(status_evento_por_chave, event_resumo)
     if only_chaves is not None:
         rows = [row for row in rows if (row.get("chave") or "").strip() in only_chaves]
     if updated_after is not None:
@@ -971,18 +1018,12 @@ def ingerir_saida_legado(
                             )
                 counters["eventos_importados"] = int(counters.get("eventos_importados", 0)) + 1
                 continue
-            status_documento = row.get("status_documento") or xml_resumo.get("status_documento") or None
-            status_rotulo = row.get("status_rotulo") or xml_resumo.get("status_rotulo") or None
-            status_evento = status_evento_por_chave.get(chave)
             nota_existente = notas_repo.get_nota_by_chave(db, int(processo.empresa_id), chave)
-            status_existente = str(getattr(nota_existente, "status_documento", None) or "").strip().lower()
-            if status_evento is not None:
-                status_documento, status_rotulo = status_evento
-            elif status_existente in {"cancelada", "substituida"}:
-                # Reprocessar o XML original nao pode apagar um evento fiscal
-                # ja conhecido nem recriar o espelho sem o respectivo carimbo.
-                status_documento = status_existente
-                status_rotulo = getattr(nota_existente, "status_rotulo", None) or status_existente.capitalize()
+            status_documento, status_rotulo = _status_final_nota(
+                (xml_resumo.get("status_documento") or None, xml_resumo.get("status_rotulo") or None),
+                status_evento_por_chave.get(chave),
+                nota_existente,
+            )
             pdf_espelho_path = None
             pdf_espelho_reutilizado = False
             pdf_filename = ""
@@ -1076,6 +1117,9 @@ def ingerir_saida_legado(
                 counters["notas_criadas"] += 1
             else:
                 counters["notas_atualizadas"] += 1
+            _aplicar_substituicao(
+                db, storage, processo, xml_resumo.get("chave_substituida"), gerar_pdf_espelho, counters
+            )
 
             if xml_path is not None and xml_storage_key is not None:
                 xml_bytes = xml_path.read_bytes()
@@ -1218,13 +1262,7 @@ def _ingerir_por_varredura(
         except Exception:
             continue
         resumos_por_xml[candidate] = candidate_resumo
-        event_status = str(candidate_resumo.get("status_documento") or "").strip().lower()
-        chave_afetada = str(candidate_resumo.get("chave_afetada") or "").strip()
-        if candidate_resumo.get("tipo_xml") == "evento" and chave_afetada and event_status in {"cancelada", "substituida"}:
-            status_evento_por_chave[chave_afetada] = (
-                event_status,
-                candidate_resumo.get("status_rotulo") or event_status.capitalize(),
-            )
+        _prever_status_por_chave(status_evento_por_chave, candidate_resumo)
 
     for xml_path in xml_files:
         try:
@@ -1282,16 +1320,12 @@ def _ingerir_por_varredura(
                 counters["erros"] += 1
                 continue
 
-            status_documento = resumo.get("status_documento") or None
-            status_rotulo = resumo.get("status_rotulo") or None
-            status_evento = status_evento_por_chave.get(chave)
             nota_existente = notas_repo.get_nota_by_chave(db, int(processo.empresa_id), chave)
-            status_existente = str(getattr(nota_existente, "status_documento", None) or "").strip().lower()
-            if status_evento is not None:
-                status_documento, status_rotulo = status_evento
-            elif status_existente in {"cancelada", "substituida"}:
-                status_documento = status_existente
-                status_rotulo = getattr(nota_existente, "status_rotulo", None) or status_existente.capitalize()
+            status_documento, status_rotulo = _status_final_nota(
+                (resumo.get("status_documento") or None, resumo.get("status_rotulo") or None),
+                status_evento_por_chave.get(chave),
+                nota_existente,
+            )
 
             ano, mes = _ano_mes(resumo)
             xml_storage_key = build_xml_key(empresa_cnpj, ano, mes, xml_path.name)
@@ -1349,6 +1383,9 @@ def _ingerir_por_varredura(
             _aplicar_campos_fiscais_xml(nota_data, resumo)
             nota, created = notas_repo.upsert_nota_by_chave(db, processo.empresa_id, chave, nota_data)
             counters["notas_criadas" if created else "notas_atualizadas"] += 1
+            _aplicar_substituicao(
+                db, storage, processo, resumo.get("chave_substituida"), gerar_pdf_espelho, counters
+            )
 
             xml_bytes = xml_path.read_bytes()
             meta, imported = _put_file_if_needed(storage, xml_storage_key, xml_path, "application/xml")

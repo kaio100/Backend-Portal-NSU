@@ -14,6 +14,9 @@ from cryptography.fernet import Fernet
 _TEST_DB_PATH = Path(__file__).resolve().parents[1] / "data" / "test_suite.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH.as_posix()}"
 os.environ["API_WORKER_ENABLED"] = "false"
+# O .env do desenvolvedor pode apontar para o R2 de producao; a suite nunca
+# pode gravar ou ler arquivos fora do disco local.
+os.environ["STORAGE_BACKEND"] = "local"
 # O .env do desenvolvedor pode ligar o perfil local; a suite exige o padrao
 # fechado para testar que as rotas locais nao existem fora dele.
 os.environ["LOCAL_SIGNUP_ENABLED"] = "false"
@@ -29,6 +32,7 @@ from backend.app.core.config import settings as _test_settings  # noqa: E402
 
 assert _test_settings.database_url.startswith("sqlite:///")
 assert "test_suite.db" in _test_settings.database_url
+assert _test_settings.storage_backend == "local"
 
 
 @pytest.fixture(autouse=True)

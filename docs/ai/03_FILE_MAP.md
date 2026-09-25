@@ -42,6 +42,7 @@ Este é o mapa funcional do snapshot auditado. Diretórios de dependência insta
 | Consulta/NSU | `consultas_service.py`, `nsu_control_service.py`, `processos_service.py`, `locks_service.py` | valida elegibilidade → processo/job → NSU/lock/status |
 | Worker/legado | `worker/jobs.py`, `worker/worker.py`, `worker/scheduler.py`, `legacy_processing_service.py`, `legacy_ingestion_service.py` | claim → ADN → parse/upsert → finalização |
 | Notas | `notas_service.py`, `notas_download_service.py`, `notas_archive_service.py`, `nfse_xml_parser.py`, `pdf_status_service.py` | classificação, conferência, download e arquivamento |
+| Status fiscal | `nfse_status_service.py` | única fonte da decisão nota/evento e do `status_documento` (raiz, cStat, código do evento); ver REG-014 |
 | Fiscal | `retencoes_regras_service.py`, `retencoes_calculo_service.py`, `operational_fields_service.py` | regra LC/flags → Decimal → status/alerta |
 | Documentos | `storage_service.py`, `storage_naming_service.py`, `arquivos_service.py`, `danfse_service.py` | chave segura → storage → índice ou DANFSe PHP |
 | Portal | `portal_support_service.py`, `empresas_service.py`, `certificados_service.py`, `certificado_metadata_service.py`, `secrets_service.py`, `auth_service.py` | suporte às telas, cadastro e relatório |

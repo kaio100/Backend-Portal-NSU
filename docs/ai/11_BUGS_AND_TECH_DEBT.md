@@ -14,6 +14,8 @@
 
 8. **Colisão com código municipal de 3 dígitos (corrigido nesta alteração):** `cTribMun=501` era normalizado como subitem LC116 `5.01`, podendo aplicar silenciosamente a regra de medicina veterinária a uma nota de locação sem incidência. Códigos municipais simples de 3 dígitos agora não são convertidos em subitem; o código nacional é preservado separadamente.
 
+9. **Classificação de status por palavra-chave (corrigido em 2026-09-25, branch `ajustes/f1-status-fiscal`):** `_status_from_xml` procurava "cancel"/"subst" em qualquer texto e tratava como evento todo XML com `chSubstda` e a palavra "evento". Em produção: nota substituta válida (cStat 101) gravada como `substituida` (239 notas), notas de empresas/serviços de eventos gravadas como evento e ausentes do portal (15), "Solicitação de Análise Fiscal" (e101103) gravada como cancelamento, cancelamento por substituição (e105102) gravado como `cancelada`, cStat 102/103 sem rótulo. Substituído por `nfse_status_service.classificar_xml` (REG-014). **Os dados já gravados em produção ainda precisam do script de correção da Fase 1.**
+
 ## Bugs potenciais sustentados pela leitura
 
 - **Duplicidade de evento:** `eventos` não possui unique composto; a idempotência depende de `_registrar_evento_xml` e de suas buscas. Reprocessamento concorrente merece teste.

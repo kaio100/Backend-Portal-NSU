@@ -92,3 +92,11 @@ A empresa Canopus conserva cadastro/certificado, mas seus documentos e registros
 ## Última alteração auditada (2026-09-15)
 
 `retencoes_regras_service.py` agora normaliza cabeçalhos/percentuais, recarrega a fonte quando ela muda e aceita `RETENCOES_REGRAS_PATH`. `legacy_ingestion_service.py` não deixa um código genérico sem regra (como `990101`/`99.01`) esconder um candidato LC116 posterior que esteja na `Planilha2`, nem transforma `cTribMun` simples de 3 dígitos (como `501`) em subitem LC116. O `cTribNac` original permanece separado quando há fallback municipal. A varredura de 8.412 notas XML do projeto não encontrou subitem ausente; encontrou apenas o código inválido/sem regra `005300`→`0.53`, que deve ser corrigido na origem e não inferido pela descrição. Para dados já persistidos, execute `backend.app.scripts.recalcular_alertas_fiscais` no ambiente que tenha acesso aos XMLs; não invente o subitem apenas pelo texto da descrição.
+
+## Estado atual do trabalho (2026-09-25)
+
+- Plano de ajustes em fases (F0–F8), decidido com o Kaio. Auditoria de riscos e plano publicados como páginas privadas; o plano segue a ordem: status fiscal (F1), análise auditável com Alembic (F2), worker/NSU (F3), grupos e contas com convite e Resend (F4).
+- `main` local: `83db9afb` (limpeza), `ebbb4a86` (revert temporário do `c43cb834`, a regra de canceladas fora da exportação), `09559ad8` (restaura este `docs/ai`, que o revert tinha removido). Nada foi enviado ao GitHub; o Railway está parado por falta de pagamento e publicaria o `main` do GitHub, que ainda está no `c43cb834`.
+- Branch `ajustes/f1-status-fiscal`: classificação de status por estrutura (REG-014), com 35 testes e XML reais mascarados em `tests/fixtures/nfse_reais`. `tests/conftest.py` força `STORAGE_BACKEND=local`.
+- Papéis decididos: só `operador` e `admin` (o `leitura` sai); convite só por operador/admin, convidado entra como operador.
+- Próximos passos da F1: aplicar eventos já gravados ao criar a nota (A3), chave única em eventos, erro de uma nota não desfazer o bloco (C2), tela não gravar campos calculados (A1), script de correção com simulação, reativar a regra do `c43cb834`.

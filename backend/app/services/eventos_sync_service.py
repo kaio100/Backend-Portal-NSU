@@ -254,10 +254,11 @@ def aplicar_eventos_payload(
             # traga a chave afetada em um campo reconhecido pelo parser.
             if not resumo.get("chave_afetada"):
                 resumo["chave_afetada"] = str(nota.chave)
-            legacy_ingestion_service._registrar_evento_xml(db, contexto, resumo, xml_storage_key, nsu)
-            status = str(resumo.get("status_documento") or "").strip().lower()
-            if status in {"cancelada", "substituida"}:
-                status_final = status
+            nota_alterada = legacy_ingestion_service._registrar_evento_xml(db, contexto, resumo, xml_storage_key, nsu)
+            # So carimba o espelho quando o evento mudou o status da nota; um
+            # evento sem efeito (solicitacao, manifestacao) nao pode carimbar.
+            if nota_alterada is not None:
+                status_final = str(nota_alterada.status_documento or "").strip().lower()
             resultado["eventos_aplicados"] += 1
         except Exception as exc:  # um evento invalido nao pode impedir os demais
             resultado["erros"].append(str(exc)[:300])
