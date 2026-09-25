@@ -151,7 +151,7 @@ def _buscar_notas(db: Session, payload: NotasDownloadLoteRequest, max_notas: int
             raise NotasDownloadLoteError(
                 f"Limite de {max_notas} notas por ZIP excedido. Selecione menos notas ou refine os filtros."
             )
-        notas = notas_repo.list_notas_by_ids(db, payload.nota_ids, somente_exportaveis=True)
+        notas = notas_repo.list_notas_by_ids(db, payload.nota_ids)
         if grupo is not None:
             notas = [nota for nota in notas if nota.empresa is not None and nota.empresa.grupo == grupo]
         return notas
@@ -188,7 +188,6 @@ def _buscar_notas(db: Session, payload: NotasDownloadLoteRequest, max_notas: int
         sort=filtros.sort,
         limit=max_notas + 1,
         offset=0,
-        somente_exportaveis=True,
     )
     if len(notas) > max_notas:
         raise NotasDownloadLoteError(

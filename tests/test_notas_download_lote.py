@@ -197,107 +197,31 @@ def test_download_lote_por_filtros_inclui_pdf_espelho_quando_nao_ha_original():
     assert not any("OUTRO" in name for name in names)
 
 
-def _empresa_com_cancelada_e_substituida(db, storage, cnpj: str):
-    empresa, processo = _empresa_processo(db, cnpj=cnpj)
-    notas = {
-        "autorizada": _nota(db, empresa, processo, "32724", "PRESTADOR AUTORIZADO", status="autorizada"),
-        "cancelada": _nota(db, empresa, processo, "32725", "PRESTADOR CANCELADO", status="cancelada"),
-        "substituida": _nota(db, empresa, processo, "32726", "PRESTADOR SUBSTITUIDO", status="substituida"),
-        # Status gravado fora do padrao tambem nao pode escapar da regra.
-        "cancelada_fora_padrao": _nota(db, empresa, processo, "32727", "PRESTADOR CANCELADO 2", status=" Cancelada "),
-    }
-    for nota in notas.values():
-        _arquivo(db, storage, empresa, processo, nota, "XML", f"{nota.numero_nfse}.xml", b"<xml/>")
-        _arquivo(db, storage, empresa, processo, nota, "PDF_ESPELHO", f"{nota.numero_nfse}.pdf", b"%PDF")
-    return empresa, {chave: int(nota.id) for chave, nota in notas.items()}
-
-
-def test_download_lote_nunca_inclui_cancelada_ou_substituida():
+def test_download_lote_prefixa_status_cancelado_e_substituido():
     _reset_db()
     storage = get_storage_service()
     with SessionLocal() as db:
-        empresa, ids = _empresa_com_cancelada_e_substituida(db, storage, cnpj="22333444000156")
-        empresa_id = empresa.id
-        db.commit()
-
-    esperado = ["xml/NFS-e 32724.xml", "pdf/NFS-e 32724.pdf"]
-    with TestClient(app) as client:
-        respostas = [
-            client.post(
-                "/notas/download-lote",
-                json={"nota_ids": list(ids.values()), "incluir_xml": True, "incluir_pdf": True},
-            ),
-            client.post(
-                "/notas/download-lote",
-                json={"filtros": {"empresa_id": empresa_id}, "incluir_xml": True, "incluir_pdf": True},
-            ),
-            client.get(f"/notas/download-lote?empresa_id={empresa_id}&incluir_xml=true&incluir_pdf=true"),
-            client.get(
-                "/notas/download-lote?"
-                + "&".join(f"nota_ids={nota_id}" for nota_id in ids.values())
-                + "&incluir_xml=true&incluir_pdf=true"
-            ),
-        ]
-
-    for response in respostas:
-        assert response.status_code == 200
-        names = _zip_names(response)
-        assert sorted(name.split("/", 2)[2] for name in names) == sorted(esperado)
-        assert not any("CANCELADO" in name or "SUBSTITUIDO" in name for name in names)
-
-
-def test_download_lote_somente_canceladas_ou_substituidas_retorna_erro_amigavel():
-    _reset_db()
-    storage = get_storage_service()
-    with SessionLocal() as db:
-        empresa, ids = _empresa_com_cancelada_e_substituida(db, storage, cnpj="22333444000157")
-        empresa_id = empresa.id
+        empresa, processo = _empresa_processo(db, cnpj="22333444000156")
+        cancelada = _nota(db, empresa, processo, "32725", "PRESTADOR CANCELADO", status="cancelada")
+        substituida = _nota(db, empresa, processo, "32726", "PRESTADOR SUBSTITUIDO", status="substituida")
+        for nota, prefixo in ((cancelada, "CANCELADO"), (substituida, "SUBSTITUIDO")):
+            _arquivo(db, storage, empresa, processo, nota, "XML", f"{prefixo.lower()}.xml", b"<xml/>")
+            _arquivo(db, storage, empresa, processo, nota, "PDF_ESPELHO", f"{prefixo.lower()}.pdf", b"%PDF")
+        nota_ids = [cancelada.id, substituida.id]
         db.commit()
 
     with TestClient(app) as client:
-        por_ids = client.post(
+        response = client.post(
             "/notas/download-lote",
-            json={"nota_ids": [ids["cancelada"], ids["substituida"]], "incluir_xml": True, "incluir_pdf": True},
-        )
-        por_filtro = client.post(
-            "/notas/download-lote",
-            json={"filtros": {"empresa_id": empresa_id, "status": "cancelada"}},
+            json={"nota_ids": nota_ids, "incluir_xml": True, "incluir_pdf": True},
         )
 
-    for response in (por_ids, por_filtro):
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Nenhuma nota encontrada para os filtros informados."
-
-
-def test_download_lote_limite_nao_conta_cancelada_ou_substituida(monkeypatch):
-    _reset_db()
-    monkeypatch.setattr(settings, "download_lote_max_notas", 1)
-    storage = get_storage_service()
-    with SessionLocal() as db:
-        empresa, _ = _empresa_com_cancelada_e_substituida(db, storage, cnpj="22333444000158")
-        empresa_id = empresa.id
-        db.commit()
-
-    with TestClient(app) as client:
-        response = client.post("/notas/download-lote", json={"filtros": {"empresa_id": empresa_id}})
-
     assert response.status_code == 200
-    assert any(name.endswith("/xml/NFS-e 32724.xml") for name in _zip_names(response))
-
-
-def test_listagem_do_portal_continua_exibindo_cancelada_e_substituida():
-    _reset_db()
-    storage = get_storage_service()
-    with SessionLocal() as db:
-        empresa, ids = _empresa_com_cancelada_e_substituida(db, storage, cnpj="22333444000159")
-        empresa_id = empresa.id
-        db.commit()
-
-    with TestClient(app) as client:
-        response = client.get(f"/notas?empresa_id={empresa_id}")
-
-    assert response.status_code == 200
-    assert {item["id"] for item in response.json()} == set(ids.values())
+    names = _zip_names(response)
+    assert any(name.endswith("/xml/CANCELADO NFS-e 32725.xml") for name in names)
+    assert any(name.endswith("/pdf/CANCELADO NFS-e 32725.pdf") for name in names)
+    assert any(name.endswith("/xml/SUBSTITUIDO NFS-e 32726.xml") for name in names)
+    assert any(name.endswith("/pdf/SUBSTITUIDO NFS-e 32726.pdf") for name in names)
 
 
 def test_download_lote_get_compatibilidade_com_botao_frontend():

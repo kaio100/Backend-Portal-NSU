@@ -927,8 +927,6 @@ def _buscar_notas_relatorio(db: Session, filtros: NotasDownloadFiltros, grupo: s
 
         sort=filtros.sort,
 
-        somente_exportaveis=True,
-
     )
 
     empresa_cnpj = ""

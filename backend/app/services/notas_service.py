@@ -308,7 +308,6 @@ def listar_notas(
     offset: int = 0,
     sort: str = "recentes",
     arquivadas: str = "ativas",
-    somente_exportaveis: bool = False,
 ) -> list[Nota]:
     filtro_tipo = normalizar_tipo_nota(tipo_nota)
     filtro_direcao = normalizar_direcao_nota(direcao_nota)
@@ -371,7 +370,6 @@ def listar_notas(
         offset=repo_offset,
         sort=sort,
         arquivadas=arquivadas,
-        somente_exportaveis=somente_exportaveis,
     )
     mapa_consulta_simples = _consultas_simples_api_lote(db, notas)
     anotadas = [_anotar_detalhe_frontend(nota, mapa_consulta_simples.get(int(nota.id))) for nota in notas]
