@@ -3,10 +3,25 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timezone
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from backend.app.db.models import Empresa, Nota, Processo
+
+
+# Notas canceladas/substituidas continuam visiveis no portal, mas nunca entram
+# nas exportacoes em lote (ZIP de XML/PDF e planilha de conferencia).
+STATUS_FORA_DA_EXPORTACAO = ("cancelada", "cancelado", "substituida", "substituido")
+
+
+def _somente_exportaveis(query):
+    # Sem o IS NULL o NOT IN do SQL descartaria tambem notas sem status gravado.
+    return query.filter(
+        or_(
+            Nota.status_documento.is_(None),
+            func.lower(func.trim(Nota.status_documento)).notin_(STATUS_FORA_DA_EXPORTACAO),
+        )
+    )
 
 
 def _incidencia_search_term(value: str) -> str:
@@ -72,8 +87,11 @@ def list_notas(
     sort: str = "recentes",
     arquivadas: str = "ativas",
     count_only: bool = False,
+    somente_exportaveis: bool = False,
 ) -> list[Nota] | int:
     query = db.query(Nota)
+    if somente_exportaveis:
+        query = _somente_exportaveis(query)
     if arquivadas == "ativas":
         query = query.filter(Nota.arquivada.is_(False))
     elif arquivadas == "somente":
@@ -157,11 +175,14 @@ def list_notas(
     return list(query.offset(safe_offset).limit(safe_limit).all())
 
 
-def list_notas_by_ids(db: Session, nota_ids: list[int]) -> list[Nota]:
+def list_notas_by_ids(db: Session, nota_ids: list[int], somente_exportaveis: bool = False) -> list[Nota]:
     if not nota_ids:
         return []
     order = {nota_id: index for index, nota_id in enumerate(nota_ids)}
-    notas = list(db.query(Nota).filter(Nota.id.in_(nota_ids)).all())
+    query = db.query(Nota).filter(Nota.id.in_(nota_ids))
+    if somente_exportaveis:
+        query = _somente_exportaveis(query)
+    notas = list(query.all())
     return sorted(notas, key=lambda nota: order.get(int(nota.id), len(order)))
 
 
