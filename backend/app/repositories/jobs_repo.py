@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import Empresa, Job
+from backend.app.db.models import Empresa, Job, LockProcessamento, Processo
 
 
 def create_job(db: Session, data: dict) -> Job:
@@ -142,3 +142,35 @@ def mark_job_cancelado(db: Session, job: Job, mensagem: str | None = None) -> Jo
             "erro_resumo": mensagem,
         },
     )
+
+
+def recuperar_jobs_travados(db: Session, minutos: int) -> int:
+    """Devolve para a fila jobs "rodando" sem heartbeat ha mais de `minutos`.
+
+    Vale para qualquer worker (embutido ou separado). A regra antiga so via
+    workers api-* e, com duas replicas, uma devolvia para a fila os jobs que a
+    outra estava rodando. O heartbeat e renovado a cada poucos segundos
+    enquanto o job roda (legacy_processing_service._loop_ingestao_incremental).
+    """
+    limite = datetime.now(timezone.utc) - timedelta(minutes=max(1, int(minutos)))
+    travados = (
+        db.query(Job)
+        .filter(Job.status == "rodando")
+        .filter(or_(Job.updated_at.is_(None), Job.updated_at < limite))
+        .all()
+    )
+    if not travados:
+        return 0
+    workers = {str(job.locked_by) for job in travados if job.locked_by}
+    for job in travados:
+        job.status = "pendente"
+        job.locked_by = None
+        job.locked_at = None
+        processo = db.get(Processo, int(job.processo_id))
+        if processo is not None and processo.status == "rodando":
+            processo.status = "pendente"
+            processo.started_at = None
+    if workers:
+        db.query(LockProcessamento).filter(LockProcessamento.locked_by.in_(workers)).delete(synchronize_session=False)
+    db.commit()
+    return len(travados)

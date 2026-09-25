@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import logging
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -539,3 +540,30 @@ def testar_certificado_com_senha_salva(
 
     pfx_bytes = storage.get_bytes(certificado.storage_key)
     return testar_certificado_pfx_bytes(pfx_bytes, senha)
+
+
+def vencimentos(db: Session, grupo: str, dias: int = 30) -> dict[str, Any]:
+    """Certificados ativos do grupo vencidos ou que vencem nos proximos `dias`."""
+    agora = datetime.now(timezone.utc)
+    limite = agora + timedelta(days=dias)
+    vencidos: list[dict[str, Any]] = []
+    vencendo: list[dict[str, Any]] = []
+    for certificado in certificados_repo.list_certificados(db, ativo=True, grupo=grupo):
+        validade = certificado.valido_ate
+        if validade is None:
+            continue
+        if validade.tzinfo is None:
+            validade = validade.replace(tzinfo=timezone.utc)
+        item = {
+            "certificado_id": certificado.id,
+            "nome": certificado.nome,
+            "empresa_id": certificado.empresa_id,
+            "empresa_nome": certificado.empresa_nome,
+            "valido_ate": validade,
+            "dias_restantes": (validade - agora).days,
+        }
+        if validade <= agora:
+            vencidos.append(item)
+        elif validade <= limite:
+            vencendo.append(item)
+    return {"dias": dias, "vencidos": vencidos, "vencendo": sorted(vencendo, key=lambda item: item["valido_ate"])}

@@ -1,3 +1,5 @@
+from datetime import date
+
 from cryptography.fernet import Fernet
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -32,6 +34,17 @@ class Settings(BaseSettings):
     worker_consulta_lote_tamanho: int = 1000
     worker_adn_lote: bool = True
     worker_temp_dir: str = "data/tmp_worker"
+    # Saida do motor legado (XML, indice, estado). Fica dentro de data/, que e
+    # o volume persistente no Railway: antes ficava em /app/saida_adn_nfse e
+    # sumia a cada deploy com XML baixados e ainda nao ingeridos.
+    legacy_output_dir: str = "data/saida_adn_nfse"
+    # Respostas brutas do ADN (raw/ e json/) mais antigas que isto sao apagadas;
+    # os XML ficam, porque o indice aponta para eles.
+    legacy_output_retencao_dias: int = 15
+    # Documentos do ADN emitidos antes desta data sao descartados na consulta.
+    notas_data_corte: date = date(2026, 1, 1)
+    # Job "rodando" sem heartbeat ha mais tempo que isto volta para a fila.
+    jobs_travados_minutos: int = 15
     api_worker_enabled: bool = True
     embedded_scheduler_enabled: bool = True
     local_signup_enabled: bool = False

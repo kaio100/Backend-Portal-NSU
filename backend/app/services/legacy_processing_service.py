@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import re
 import sys
 import threading
@@ -16,8 +17,11 @@ from backend.app.core.config import settings
 from backend.app.db.models import Empresa, Job, Nota, Processo
 from backend.app.db.session import SessionLocal, executar_escrita_com_retry, renovar_snapshot
 from backend.app.repositories import certificados_repo, empresas_repo
-from backend.app.services import cnpj_enrichment_service, legacy_ingestion_service, logs_service, nsu_control_service, secrets_service
+from backend.app.services import cnpj_enrichment_service, legacy_ingestion_service, locks_service, logs_service, nsu_control_service, secrets_service
 from backend.app.services.storage_service import StorageService, get_storage_service
+
+
+logger = logging.getLogger(__name__)
 
 
 class LegacyProcessingError(RuntimeError):
@@ -98,6 +102,66 @@ def _configure_legacy_output(legacy: Any, root_out: Path) -> None:
         folder.mkdir(parents=True, exist_ok=True)
 
 
+def _limitar_nsu_por_falhas(ultimo_nsu: int, ingestao: dict[str, Any] | None) -> tuple[int, str | None]:
+    """NSU que pode ser confirmado e o aviso para o processo.
+
+    Documento que falhou na ingestao fica a frente do cursor, para ser baixado
+    e ingerido de novo na proxima consulta, em vez de ficar para tras sem aviso.
+    """
+    if not ingestao or not int(ingestao.get("erros") or 0):
+        return ultimo_nsu, None
+    nsus_com_erro = [
+        int(detalhe["nsu"])
+        for detalhe in ingestao.get("erros_detalhes") or []
+        if detalhe.get("etapa") == "ingestao" and str(detalhe.get("nsu") or "").isdigit()
+    ]
+    if nsus_com_erro:
+        ultimo_nsu = min(ultimo_nsu, min(nsus_com_erro) - 1)
+    aviso = (
+        f"Consulta concluida com {int(ingestao['erros'])} documento(s) que nao entraram no banco; "
+        f"o NSU central ficou em {ultimo_nsu} para reprocessar."
+    )
+    return ultimo_nsu, aviso
+
+
+def _limpar_respostas_antigas(root_out: Path) -> int:
+    """Apaga respostas brutas do ADN (raw/, json/) mais antigas que a retencao.
+
+    A saida agora fica no volume persistente; sem limpeza, as respostas
+    brutas (com o XML de cada lote em base64) enchiam o disco.
+    """
+    limite = time.time() - max(1, int(settings.legacy_output_retencao_dias)) * 86400
+    removidos = 0
+    for pasta in (root_out / "raw", root_out / "json"):
+        if not pasta.exists():
+            continue
+        for arquivo in pasta.iterdir():
+            try:
+                if arquivo.is_file() and arquivo.stat().st_mtime < limite:
+                    arquivo.unlink()
+                    removidos += 1
+            except OSError:
+                logger.warning("Nao foi possivel apagar resposta antiga do ADN: %s", arquivo)
+    return removidos
+
+
+def limpar_pfx_temporarios(max_horas: int = 6) -> int:
+    """Apaga PFX temporarios deixados por processos mortos no meio de um job."""
+    pasta = Path(settings.worker_temp_dir)
+    if not pasta.exists():
+        return 0
+    limite = time.time() - max_horas * 3600
+    removidos = 0
+    for arquivo in pasta.glob("worker_*_cert_*.pfx"):
+        try:
+            if arquivo.stat().st_mtime < limite:
+                arquivo.unlink()
+                removidos += 1
+        except OSError:
+            logger.warning("Nao foi possivel apagar PFX temporario: %s", arquivo.name)
+    return removidos
+
+
 def _safe_worker_id(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", value or "worker")
 
@@ -159,26 +223,34 @@ def _loop_ingestao_incremental(
     run_started_at: datetime,
     stop_event: threading.Event,
     intervalo: float,
+    lock: tuple[int, int, str] | None = None,
 ) -> None:
+    """Ingere a saida do motor enquanto ele consulta o ADN.
+
+    A cada volta tambem renova o heartbeat do processo/job e o lock do
+    certificado (empresa_id, certificado_id, worker_id): uma consulta longa
+    perdia o lock de 1 hora no meio e outro worker podia pegar o mesmo
+    certificado.
+    """
     proxima_linha_index = 0
+    erros_registrados: set[str] = set()
     while not stop_event.is_set():
         try:
-            base_dir = Path(pasta_saida)
-            if base_dir.exists():
-                with SessionLocal() as session:
-                    processo = session.get(Processo, processo_id)
-                    if processo is None or processo.status == "cancelado":
-                        return
-                    job = session.get(Job, job_id)
-                    if job is None or job.status == "cancelado":
-                        return
+            with SessionLocal() as session:
+                processo = session.get(Processo, processo_id)
+                if processo is None or processo.status == "cancelado":
+                    return
+                job = session.get(Job, job_id)
+                if job is None or job.status == "cancelado":
+                    return
+                base_dir = Path(pasta_saida)
+                if base_dir.exists():
                     ingestao = legacy_ingestion_service.ingerir_saida_legado(
                         session,
                         get_storage_service(),
                         processo,
                         base_dir,
                         updated_after=run_started_at,
-                        commit_every=20,
                         start_row=proxima_linha_index,
                         gerar_pdf_espelho=bool(processo.gerar_pdf_espelho),
                         should_stop=stop_event.is_set,
@@ -193,18 +265,24 @@ def _loop_ingestao_incremental(
                             "Ingestao incremental da saida legada",
                             {"contadores": ingestao},
                         )
-                    # O motor legado pode trabalhar por horas dentro de uma
-                    # unica chamada. Mantenha os timestamps vivos para que o
-                    # dashboard diferencie uma consulta ativa de uma travada.
-                    heartbeat = datetime.now(timezone.utc)
-                    processo.updated_at = heartbeat
-                    job.updated_at = heartbeat
-                    session.add(processo)
-                    session.add(job)
-                    session.commit()
-        except Exception:
-            # A ingestao final pos-processamento ainda roda no fluxo principal.
-            pass
+                # O motor legado pode trabalhar por horas dentro de uma
+                # unica chamada. Mantenha os timestamps vivos para que o
+                # dashboard diferencie uma consulta ativa de uma travada.
+                heartbeat = datetime.now(timezone.utc)
+                processo.updated_at = heartbeat
+                job.updated_at = heartbeat
+                session.add(processo)
+                session.add(job)
+                if lock is not None:
+                    locks_service.renovar_lock(session, empresa_id=lock[0], certificado_id=lock[1], locked_by=lock[2])
+                session.commit()
+        except Exception as exc:
+            # A ingestao final pos-processamento ainda roda no fluxo principal,
+            # mas o erro nao pode sumir: vai para o log uma vez por job.
+            mensagem = f"{type(exc).__name__}: {exc}"[:500]
+            if mensagem not in erros_registrados:
+                erros_registrados.add(mensagem)
+                logger.exception("Ingestao incremental do processo %s falhou: %s", processo_id, mensagem)
         stop_event.wait(max(0.5, intervalo))
 
 
@@ -214,11 +292,12 @@ def _iniciar_ingestao_incremental(
     pasta_saida: str,
     run_started_at: datetime,
     intervalo: float = 5.0,
+    lock: tuple[int, int, str] | None = None,
 ) -> tuple[threading.Event, threading.Thread]:
     stop_event = threading.Event()
     thread = threading.Thread(
         target=_loop_ingestao_incremental,
-        args=(processo_id, job_id, pasta_saida, run_started_at, stop_event, intervalo),
+        args=(processo_id, job_id, pasta_saida, run_started_at, stop_event, intervalo, lock),
         name=f"ingestao-incremental-{processo_id}",
         daemon=True,
     )
@@ -365,10 +444,10 @@ def _executar_baixa_empresa_compat(
             nsu_atual = maior_nsu
             ultimo_nsu = nsu_atual
             legacy.salvar_estado(config.cnpj, nsu_atual)
-            if empresa_id is not None:
-                _gravar_nsu_em_sessao_curta(
-                    empresa_id, certificado_id, config.cnpj, nsu_atual, "processamento"
-                )
+            # O NSU central NAO avanca aqui: o XML so foi salvo em disco. Ele
+            # avanca no fim do job, depois da ingestao, e so ate onde as notas
+            # entraram no banco. Antes, uma queda entre o download e a
+            # ingestao deixava documentos para tras do cursor, sem aviso.
 
         if not parar and consultas_realizadas < limite and pausa > 0:
             # Ritmo entre blocos de consulta ao ADN. O PDF espelho e produzido
@@ -432,6 +511,7 @@ def executar_consulta_nfse_legado(
     nsu_inicio = payload.get("nsu_inicio")
     gerar_pdf_espelho = bool(_payload_value(payload, "gerar_pdf_espelho", True))
 
+    legacy = None
     try:
         temp_pfx_path.write_bytes(pfx_bytes)
         run_started_at = datetime.now()
@@ -478,12 +558,16 @@ def executar_consulta_nfse_legado(
         db.commit()
 
         legacy = _load_legacy_module(int(processo.id))
+        # Data de corte vem do Settings (validada no startup), nao do os.getenv
+        # do motor legado.
+        legacy.data_corte_documentos = lambda: settings.notas_data_corte
         legacy_output_dir = (
-            Path("saida_adn_nfse")
+            Path(settings.legacy_output_dir)
             / "empresas"
             / f"empresa_{empresa.id}_cert_{certificado.id}"
         )
         _configure_legacy_output(legacy, legacy_output_dir)
+        _limpar_respostas_antigas(legacy_output_dir)
         logs_service.registrar_log(
             db,
             processo.id,
@@ -573,6 +657,7 @@ def executar_consulta_nfse_legado(
                 pasta_saida=pasta_saida_incremental,
                 run_started_at=run_started_at,
                 intervalo=min(max(1.0, pausa), 3.0),
+                lock=(int(empresa.id), int(certificado.id), worker_id),
             )
             logs_service.registrar_log(
                 db,
@@ -712,6 +797,7 @@ def executar_consulta_nfse_legado(
             int(ultimo_nsu_result or 0),
             nsu_control_service.maior_nsu_importado(db, int(empresa.id)),
         )
+        ultimo_nsu_final, aviso_ingestao = _limitar_nsu_por_falhas(ultimo_nsu_final, ingestao)
         if ultimo_nsu_final:
             # Em sessao curta, e nao nesta transacao longa: o scheduler e a
             # ingestao gravam em paralelo durante o job, e no SQLite isso
@@ -807,6 +893,7 @@ def executar_consulta_nfse_legado(
 
         return {
             "ok": True,
+            "aviso": aviso_ingestao,
             "modo": "legado_real",
             "empresa_id": empresa.id,
             "certificado_id": certificado.id,
@@ -819,6 +906,10 @@ def executar_consulta_nfse_legado(
         }
     finally:
         senha = ""
+        # Cada job carrega uma copia nova do motor; sem remover, sys.modules
+        # crescia a cada consulta (memoria de 1,3 GB para 3,1 GB em 8 dias).
+        if legacy is not None:
+            sys.modules.pop(getattr(legacy, "__name__", ""), None)
         if temp_pfx_path.exists():
             temp_pfx_path.unlink()
             try:

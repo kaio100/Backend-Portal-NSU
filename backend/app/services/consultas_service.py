@@ -173,7 +173,19 @@ def list_certificados_elegiveis(
 
     certificados = list(query.order_by(Certificado.id.asc()).all())
     elegiveis = []
+    agora = _now()
     for certificado in certificados:
+        validade = _as_aware(certificado.valido_ate)
+        if validade is not None and validade <= agora:
+            # O ADN recusa certificado vencido. Antes ele entrava na fila a cada
+            # ciclo e gastava ~3,5 min em 5 tentativas antes de falhar,
+            # atrasando todas as outras empresas (477 erros em 7 dias).
+            logger.warning(
+                "Certificado %s ignorado na consulta: vencido em %s. Renove ou desative o certificado.",
+                certificado.id,
+                validade.date().isoformat(),
+            )
+            continue
         try:
             secrets_service.get_secret_value(db, str(certificado.senha_secret_ref))
         except secrets_service.SecretsServiceError as exc:
@@ -236,6 +248,7 @@ def enqueue_consultas_pendentes(
     options: ConsultaIniciarRequest | None = None,
     respeitar_ciclo: bool = True,
     grupo: str = "planning_hub",
+    atualizar_ciclo: bool = True,
 ) -> dict[str, Any]:
     config = get_monitoramento_config(db, grupo)
     options = options or ConsultaIniciarRequest(**(config.filtros_json or {}))
@@ -263,9 +276,10 @@ def enqueue_consultas_pendentes(
             continue
         processos_criados.append(_create_consulta_job(db, certificado, options))
 
-    config.ultimo_ciclo_em = agora
-    config.proximo_ciclo_em = agora + timedelta(minutes=int(config.intervalo_minutos))
-    db.add(config)
+    if atualizar_ciclo:
+        config.ultimo_ciclo_em = agora
+        config.proximo_ciclo_em = agora + timedelta(minutes=int(config.intervalo_minutos))
+        db.add(config)
     db.commit()
     for processo in processos_criados:
         db.refresh(processo)
@@ -277,12 +291,49 @@ def enqueue_consultas_pendentes(
     }
 
 
+def _consulta_avulsa(db: Session, options: ConsultaIniciarRequest, grupo: str) -> dict[str, Any]:
+    """Consulta pontual: enfileira so o pedido e nao toca no monitor do grupo.
+
+    Antes, uma consulta avulsa gravava automatico_ativo e os filtros
+    (empresa_ids) no monitor: o automatico passava a consultar so aquela
+    empresa, ou era desligado. Em 17/09/2026 o monitor global de producao
+    teve de ser restaurado a mao por isso.
+    """
+    if options.nsu_inicio is not None:
+        # Novo ponto de partida so para os certificados pedidos.
+        alvos = [int(c.id) for c in list_certificados_elegiveis(db, options=options, grupo=grupo)]
+        _cancelar_consultas_dos_certificados(db, alvos, "Nova consulta com NSU inicial informado.")
+    return enqueue_consultas_pendentes(
+        db, options=options, respeitar_ciclo=False, grupo=grupo, atualizar_ciclo=False
+    )
+
+
+def _cancelar_consultas_dos_certificados(db: Session, certificado_ids: list[int], motivo: str) -> int:
+    if not certificado_ids:
+        return 0
+    processos = (
+        db.query(Processo)
+        .filter(Processo.tipo == "consulta_nfse", Processo.certificado_id.in_(certificado_ids))
+        .filter(Processo.status.in_(PENDENTE_STATUSES + RODANDO_STATUSES))
+        .all()
+    )
+    for processo in processos:
+        processos_repo.cancelar_processo(db, processo)
+        for job in jobs_repo.list_jobs(db, processo_id=processo.id, limit=100000):
+            if job.status in {"pendente", "rodando"}:
+                jobs_repo.mark_job_cancelado(db, job, motivo)
+    db.commit()
+    return len(processos)
+
+
 def iniciar_consultas_automaticas(
     db: Session,
     options: ConsultaIniciarRequest | None = None,
     grupo: str = "planning_hub",
 ) -> dict[str, Any]:
     options = options or ConsultaIniciarRequest()
+    if not options.automatico:
+        return _consulta_avulsa(db, options, grupo)
     # Um NSU informado manualmente representa um novo ponto de partida. Nao
     # pode concorrer com jobs antigos, pois o worker poderia reservar primeiro
     # uma consulta criada com o estado anterior.

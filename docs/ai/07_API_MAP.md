@@ -40,6 +40,7 @@ Legenda: `JWT` = usuário autenticado; `ADM` = `require_admin`; `OP` = operador/
 | GET | `/empresas/{empresa_id}/certificados` | `certificados.py::list_certificados_empresa` | JWT/TEN | → certificados sem segredo |
 | GET | `/certificados` | `certificados.py::list_certificados` | JWT | filtros → certificados TEN |
 | PUT | `/certificados/{certificado_ref}` | `certificados.py::update_certificado_compat` | JWT/OP | body legado → DTO |
+| GET | `/certificados/vencimentos` | `certificados.py::vencimentos_certificados` | JWT/TEN | vencidos e vencendo em `dias` (padrão 30) |
 | GET | `/certificados/{certificado_id}` | `certificados.py::get_certificado` | JWT/TEN | → metadata |
 | POST | `/certificados/{certificado_id}/testar` | `certificados.py::testar_certificado` | JWT/TEN | → resultado conexão |
 | PATCH | `/certificados/{certificado_id}` | `certificados.py::update_certificado` | JWT/OP/TEN | nome/ativo → DTO |

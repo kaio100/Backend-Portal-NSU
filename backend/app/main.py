@@ -33,9 +33,11 @@ from backend.app.api.routers import (
 )
 from backend.app.core.config import settings
 from backend.app.core.observability import configure_logging
-from backend.app.db.models import Empresa, Job, LockProcessamento, MonitoramentoConfig, Processo
+from backend.app.db.models import Empresa, MonitoramentoConfig
 from backend.app.db.session import SessionLocal, init_db
+from backend.app.repositories import jobs_repo
 from backend.app.services import consultas_service
+from backend.app.services.legacy_processing_service import limpar_pfx_temporarios
 from backend.app.services.notas_download_service import limpar_zips_temporarios
 from backend.app.services.valor_liquido_backfill_service import recalcular_notas_salvas
 from backend.app.worker.worker import processar_proximo_job
@@ -63,38 +65,9 @@ def _build_api_workers(groups: list[str], workers_per_group: int) -> list[tuple[
     ]
 
 
-def _recover_stale_api_jobs(active_worker_ids: list[str]) -> int:
+def _recuperar_jobs_travados() -> int:
     with SessionLocal() as db:
-        stale_jobs = (
-            db.query(Job)
-            .filter(Job.status == "rodando")
-            .filter(Job.locked_by.like("api-%"))
-            .filter(Job.locked_by.notin_(active_worker_ids))
-            .all()
-        )
-        if not stale_jobs:
-            return 0
-
-        stale_worker_ids = {str(job.locked_by) for job in stale_jobs if job.locked_by}
-        for job in stale_jobs:
-            job.status = "pendente"
-            job.locked_by = None
-            job.locked_at = None
-            db.add(job)
-            processo = db.get(Processo, int(job.processo_id))
-            if processo is not None and processo.status == "rodando":
-                processo.status = "pendente"
-                processo.started_at = None
-                db.add(processo)
-
-        if stale_worker_ids:
-            (
-                db.query(LockProcessamento)
-                .filter(LockProcessamento.locked_by.in_(stale_worker_ids))
-                .delete(synchronize_session=False)
-            )
-        db.commit()
-        return len(stale_jobs)
+        return jobs_repo.recuperar_jobs_travados(db, settings.jobs_travados_minutos)
 
 
 async def _run_api_worker(slot: int, worker_id: str, grupo: str) -> None:
@@ -133,6 +106,9 @@ async def _supervisionar_grupos(
     while True:
         await asyncio.sleep(SUPERVISOR_GRUPOS_INTERVALO)
         try:
+            recuperados = await asyncio.to_thread(_recuperar_jobs_travados)
+            if recuperados:
+                print(f"Supervisor: {recuperados} job(s) sem heartbeat voltaram para a fila")
             novos = [g for g in await asyncio.to_thread(_worker_groups) if g not in grupos_cobertos]
         except Exception as exc:
             print(f"Supervisor de grupos falhou e continuara ativo: {exc}")
@@ -184,6 +160,9 @@ async def _recalcular_valores_liquidos_salvos() -> None:
 async def lifespan(app: FastAPI):
     init_db()
     zips_removidos = limpar_zips_temporarios()
+    pfx_removidos = limpar_pfx_temporarios()
+    if pfx_removidos:
+        print(f"Limpeza de certificados temporarios: {pfx_removidos} PFX removido(s)")
     if zips_removidos:
         print(f"Limpeza de downloads temporarios: {zips_removidos} ZIP(s) removido(s)")
     worker_tasks: list[asyncio.Task] = []
@@ -192,8 +171,7 @@ async def lifespan(app: FastAPI):
     if settings.api_worker_enabled:
         workers_per_group = max(1, int(settings.api_worker_concurrency))
         api_workers = _build_api_workers(_worker_groups(), workers_per_group)
-        worker_ids = [worker_id for _grupo, worker_id in api_workers]
-        recovered = _recover_stale_api_jobs(worker_ids)
+        recovered = _recuperar_jobs_travados()
         if recovered:
             print(f"API worker recuperou jobs presos de execucoes antigas: {recovered}")
         worker_tasks = [

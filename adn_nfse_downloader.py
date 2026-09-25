@@ -278,6 +278,10 @@ def requisicao_json_com_retry(
 
         except KeyboardInterrupt:
             raise
+        except ValueError:
+            # Certificado vencido ou senha errada (requests_pkcs12/cryptography
+            # levantam ValueError): repetir nao resolve e so atrasava a fila.
+            raise
         except Exception as exc:
             if tentativa >= tentativas:
                 raise

@@ -60,9 +60,24 @@ def main() -> None:
     init_db()
     print(f"Worker iniciado: {worker_id} | dry_run={settings.worker_dry_run}")
 
+    from backend.app.services.legacy_processing_service import limpar_pfx_temporarios
+
+    limpar_pfx_temporarios()
+    ultima_recuperacao = 0.0
     try:
         while True:
-            result = processar_proximo_job(worker_id, grupo_worker=args.grupo or None)
+            try:
+                if time.monotonic() - ultima_recuperacao > 60:
+                    ultima_recuperacao = time.monotonic()
+                    with SessionLocal() as db:
+                        jobs_repo.recuperar_jobs_travados(db, settings.jobs_travados_minutos)
+                result = processar_proximo_job(worker_id, grupo_worker=args.grupo or None)
+            except Exception as exc:
+                # Uma falha fora do job (banco fora do ar, por exemplo) matava o
+                # loop e o worker ficava parado sem ninguem perceber.
+                print(f"Worker {worker_id} falhou e continuara ativo: {exc}")
+                time.sleep(max(1.0, args.sleep))
+                continue
             print(result)
             if args.once:
                 return

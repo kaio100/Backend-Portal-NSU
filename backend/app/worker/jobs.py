@@ -192,9 +192,13 @@ def processar_job_consulta_nfse_real(db: Session, job: Job, worker_id: str) -> d
             logs_service.registrar_log(db, processo.id, processo.empresa_id, "info", "Processo cancelado durante execucao real")
             db.commit()
             return {"ok": False, "job_id": job.id, "processo_id": processo.id, "motivo": "cancelado"}
-        jobs_repo.mark_job_finalizado(db, job)
-        processos_repo.mark_processo_finalizado(db, processo)
-        logs_service.registrar_log(db, processo.id, processo.empresa_id, "info", "Processo finalizado")
+        # Documentos que nao entraram no banco ficam visiveis no processo.
+        aviso = result.get("aviso") if isinstance(result, dict) else None
+        jobs_repo.mark_job_finalizado(db, job, aviso)
+        processos_repo.mark_processo_finalizado(db, processo, erro_resumo=aviso)
+        logs_service.registrar_log(
+            db, processo.id, processo.empresa_id, "warning" if aviso else "info", aviso or "Processo finalizado"
+        )
         db.commit()
         return result
     except Exception as exc:

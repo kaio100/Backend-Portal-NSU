@@ -363,6 +363,16 @@ async def update_certificado_compat(
         _handle_error(exc)
 
 
+@router.get("/vencimentos")
+def vencimentos_certificados(
+    dias: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
+):
+    """Certificados do grupo vencidos ou que vencem nos proximos `dias` dias."""
+    return certificados_service.vencimentos(db, usuario.grupo, dias)
+
+
 @router.get("/{certificado_id}", response_model=CertificadoRead)
 def get_certificado(certificado_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
     try:
