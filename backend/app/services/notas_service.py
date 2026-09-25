@@ -10,7 +10,7 @@ from backend.app.core.config import settings
 from backend.app.db.models import Arquivo, Empresa, Nota
 from backend.app.repositories import arquivos_repo, empresas_repo, notas_repo
 from backend.app.services import cnpj_cache_service
-from backend.app.services.operational_fields_service import aplicar_campos_operacionais
+from backend.app.services.operational_fields_service import aplicar_campos_operacionais, definir_valor_exibicao
 
 
 class NotaServiceError(RuntimeError):
@@ -271,7 +271,9 @@ def _anotar_detalhe_frontend(nota: Nota, consulta_simples_api: str | None = None
     if missing:
         alertas.append("Campos obrigatorios ausentes no XML")
     if not getattr(nota, "alertas_fiscais", None):
-        setattr(nota, "alertas_fiscais", "\n".join(alertas) or None)
+        # So para a resposta: alertas_fiscais e preenchido apenas pela analise
+        # fiscal; com setattr, salvar a conferencia gravava este texto.
+        definir_valor_exibicao(nota, "alertas_fiscais", "\n".join(alertas) or None)
     return aplicar_campos_operacionais(nota, consulta_simples_api=consulta_simples_api)
 
 

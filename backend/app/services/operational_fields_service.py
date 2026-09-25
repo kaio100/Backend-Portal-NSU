@@ -5,6 +5,8 @@ import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.orm.attributes import set_committed_value
 
 
@@ -272,13 +274,28 @@ def montar_campos_operacionais(nota, consulta_simples_api: str | None = None) ->
     }
 
 
+def definir_valor_exibicao(obj, key: str, value) -> None:
+    """Anota um valor calculado so para a resposta, sem gravar no banco.
+
+    Em colunas mapeadas, setattr marca o objeto como alterado e o proximo
+    commit da sessao (por exemplo, ao salvar a conferencia) gravava o valor
+    calculado: status_simples_nacional e alertas_fiscais de 1.326 notas de
+    producao foram sobrescritos assim. set_committed_value atualiza o objeto
+    sem gerar UPDATE.
+    """
+    try:
+        colunas = sa_inspect(obj).mapper.column_attrs
+    except NoInspectionAvailable:
+        setattr(obj, key, value)
+        return
+    if key in colunas:
+        set_committed_value(obj, key, value)
+    else:
+        setattr(obj, key, value)
+
+
 def aplicar_campos_operacionais(nota, consulta_simples_api: str | None = None):
     campos = montar_campos_operacionais(nota, consulta_simples_api=consulta_simples_api)
     for key, value in campos.items():
-        if key in {"sla", "consulta_simples_api"}:
-            # consulta_simples_api vem da tabela cnpj_cache (join externo), nao
-            # deve ser persistido de volta na linha de `notas` via commit.
-            set_committed_value(nota, key, value)
-        else:
-            setattr(nota, key, value)
+        definir_valor_exibicao(nota, key, value)
     return nota

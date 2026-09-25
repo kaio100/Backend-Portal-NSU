@@ -34,7 +34,7 @@ from backend.app.repositories import arquivos_repo, notas_repo, processos_repo
 from backend.app.schemas.notas import NotasDownloadFiltros
 
 from backend.app.services import cnpj_cache_service, legacy_ingestion_service, notas_service
-from backend.app.services.operational_fields_service import aplicar_campos_operacionais
+from backend.app.services.operational_fields_service import aplicar_campos_operacionais, definir_valor_exibicao
 from backend.app.services.retencoes_calculo_service import calcular_liquido_com_retencoes_salvas
 from backend.app.services.storage_service import StorageService, get_storage_service
 
@@ -395,8 +395,9 @@ _STATUS_TRIBUTO_SEM_PROBLEMA = {
 def comparar_tributos_nota(db: Session, nota_id: int) -> dict:
     nota = notas_service.obter_nota(db, nota_id)
     liquido_atualizado = calcular_liquido_com_retencoes_salvas(nota)
-    nota.valor_liquido_correto = liquido_atualizado
-    nota.valor_liquido_calculado = liquido_atualizado
+    # Comparativo e leitura: os valores recalculados nao podem ir para o banco.
+    definir_valor_exibicao(nota, "valor_liquido_correto", liquido_atualizado)
+    definir_valor_exibicao(nota, "valor_liquido_calculado", liquido_atualizado)
     informado_liquido = _decimal(nota.valor_liquido or 0)
     nota.status_valor_liquido = "Correto" if abs(informado_liquido - liquido_atualizado) <= Decimal("0.01") else "Divergente"
     empresa = db.get(Empresa, nota.empresa_id)
