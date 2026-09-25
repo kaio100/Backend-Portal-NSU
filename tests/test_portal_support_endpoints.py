@@ -491,6 +491,50 @@ def test_relatorio_conferencia_csv(monkeypatch):
             assert ws_filtrado.cell(row=2, column=coluna_processado).number_format == "yyyy-mm-dd"
 
 
+def test_relatorio_conferencia_nunca_inclui_cancelada_ou_substituida(monkeypatch):
+    _reset_db()
+    empresa_id, _, _ = _base_data()
+    monkeypatch.setattr(portal_support_service, "_consultar_invertexto_cnpjs", lambda db, cnpjs: {})
+    with SessionLocal() as db:
+        for numero, status in (("700", "cancelada"), ("701", "substituida"), ("702", "SUBSTITUIDA"), ("703", None)):
+            db.add(
+                Nota(
+                    empresa_id=empresa_id,
+                    chave=f"CHAVE-EXPORTACAO-{numero}",
+                    numero_nfse=numero,
+                    data_emissao=date(2026, 6, 21),
+                    competencia=date(2026, 6, 1),
+                    prestador_cnpj="11111111000191",
+                    prestador_nome="Prestador Portal",
+                    tomador_cnpj="26743708000126",
+                    tomador_nome="Guardia Teste LTDA",
+                    valor_servico=100,
+                    valor_liquido=100,
+                    status_documento=status,
+                )
+            )
+        db.commit()
+
+    with TestClient(app) as client:
+        response = client.post("/relatorios/conferencia", json={"filtros": {"empresa_id": empresa_id}})
+        so_canceladas = client.post(
+            "/relatorios/conferencia",
+            json={"filtros": {"empresa_id": empresa_id, "status_documento": "cancelada"}},
+        )
+
+    assert response.status_code == 200
+    wb = load_workbook(filename=io.BytesIO(response.content), read_only=True)
+    for aba in wb.sheetnames:
+        numeros = {row[5] for row in wb[aba].iter_rows(min_row=2, values_only=True)}
+        assert not numeros & {"700", "701", "702"}, aba
+    todas = {row[5] for row in wb["Todas as Notas"].iter_rows(min_row=2, values_only=True)}
+    assert todas == {"123", "703"}
+
+    assert so_canceladas.status_code == 200
+    wb_vazio = load_workbook(filename=io.BytesIO(so_canceladas.content), read_only=True)
+    assert list(wb_vazio["Todas as Notas"].iter_rows(min_row=2, values_only=True)) == []
+
+
 def test_relatorio_conferencia_enriquece_campos_vazios_pelo_xml(monkeypatch):
     monkeypatch.setattr(portal_support_service.settings, "invertexto_enabled", False)
     _reset_db()
