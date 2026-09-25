@@ -47,3 +47,6 @@ Thumbs.db
 # Ambiente de producao local (nunca versionar)
 .env.producao
 run_prod.sh
+
+# Saida do script backup_supabase_nfse.ps1 (nunca versionar)
+backup_supabase/
