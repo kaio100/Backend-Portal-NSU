@@ -303,6 +303,10 @@ class Nota(TimestampMixin, Base):
 
 class Evento(Base):
     __tablename__ = "eventos"
+    __table_args__ = (
+        # Reprocessar o mesmo XML nao pode duplicar o evento.
+        Index("uq_eventos_empresa_chave_evento", "empresa_id", "chave_evento", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)

@@ -632,19 +632,52 @@ def _prever_status_por_chave(mapa: dict[str, tuple[str, str | None]], resumo: di
         mapa[alvo] = previsto
 
 
+def _status_por_eventos_gravados(db: Session, empresa_id: int, chave: str) -> tuple[str, str | None] | None:
+    """Status imposto por eventos ja gravados para esta chave.
+
+    O evento pode chegar antes da nota (ou numa execucao anterior, com o disco
+    do container ja apagado). Sem esta consulta a nota entrava como
+    autorizada e ia para as exportacoes mesmo cancelada.
+    """
+    tipos = {
+        str(tipo or "").strip().lower()
+        for (tipo,) in db.query(Evento.tipo_evento)
+        .filter(Evento.empresa_id == empresa_id, Evento.chave_afetada == chave)
+        .filter(Evento.tipo_evento.in_(["cancelada", "substituida"]))
+        .all()
+    }
+    if not tipos:
+        return None
+    status = max(tipos, key=prioridade_status)
+    return status, status.capitalize()
+
+
+def _vincular_eventos_orfaos(db: Session, empresa_id: int, nota: Nota) -> None:
+    """Liga a nota os eventos que chegaram antes dela (nota_id vazio)."""
+    (
+        db.query(Evento)
+        .filter(Evento.empresa_id == empresa_id, Evento.chave_afetada == nota.chave, Evento.nota_id.is_(None))
+        .update({Evento.nota_id: nota.id}, synchronize_session=False)
+    )
+
+
 def _status_final_nota(
     status_xml: tuple[str | None, str | None],
     status_previsto: tuple[str, str | None] | None,
     nota_existente: Nota | None,
+    status_eventos_gravados: tuple[str, str | None] | None = None,
 ) -> tuple[str | None, str | None]:
     """Status gravado na nota: o de maior prioridade entre XML, lote e banco.
 
     Reprocessar o XML original nunca desfaz um cancelamento ou substituicao ja
-    conhecidos, e um evento do lote prevalece sobre o status "autorizada".
+    conhecidos, e um evento (do lote ou ja gravado) prevalece sobre o status
+    "autorizada".
     """
     candidatos = [status_xml]
     if status_previsto is not None:
         candidatos.append(status_previsto)
+    if status_eventos_gravados is not None:
+        candidatos.append(status_eventos_gravados)
     existente = str(getattr(nota_existente, "status_documento", None) or "").strip().lower()
     if existente in {"cancelada", "substituida"}:
         candidatos.append((existente, getattr(nota_existente, "status_rotulo", None) or existente.capitalize()))
@@ -800,6 +833,44 @@ def _read_index_rows(index_path: Path) -> list[dict[str, str]]:
     return list(csv.DictReader(io.StringIO(text), delimiter=";"))
 
 
+def _linhas_fora_do_indice(base_dir: Path, rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Documentos que o indice unico esconde, lidos de ocorrencias_nsu.csv.
+
+    O indice tem uma linha por chave, e o ADN manda o evento com a chave da
+    nota que ele atinge. Quando a nota ja esta no indice, o evento so atualiza
+    o NSU da linha e o XML dele nunca e lido: cancelamentos de notas baixadas
+    no mesmo container sumiam sem aviso. As ocorrencias guardam cada NSU com
+    o proprio XML.
+    """
+    ocorrencias_path = base_dir / "ocorrencias_nsu.csv"
+    if not ocorrencias_path.exists():
+        return []
+    referenciados = {
+        str(resolvido)
+        for row in rows
+        if (resolvido := _resolve_path(row.get("xml_path", ""), Path.cwd())) is not None
+    }
+    extras: list[dict[str, str]] = []
+    for ocorrencia in _read_index_rows(ocorrencias_path):
+        resolvido = _resolve_path(ocorrencia.get("xml_path", ""), Path.cwd())
+        if resolvido is None or str(resolvido) in referenciados:
+            continue
+        referenciados.add(str(resolvido))
+        registrado_em = str(ocorrencia.get("registrado_em") or "")
+        extras.append(
+            {
+                "chave": ocorrencia.get("chave", ""),
+                "xml_path": ocorrencia.get("xml_path", ""),
+                "primeiro_nsu": ocorrencia.get("nsu", ""),
+                "ultimo_nsu": ocorrencia.get("nsu", ""),
+                "tipo_documento": ocorrencia.get("tipo_documento", ""),
+                "data_emissao": registrado_em[:10],
+                "atualizado_em": registrado_em,
+            }
+        )
+    return extras
+
+
 def _arquivo_tipo_pdf(row: dict[str, str]) -> str:
     pdf_tipo = (row.get("pdf_tipo") or "").strip().lower()
     if pdf_tipo == "oficial":
@@ -868,7 +939,7 @@ def ingerir_saida_legado(
     max_rows: int | None = None,
     updated_after: datetime | None = None,
     only_chaves: set[str] | None = None,
-    commit_every: int | None = None,
+    commit_every: int | None = None,  # mantido por compatibilidade; cada linha e confirmada sozinha
     start_row: int = 0,
     gerar_pdf_espelho: bool = True,
     should_stop: Callable[[], bool] | None = None,
@@ -902,6 +973,7 @@ def ingerir_saida_legado(
         )
 
     rows = _read_index_rows(index_path)
+    rows.extend(_linhas_fora_do_indice(base_dir, rows))
     # Eventos de cancelamento/substituicao podem aparecer depois da linha da
     # nota no indice. Levantamos os estados antes de gerar qualquer espelho
     # para que a ordem das linhas nao produza um PDF autorizado sem carimbo.
@@ -1017,12 +1089,14 @@ def ingerir_saida_legado(
                                 }
                             )
                 counters["eventos_importados"] = int(counters.get("eventos_importados", 0)) + 1
+                db.commit()
                 continue
             nota_existente = notas_repo.get_nota_by_chave(db, int(processo.empresa_id), chave)
             status_documento, status_rotulo = _status_final_nota(
                 (xml_resumo.get("status_documento") or None, xml_resumo.get("status_rotulo") or None),
                 status_evento_por_chave.get(chave),
                 nota_existente,
+                _status_por_eventos_gravados(db, int(processo.empresa_id), chave),
             )
             pdf_espelho_path = None
             pdf_espelho_reutilizado = False
@@ -1117,6 +1191,7 @@ def ingerir_saida_legado(
                 counters["notas_criadas"] += 1
             else:
                 counters["notas_atualizadas"] += 1
+            _vincular_eventos_orfaos(db, int(processo.empresa_id), nota)
             _aplicar_substituicao(
                 db, storage, processo, xml_resumo.get("chave_substituida"), gerar_pdf_espelho, counters
             )
@@ -1215,11 +1290,13 @@ def ingerir_saida_legado(
             elif row.get("pdf_path"):
                 counters["arquivos_ausentes"] += 1
             linhas_processadas += 1
-            if commit_every and linhas_processadas % max(1, commit_every) == 0:
-                db.commit()
+            # Cada linha e confirmada sozinha: com commits em blocos, o
+            # rollback de uma linha com erro desfazia as anteriores do bloco,
+            # que ja tinham sido contadas e enviadas ao storage, e elas nunca
+            # voltavam (o cursor da ingestao incremental ja tinha passado).
+            db.commit()
         except Exception as exc:
-            # Uma falha de uma linha nao pode deixar a sessao em transacao
-            # quebrada e contaminar os documentos seguintes do lote.
+            # A falha desfaz so esta linha; as anteriores ja estao gravadas.
             db.rollback()
             counters["erros"] += 1
             if len(counters["erros_detalhes"]) < 20:
@@ -1231,9 +1308,6 @@ def ingerir_saida_legado(
                         "erro": str(exc)[:500],
                     }
                 )
-
-    if commit_every and linhas_processadas % max(1, commit_every) != 0:
-        db.commit()
 
     return counters
 
@@ -1314,6 +1388,7 @@ def _ingerir_por_varredura(
                                 }
                             )
                 counters["eventos_importados"] = int(counters.get("eventos_importados", 0)) + 1
+                db.commit()
                 continue
             chave = (resumo.get("chave") or "").strip()
             if not chave:
@@ -1325,6 +1400,7 @@ def _ingerir_por_varredura(
                 (resumo.get("status_documento") or None, resumo.get("status_rotulo") or None),
                 status_evento_por_chave.get(chave),
                 nota_existente,
+                _status_por_eventos_gravados(db, int(processo.empresa_id), chave),
             )
 
             ano, mes = _ano_mes(resumo)
@@ -1383,6 +1459,7 @@ def _ingerir_por_varredura(
             _aplicar_campos_fiscais_xml(nota_data, resumo)
             nota, created = notas_repo.upsert_nota_by_chave(db, processo.empresa_id, chave, nota_data)
             counters["notas_criadas" if created else "notas_atualizadas"] += 1
+            _vincular_eventos_orfaos(db, int(processo.empresa_id), nota)
             _aplicar_substituicao(
                 db, storage, processo, resumo.get("chave_substituida"), gerar_pdf_espelho, counters
             )
@@ -1454,6 +1531,8 @@ def _ingerir_por_varredura(
                     pdf_espelho_path.name,
                 ):
                     counters["arquivos_registrados"] += 1
+            # Mesma regra da ingestao pelo indice: uma linha por transacao.
+            db.commit()
         except Exception:
             db.rollback()
             counters["erros"] += 1

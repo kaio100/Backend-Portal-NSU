@@ -160,8 +160,13 @@ def _nota_xml(tmp_path: Path, chave: str) -> Path:
     return caminho
 
 
-def _ingerir(tmp_path: Path, arquivos: list[Path], notas_existentes: dict[str, str] | None = None) -> dict:
-    """Ingere os XML na ordem dada; notas_existentes = {chave: status}."""
+def _ingerir(
+    tmp_path: Path,
+    arquivos: list[Path],
+    notas_existentes: dict[str, str] | None = None,
+    eventos_existentes: dict[str, str] | None = None,
+) -> dict:
+    """Ingere os XML na ordem dada; notas/eventos_existentes = {chave: status}."""
     linhas = ["chave;xml_path;pdf_path;competencia"]
     for arquivo in arquivos:
         chave = legacy_ingestion_service._parse_xml_resumo(arquivo)["chave"]
@@ -173,6 +178,8 @@ def _ingerir(tmp_path: Path, arquivos: list[Path], notas_existentes: dict[str, s
         db.flush()
         for chave, status in (notas_existentes or {}).items():
             db.add(Nota(empresa_id=empresa.id, chave=chave, status_documento=status, status_rotulo=status.capitalize()))
+        for i, (chave, tipo) in enumerate((eventos_existentes or {}).items()):
+            db.add(Evento(empresa_id=empresa.id, chave_evento=f"EVT{i}", chave_afetada=chave, tipo_evento=tipo))
         processo = Processo(empresa_id=empresa.id, certificado_id=None, tipo="consulta_nfse", status="rodando")
         db.add(processo)
         db.flush()
@@ -294,3 +301,30 @@ def test_reprocessar_xml_original_nao_desfaz_cancelamento(tmp_path):
     chave = _resumo(arquivo.name)["chave"]
     _ingerir(tmp_path, [arquivo], {chave: "cancelada"})
     assert _status(chave) == "cancelada"
+
+
+@pytest.mark.parametrize(
+    ("tipo_evento", "status_final"),
+    [("cancelada", "cancelada"), ("substituida", "substituida"), ("evento", "autorizada")],
+)
+def test_nota_que_chega_depois_do_evento_recebe_o_status_dele(tmp_path, tipo_evento, status_final):
+    arquivo = FIXTURES / "nota_cstat100.xml"
+    chave = _resumo(arquivo.name)["chave"]
+    _ingerir(tmp_path, [arquivo], eventos_existentes={chave: tipo_evento})
+
+    assert _status(chave) == status_final
+    with SessionLocal() as db:
+        nota = db.query(Nota).filter(Nota.chave == chave).one()
+        evento = db.query(Evento).one()
+        assert evento.nota_id == nota.id
+
+
+def test_cancelamento_gravado_prevalece_sobre_substituicao_gravada(tmp_path):
+    arquivo = FIXTURES / "nota_cstat100.xml"
+    chave = _resumo(arquivo.name)["chave"]
+    _ingerir(tmp_path, [arquivo], eventos_existentes={chave: "substituida"})
+    with SessionLocal() as db:
+        empresa_id = db.query(Nota).filter(Nota.chave == chave).one().empresa_id
+        db.add(Evento(empresa_id=empresa_id, chave_evento="EVT-CANCEL", chave_afetada=chave, tipo_evento="cancelada"))
+        db.commit()
+        assert legacy_ingestion_service._status_por_eventos_gravados(db, empresa_id, chave)[0] == "cancelada"

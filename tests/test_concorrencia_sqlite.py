@@ -233,3 +233,36 @@ def test_lock_orfao_sem_fuso_nao_quebra_aquisicao():
         assert locks_repo.get_lock(db, 9901, 1).locked_by == "novo"
         db.query(LockProcessamento).filter(LockProcessamento.empresa_id == 9901).delete()
         db.commit()
+
+
+def test_falha_em_uma_nota_nao_desfaz_as_anteriores(tmp_path, monkeypatch):
+    # Com commits a cada 20 linhas, o rollback da linha com erro desfazia as
+    # linhas boas ainda nao confirmadas do bloco. Elas ja tinham sido contadas
+    # como criadas e o cursor da ingestao incremental ja tinha passado delas.
+    _index_com_notas(tmp_path, 6)
+    chave_com_erro = f"{2:044d}"
+    upsert_original = legacy_ingestion_service.notas_repo.upsert_nota_by_chave
+
+    def upsert_com_falha(db, empresa_id, chave, data):
+        if chave == chave_com_erro:
+            raise RuntimeError("falha simulada")
+        return upsert_original(db, empresa_id, chave, data)
+
+    monkeypatch.setattr(legacy_ingestion_service.notas_repo, "upsert_nota_by_chave", upsert_com_falha)
+    with SessionLocal() as db:
+        empresa = Empresa(nome="Bloco LTDA", cnpj="22333444000155", ambiente="producao", ativo=True)
+        db.add(empresa)
+        db.flush()
+        processo = Processo(empresa_id=empresa.id, certificado_id=None, tipo="consulta_nfse", status="rodando")
+        db.add(processo)
+        db.commit()
+        result = legacy_ingestion_service.ingerir_saida_legado(
+            db, get_storage_service(), processo, tmp_path, gerar_pdf_espelho=False, commit_every=20
+        )
+        db.rollback()  # nada pendente pode depender do chamador
+
+    with SessionLocal() as db:
+        chaves = sorted(chave for (chave,) in db.query(Nota.chave).all())
+    assert result["erros"] == 1
+    assert result["notas_criadas"] == 5
+    assert chaves == [f"{i:044d}" for i in range(6) if i != 2]

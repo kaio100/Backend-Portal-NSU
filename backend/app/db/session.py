@@ -303,6 +303,12 @@ def _ensure_runtime_columns() -> None:
         statements.append("UPDATE cnpj_cache SET json_resposta = json_completo WHERE json_resposta IS NULL AND json_completo IS NOT NULL")
         statements.append("UPDATE cnpj_cache SET created_at = updated_at WHERE created_at IS NULL AND updated_at IS NOT NULL")
 
+    if "eventos" in table_names:
+        # Producao nao tinha duplicados quando a restricao entrou (2026-09-25).
+        statements.append(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_eventos_empresa_chave_evento ON eventos (empresa_id, chave_evento)"
+        )
+
     if "nsu_controle" in table_names:
         nsu_columns = {column["name"] for column in inspector.get_columns("nsu_controle")}
         if "ultima_reconciliacao_em" not in nsu_columns:
