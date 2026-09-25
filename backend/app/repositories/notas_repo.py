@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import Empresa, Nota, Processo
+from backend.app.db.models import Certificado, Empresa, Nota
 
 
 # Notas canceladas/substituidas continuam visiveis no portal, mas nunca entram
@@ -91,6 +91,7 @@ def list_notas(
     arquivadas: str = "ativas",
     count_only: bool = False,
     somente_exportaveis: bool = False,
+    id_menor_que: int | None = None,
 ) -> list[Nota] | int:
     query = db.query(Nota)
     if somente_exportaveis:
@@ -106,7 +107,13 @@ def list_notas(
     if empresa_id is not None:
         query = query.filter(Nota.empresa_id == empresa_id)
     if certificado_id is not None:
-        query = query.join(Processo, Processo.id == Nota.processo_id).filter(Processo.certificado_id == certificado_id)
+        # Nota e da empresa, nao do processo que a baixou: pelo processo sumiam
+        # as notas baixadas antes da renovacao do certificado (vira outro id)
+        # e as criadas sem processo pelo script de correcao.
+        empresa_do_certificado = (
+            db.query(Certificado.empresa_id).filter(Certificado.id == certificado_id).scalar_subquery()
+        )
+        query = query.filter(Nota.empresa_id == empresa_do_certificado)
     if processo_id is not None:
         query = query.filter(Nota.processo_id == processo_id)
     effective_status = status_documento or status
@@ -167,10 +174,16 @@ def list_notas(
 
     if count_only:
         return int(query.count())
+    if id_menor_que is not None:
+        query = query.filter(Nota.id < id_menor_que)
 
+    # 5.000 e o tamanho maximo de uma pagina, nao do resultado: quem precisa
+    # de tudo percorre com notas_service.iterar_notas.
     safe_limit = min(max(limit, 1), 5000)
     safe_offset = max(offset, 0)
-    if sort == "emissao":
+    if sort == "id":
+        query = query.order_by(Nota.id.desc())
+    elif sort == "emissao":
         query = query.order_by(Nota.data_emissao.desc().nullslast(), Nota.importado_em.desc().nullslast(), Nota.updated_at.desc().nullslast(), Nota.id.desc())
     else:
         query = query.order_by(Nota.importado_em.desc().nullslast(), Nota.updated_at.desc().nullslast(), Nota.created_at.desc().nullslast(), Nota.id.desc())

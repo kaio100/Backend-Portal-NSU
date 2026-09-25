@@ -277,6 +277,134 @@ def _anotar_detalhe_frontend(nota: Nota, consulta_simples_api: str | None = None
     return aplicar_campos_operacionais(nota, consulta_simples_api=consulta_simples_api)
 
 
+# Tamanho do lote ao percorrer notas no banco. Antes varias rotas pediam
+# "ate 5.000 notas" e descartavam o resto sem avisar (dashboard, planilha,
+# ZIP, notas do processo).
+LOTE_NOTAS = 2000
+
+
+class LimiteExportacaoExcedido(NotaServiceError):
+    def __init__(self, max_notas: int):
+        self.max_notas = max_notas
+        super().__init__(f"O filtro tem mais de {max_notas} notas.")
+
+
+def _percorrer_repo(db: Session, sort: str = "id", lote: int = LOTE_NOTAS, **filtros_repo):
+    """Entrega lotes de notas do banco ate acabar, sem teto.
+
+    Em ``sort="id"`` a paginacao e por id (estavel mesmo com o worker
+    gravando notas durante a leitura); nas outras ordens e por offset.
+    """
+    lote = max(1, min(int(lote), 5000))
+    offset = 0
+    ultimo_id: int | None = None
+    while True:
+        if sort == "id":
+            notas = notas_repo.list_notas(db, limit=lote, offset=0, sort="id", id_menor_que=ultimo_id, **filtros_repo)
+        else:
+            notas = notas_repo.list_notas(db, limit=lote, offset=offset, sort=sort, **filtros_repo)
+        if not notas:
+            return
+        yield notas
+        if len(notas) < lote:
+            return
+        offset += lote
+        ultimo_id = int(notas[-1].id)
+
+
+def iterar_notas(
+    db: Session,
+    tipo_nota: str | None = None,
+    direcao_nota: str | None = None,
+    sort: str = "id",
+    consultar_simples: bool = True,
+    lote: int = LOTE_NOTAS,
+    **filtros_repo,
+):
+    """Percorre todas as notas dos filtros, anotadas e filtradas por tipo e
+    direcao. Nao tem teto: quem chama decide o limite e avisa quando passar."""
+    filtro_tipo = normalizar_tipo_nota(tipo_nota)
+    filtro_direcao = normalizar_direcao_nota(direcao_nota)
+    if filtro_tipo and filtro_direcao and tipo_para_direcao(filtro_tipo) != filtro_direcao:
+        return
+    for notas in _percorrer_repo(db, sort=sort, lote=lote, **filtros_repo):
+        mapa_consulta_simples = _consultas_simples_api_lote(db, notas) if consultar_simples else {}
+        for nota in notas:
+            anotada = _anotar_detalhe_frontend(nota, mapa_consulta_simples.get(int(nota.id)))
+            if filtro_tipo is not None and getattr(anotada, "tipo_nota", None) != filtro_tipo:
+                continue
+            if filtro_direcao is not None and getattr(anotada, "direcao_nota", None) != filtro_direcao:
+                continue
+            yield anotada
+
+
+def _chave_ordem(valor):
+    # Mesma regra do banco (DESC NULLS LAST): nulos sempre no fim.
+    return (valor is not None, valor if valor is not None else 0)
+
+
+def ordenar_notas(notas: list[Nota], sort: str = "recentes") -> list[Nota]:
+    """Ordena em memoria como notas_repo.list_notas ordena no banco."""
+    if sort == "emissao":
+        campos = ("data_emissao", "importado_em", "updated_at", "id")
+    else:
+        campos = ("importado_em", "updated_at", "created_at", "id")
+    return sorted(
+        notas,
+        key=lambda nota: tuple(_chave_ordem(getattr(nota, campo, None)) for campo in campos),
+        reverse=True,
+    )
+
+
+def buscar_notas_exportacao(db: Session, filtros, grupo: str | None, max_notas: int) -> list[Nota]:
+    """Notas de uma exportacao (ZIP ou planilha) com os mesmos filtros da tela.
+
+    Canceladas/substituidas nunca entram. Passando de ``max_notas`` levanta
+    LimiteExportacaoExcedido em vez de cortar o resultado em silencio.
+    """
+    selecionadas: list[Nota] = []
+    for nota in iterar_notas(
+        db,
+        tipo_nota=filtros.tipo_nota,
+        direcao_nota=filtros.direcao_nota,
+        grupo=grupo,
+        empresa_id=filtros.empresa_id,
+        certificado_id=filtros.certificado_id,
+        processo_id=filtros.processo_id,
+        status_documento=filtros.status_documento,
+        numero=filtros.numero,
+        prestador_cnpj=filtros.prestador_cnpj,
+        tomador_cnpj=filtros.tomador_cnpj,
+        chave=filtros.chave,
+        busca=filtros.busca,
+        data_inicio=filtros.data_inicio,
+        data_fim=filtros.data_fim,
+        competencia_inicio=filtros.competencia_inicio,
+        competencia_fim=filtros.competencia_fim,
+        conferencia_status=filtros.conferencia_status,
+        prioridade=filtros.prioridade,
+        responsavel=filtros.responsavel,
+        status_nota_pdf=filtros.status_nota_pdf,
+        simples_nacional_xml=filtros.simples_nacional_xml,
+        status_simples_nacional=filtros.status_simples_nacional,
+        incidencia_iss=filtros.incidencia_iss,
+        divergencia=filtros.divergencia,
+        sla_status=filtros.sla_status,
+        somente_exportaveis=True,
+    ):
+        if not _passa_filtros_calculados(
+            nota,
+            somente_divergentes=filtros.somente_divergentes,
+            valor_min=filtros.valor_min,
+            valor_max=filtros.valor_max,
+        ):
+            continue
+        selecionadas.append(nota)
+        if len(selecionadas) > max_notas:
+            raise LimiteExportacaoExcedido(max_notas)
+    return ordenar_notas(selecionadas, filtros.sort)
+
+
 def listar_notas(
     db: Session,
     grupo: str | None = None,
@@ -339,11 +467,7 @@ def listar_notas(
                 prestador_cnpj_repo = empresa_cnpj
             filtro_direto = True
 
-    repo_limit = limit if filtro_direto or not classificar else 5000
-    repo_offset = offset if filtro_direto or not classificar else 0
-
-    notas = notas_repo.list_notas(
-        db,
+    filtros_repo = dict(
         grupo=grupo,
         empresa_id=empresa_id,
         certificado_id=certificado_id,
@@ -369,12 +493,24 @@ def listar_notas(
         incidencia_iss=incidencia_iss,
         divergencia=divergencia,
         sla_status=sla_status,
-        limit=repo_limit,
-        offset=repo_offset,
-        sort=sort,
         arquivadas=arquivadas,
         somente_exportaveis=somente_exportaveis,
     )
+
+    if classificar and not filtro_direto:
+        # Tipo/direcao sem empresa so se sabe depois de anotar: percorre em
+        # lotes ate completar a pagina. Antes lia 5.000 notas e as paginas
+        # seguintes vinham vazias.
+        safe_offset = max(offset, 0)
+        alvo = safe_offset + min(max(limit, 1), 5000)
+        coletadas: list[Nota] = []
+        for nota in iterar_notas(db, tipo_nota=filtro_tipo, direcao_nota=filtro_direcao, sort=sort, **filtros_repo):
+            coletadas.append(nota)
+            if len(coletadas) >= alvo:
+                break
+        return coletadas[safe_offset:alvo]
+
+    notas = notas_repo.list_notas(db, limit=limit, offset=offset, sort=sort, **filtros_repo)
     mapa_consulta_simples = _consultas_simples_api_lote(db, notas)
     anotadas = [_anotar_detalhe_frontend(nota, mapa_consulta_simples.get(int(nota.id))) for nota in notas]
     if classificar:
@@ -383,10 +519,6 @@ def listar_notas(
             if (filtro_tipo is None or getattr(nota, "tipo_nota", None) == filtro_tipo)
             and (filtro_direcao is None or getattr(nota, "direcao_nota", None) == filtro_direcao)
         ]
-        if not filtro_direto:
-            safe_limit = min(max(limit, 1), 5000)
-            safe_offset = max(offset, 0)
-            return anotadas[safe_offset : safe_offset + safe_limit]
     return anotadas
 
 
@@ -425,6 +557,8 @@ def listar_todas_notas(
     sort: str = "recentes",
     somente_total: bool = False,
     arquivadas: str = "ativas",
+    limit: int | None = None,
+    offset: int = 0,
 ) -> dict:
     filtro_tipo = normalizar_tipo_nota(tipo_nota)
     filtro_direcao = normalizar_direcao_nota(direcao_nota)
@@ -436,97 +570,55 @@ def listar_todas_notas(
     # responder apenas um contador. Os filtros calculados continuam no fluxo
     # completo porque dependem das anotacoes de negocio.
     filtros_calculados = any((filtro_tipo, filtro_direcao, somente_divergentes, valor_min is not None, valor_max is not None))
-    if somente_total and not filtros_calculados:
-        total = notas_repo.list_notas(
-            db, grupo=grupo, empresa_id=empresa_id, certificado_id=certificado_id,
-            processo_id=processo_id, status_documento=status_documento, status=status,
-            numero=numero, prestador_cnpj=prestador_cnpj, tomador_cnpj=tomador_cnpj,
-            chave=chave, busca=busca, data_inicio=data_inicio, data_fim=data_fim,
-            competencia_inicio=competencia_inicio, competencia_fim=competencia_fim,
-            conferencia_status=conferencia_status, prioridade=prioridade,
-            responsavel=responsavel, status_nota_pdf=status_nota_pdf,
-            simples_nacional_xml=simples_nacional_xml,
-            consulta_simples_api=consulta_simples_api,
-            status_simples_nacional=status_simples_nacional,
-            incidencia_iss=incidencia_iss, divergencia=divergencia,
-            sla_status=sla_status, arquivadas=arquivadas, count_only=True,
-        )
-        return {"items": [], "total": int(total)}
-
-    batch_size = 5000
-    offset = 0
-    items: list[Nota] = []
-    while True:
-        batch = listar_notas(
-            db,
-            grupo=grupo,
-            empresa_id=empresa_id,
-            certificado_id=certificado_id,
-            processo_id=processo_id,
-            status_documento=status_documento,
-            status=status,
-            numero=numero,
-            prestador_cnpj=prestador_cnpj,
-            tomador_cnpj=tomador_cnpj,
-            chave=chave,
-            busca=busca,
-            data_inicio=data_inicio,
-            data_fim=data_fim,
-            competencia_inicio=competencia_inicio,
-            competencia_fim=competencia_fim,
-            conferencia_status=conferencia_status,
-            prioridade=prioridade,
-            responsavel=responsavel,
-            status_nota_pdf=status_nota_pdf,
-            simples_nacional_xml=simples_nacional_xml,
-            consulta_simples_api=consulta_simples_api,
-            status_simples_nacional=status_simples_nacional,
-            incidencia_iss=incidencia_iss,
-            divergencia=divergencia,
-            sla_status=sla_status,
-            tipo_nota=None,
-            direcao_nota=None,
-            limit=batch_size,
-            offset=offset,
-            sort=sort,
-            arquivadas=arquivadas,
-        )
-        items.extend(batch)
-        if len(batch) < batch_size:
-            break
-        offset += batch_size
-
-    items = _filtrar_notas_calculadas(
-        items,
-        tipo_nota=filtro_tipo,
-        direcao_nota=filtro_direcao,
-        somente_divergentes=somente_divergentes,
-        valor_min=valor_min,
-        valor_max=valor_max,
+    filtros_repo = dict(
+        grupo=grupo, empresa_id=empresa_id, certificado_id=certificado_id,
+        processo_id=processo_id, status_documento=status_documento, status=status,
+        numero=numero, prestador_cnpj=prestador_cnpj, tomador_cnpj=tomador_cnpj,
+        chave=chave, busca=busca, data_inicio=data_inicio, data_fim=data_fim,
+        competencia_inicio=competencia_inicio, competencia_fim=competencia_fim,
+        conferencia_status=conferencia_status, prioridade=prioridade,
+        responsavel=responsavel, status_nota_pdf=status_nota_pdf,
+        simples_nacional_xml=simples_nacional_xml,
+        consulta_simples_api=consulta_simples_api,
+        status_simples_nacional=status_simples_nacional,
+        incidencia_iss=incidencia_iss, divergencia=divergencia,
+        sla_status=sla_status, arquivadas=arquivadas,
     )
+    safe_offset = max(offset or 0, 0)
+    if not filtros_calculados and (somente_total or limit is not None):
+        total = int(notas_repo.list_notas(db, count_only=True, **filtros_repo))
+        if somente_total:
+            return {"items": [], "total": total}
+        # Pagina direto no banco: sem filtro calculado o total ja e exato.
+        items = listar_notas(db, limit=limit, offset=safe_offset, sort=sort, **filtros_repo)
+        return {"items": items, "total": total, "limit": limit, "offset": safe_offset}
+
+    items = [
+        nota
+        for nota in iterar_notas(db, tipo_nota=filtro_tipo, direcao_nota=filtro_direcao, sort=sort, **filtros_repo)
+        if _passa_filtros_calculados(nota, somente_divergentes=somente_divergentes, valor_min=valor_min, valor_max=valor_max)
+    ]
+    if somente_total:
+        return {"items": [], "total": len(items)}
+    if limit is not None:
+        return {"items": items[safe_offset : safe_offset + limit], "total": len(items), "limit": limit, "offset": safe_offset}
     return {"items": items, "total": len(items)}
 
 
-def _filtrar_notas_calculadas(
-    notas: list[Nota],
-    tipo_nota: str | None = None,
-    direcao_nota: str | None = None,
+def _passa_filtros_calculados(
+    nota: Nota,
     somente_divergentes: bool = False,
     valor_min: Decimal | None = None,
     valor_max: Decimal | None = None,
-) -> list[Nota]:
-    filtradas = list(notas)
-    if tipo_nota is not None:
-        filtradas = [nota for nota in filtradas if getattr(nota, "tipo_nota", None) == tipo_nota]
-    if direcao_nota is not None:
-        filtradas = [nota for nota in filtradas if getattr(nota, "direcao_nota", None) == direcao_nota]
-    if somente_divergentes:
-        filtradas = [nota for nota in filtradas if getattr(nota, "divergencia_fila_final", False)]
-    if valor_min is not None:
-        filtradas = [nota for nota in filtradas if Decimal(str(nota.valor_servico or 0)) >= Decimal(str(valor_min))]
-    if valor_max is not None:
-        filtradas = [nota for nota in filtradas if Decimal(str(nota.valor_servico or 0)) <= Decimal(str(valor_max))]
-    return filtradas
+) -> bool:
+    if somente_divergentes and not getattr(nota, "divergencia_fila_final", False):
+        return False
+    valor = Decimal(str(nota.valor_servico or 0))
+    if valor_min is not None and valor < Decimal(str(valor_min)):
+        return False
+    if valor_max is not None and valor > Decimal(str(valor_max)):
+        return False
+    return True
 
 
 def resumo_notas_operacional(
@@ -541,8 +633,17 @@ def resumo_notas_operacional(
     direcao_nota: str | None = None,
     grupo: str | None = None,
 ) -> dict:
-    notas = listar_notas(
+    # Conta todas as notas do filtro (antes parava em 5.000 e o painel
+    # mostrava numeros menores que o acervo). O status da fila depende de
+    # regras em Python, entao percorre em lotes e solta cada nota da sessao
+    # depois de contar para nao acumular dezenas de milhares na memoria.
+    contagem = {"total": 0, "corretas": 0, "divergentes": 0, "pendentes": 0, "canceladas": 0, "substituidas": 0}
+    status_para_campo = {"correta": "corretas", "pendente": "pendentes", "cancelada": "canceladas", "substituida": "substituidas"}
+    for nota in iterar_notas(
         db,
+        tipo_nota=tipo_nota,
+        direcao_nota=direcao_nota,
+        consultar_simples=False,
         grupo=grupo,
         empresa_id=empresa_id,
         processo_id=processo_id,
@@ -550,25 +651,15 @@ def resumo_notas_operacional(
         data_fim=data_fim,
         competencia_inicio=competencia_inicio,
         competencia_fim=competencia_fim,
-        tipo_nota=tipo_nota,
-        direcao_nota=direcao_nota,
-        limit=5000,
-        offset=0,
-    )
-    total = len(notas)
-    divergentes = sum(1 for nota in notas if getattr(nota, "divergencia_fila_final", False))
-    corretas = sum(1 for nota in notas if getattr(nota, "status_fila_final", None) == "correta")
-    pendentes = sum(1 for nota in notas if getattr(nota, "status_fila_final", None) == "pendente")
-    canceladas = sum(1 for nota in notas if getattr(nota, "status_fila_final", None) == "cancelada")
-    substituidas = sum(1 for nota in notas if getattr(nota, "status_fila_final", None) == "substituida")
-    return {
-        "total": total,
-        "corretas": corretas,
-        "divergentes": divergentes,
-        "pendentes": pendentes,
-        "canceladas": canceladas,
-        "substituidas": substituidas,
-    }
+    ):
+        contagem["total"] += 1
+        if getattr(nota, "divergencia_fila_final", False):
+            contagem["divergentes"] += 1
+        campo = status_para_campo.get(getattr(nota, "status_fila_final", None))
+        if campo:
+            contagem[campo] += 1
+        db.expunge(nota)
+    return contagem
 
 
 def listar_notas_por_tipo_operacional(
@@ -631,11 +722,7 @@ def listar_notas_por_tipo_operacional(
     precisa_ajustar_competencia = nota_tipo == "recebida" and (
         competencia_inicio is not None or competencia_fim is not None
     )
-    repo_limit = 5000 if precisa_ajustar_competencia else min(max(limit, 1), 500)
-    repo_offset = 0 if precisa_ajustar_competencia else max(offset, 0)
-
-    notas = notas_repo.list_notas(
-        db,
+    filtros_repo = dict(
         empresa_id=empresa_id,
         certificado_id=certificado_id,
         processo_id=processo_id,
@@ -649,10 +736,15 @@ def listar_notas_por_tipo_operacional(
         data_fim=data_fim,
         competencia_inicio=query_competencia_inicio,
         competencia_fim=query_competencia_fim,
-        limit=repo_limit,
-        offset=repo_offset,
-        sort=sort,
     )
+    if precisa_ajustar_competencia:
+        # A competencia operacional so e conhecida depois de classificar:
+        # le todas do intervalo (antes parava em 5.000).
+        notas = [nota for lote in _percorrer_repo(db, **filtros_repo) for nota in lote]
+    else:
+        notas = notas_repo.list_notas(
+            db, limit=min(max(limit, 1), 500), offset=max(offset, 0), sort=sort, **filtros_repo
+        )
 
     classificadas = [
         _anotar_classificacao(nota, empresa_cnpj, competencia_fim)

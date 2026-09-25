@@ -164,6 +164,8 @@ class NotaDetail(NotaListItem):
 class NotasTodasResponse(BaseModel):
     items: list[NotaListItem]
     total: int
+    limit: int | None = None
+    offset: int | None = None
 
 
 def _valor_da_lista(valor: str | None, permitidos: dict[str, str], campo: str) -> str | None:

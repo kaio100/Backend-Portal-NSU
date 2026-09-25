@@ -157,44 +157,15 @@ def _buscar_notas(db: Session, payload: NotasDownloadLoteRequest, max_notas: int
         return notas
 
     filtros: NotasDownloadFiltros = payload.filtros or NotasDownloadFiltros()
-    notas = notas_service.listar_notas(
-        db,
-        grupo=grupo,
-        empresa_id=filtros.empresa_id,
-        certificado_id=filtros.certificado_id,
-        processo_id=filtros.processo_id,
-        status_documento=filtros.status_documento,
-        numero=filtros.numero,
-        prestador_cnpj=filtros.prestador_cnpj,
-        tomador_cnpj=filtros.tomador_cnpj,
-        chave=filtros.chave,
-        busca=filtros.busca,
-        data_inicio=filtros.data_inicio,
-        data_fim=filtros.data_fim,
-        competencia_inicio=filtros.competencia_inicio,
-        competencia_fim=filtros.competencia_fim,
-        conferencia_status=filtros.conferencia_status,
-        prioridade=filtros.prioridade,
-        responsavel=filtros.responsavel,
-        status_nota_pdf=filtros.status_nota_pdf,
-        simples_nacional_xml=filtros.simples_nacional_xml,
-        consulta_simples_api=None,
-        status_simples_nacional=filtros.status_simples_nacional,
-        incidencia_iss=filtros.incidencia_iss,
-        divergencia=filtros.divergencia,
-        sla_status=filtros.sla_status,
-        tipo_nota=filtros.tipo_nota,
-        direcao_nota=filtros.direcao_nota,
-        sort=filtros.sort,
-        limit=max_notas + 1,
-        offset=0,
-        somente_exportaveis=True,
-    )
-    if len(notas) > max_notas:
+    # Mesmos filtros da tela e da planilha (inclusive divergentes e faixa de
+    # valor). Antes o repositorio parava em 5.000 e o ZIP saia incompleto sem
+    # aviso, embora o limite configurado fosse 10.000.
+    try:
+        return notas_service.buscar_notas_exportacao(db, filtros, grupo, max_notas)
+    except notas_service.LimiteExportacaoExcedido as exc:
         raise NotasDownloadLoteError(
-            f"Limite de {max_notas} notas por ZIP excedido. Refine os filtros para baixar um lote menor."
-        )
-    return notas
+            f"Limite de {exc.max_notas} notas por ZIP excedido. Refine os filtros para baixar um lote menor."
+        ) from exc
 
 
 def gerar_zip_notas(

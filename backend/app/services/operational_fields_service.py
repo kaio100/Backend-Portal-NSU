@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any
 
 from sqlalchemy import inspect as sa_inspect
@@ -39,7 +40,17 @@ def _strip_accents(value: str) -> str:
 
 
 def _norm(value: Any) -> str:
-    return re.sub(r"\s+", " ", _strip_accents(str(value or "")).strip().lower())
+    return _norm_texto(str(value or ""))
+
+
+# O painel e as exportacoes normalizam os mesmos textos milhares de vezes
+# (status, alertas, observacoes); o cache evita refazer a remocao de acentos.
+@lru_cache(maxsize=8192)
+def _norm_texto(texto: str) -> str:
+    return re.sub(r"\s+", " ", _strip_accents(texto).strip().lower())
+
+
+_DIVERGENCE_HINTS_NORMALIZADAS = tuple(dict.fromkeys(_norm(hint) for hint in DIVERGENCE_HINTS))
 
 
 def normalizar_simples_xml(value: str | None) -> str | None:
@@ -146,7 +157,7 @@ def normalizar_status_fila(value: str | None) -> str | None:
 
 def _contains_divergence_hint(value: str | None) -> bool:
     text = _norm(value)
-    return any(_norm(hint) in text for hint in DIVERGENCE_HINTS)
+    return any(hint in text for hint in _DIVERGENCE_HINTS_NORMALIZADAS)
 
 
 def _status_field_is_divergent(value: str | None) -> bool:

@@ -50,7 +50,7 @@ Não há migrations Alembic versionadas. `session.py` e scripts aplicam schema; 
 1. Não confiar apenas no nome das camadas: services fazem SQL diretamente.
 2. Não copiar auditorias antigas/`docs/ai.zip` sem validar contra o commit.
 3. Não assumir que cancelar processo interrompe o ADN.
-4. Não assumir que o limite configurado de download é efetivo: repository limita 5.000.
+4. O repositório devolve no máximo 5.000 por página; para percorrer tudo use `notas_service.iterar_notas` (REG-038).
 5. Não usar `status_fila_manual` para alterar status fiscal.
 6. Não alterar naming de storage sem migração e reconciliação.
 7. Não executar scripts em `.env`/DB desconhecido.
@@ -102,4 +102,5 @@ A empresa Canopus conserva cadastro/certificado, mas seus documentos e registros
 - Papéis decididos: só `operador` e `admin` (o `leitura` sai); convite só por operador/admin, convidado entra como operador.
 - Branch `ajustes/f3-consulta-adn` (sobre a F2): saída do motor em `data/` (volume) com limpeza de respostas brutas, NSU central só no fim do job e limitado por falhas de ingestão (aviso vai para `erro_resumo` do processo), certificado vencido fora da fila e `GET /certificados/vencimentos`, erro permanente sem repetição no motor, lock atômico renovado pelo heartbeat, recuperação de jobs travados por heartbeat (startup + a cada minuto, também no worker separado), consulta avulsa sem tocar no monitor, motor legado descarregado de `sys.modules` após cada job, limpeza de PFX temporários no startup, `NOTAS_DATA_CORTE` validada no Settings.
 - Branch `ajustes/f4-grupos-contas` (sobre a F3): cadastro por convite com código por e-mail (Resend) e esqueci minha senha (REG-037), `token_version` no JWT, grupo desativado bloqueia, admin por grupo e admin geral por `SUPER_ADMIN_EMAILS`, fim do papel leitura e das rotas locais (`/auth/local`), IP real atrás do proxy, login em tempo constante, `/auth/usuarios` no grupo da empresa, vazamentos entre grupos fechados. Variáveis novas: `RESEND_ENABLED`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `FRONTEND_BASE_URL`, `SUPER_ADMIN_EMAILS`, `CONVITE_VALIDADE_DIAS`, `CODIGO_EMAIL_VALIDADE_MINUTOS`. **O patch pendente no Railway que remove RESEND_* deve ser descartado.**
-- Próximas fases: F5 (teto de 5.000), F6 (operação). Frontend (F7) na reserva: precisa das telas de convite, cadastro com código, esqueci minha senha e histórico da análise.
+- Branch `ajustes/f5-limites` (sobre a F4): fim do corte silencioso em 5.000 (painel, lista com direção, notas do processo, ZIP, planilha), exportações com os filtros da tela e erro claro acima do teto, `/notas/todas` com paginação opcional, GET do ZIP com os filtros do POST, filtro por certificado pela empresa (REG-038). Nova variável opcional `RELATORIO_MAX_NOTAS`.
+- Próximas fases: F6 (operação). Frontend (F7) na reserva: precisa das telas de convite, cadastro com código, esqueci minha senha e histórico da análise.

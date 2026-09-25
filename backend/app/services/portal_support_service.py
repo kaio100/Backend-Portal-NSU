@@ -21,7 +21,7 @@ from openpyxl.utils import get_column_letter
 
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 
 from sqlalchemy.orm import Session
 
@@ -550,26 +550,18 @@ def listar_notas_processo(
 
         raise PortalSupportError("Processo nao encontrado.")
 
-    notas = notas_service.listar_notas(
-
-        db,
-
-        processo_id=processo_id,
-
-        status_documento=status,
-
-        conferencia_status=conferencia_status,
-
-        tipo_nota=tipo_nota,
-
-        direcao_nota=direcao_nota,
-
-        busca=busca,
-
-        limit=5000,
-
-        offset=0,
-
+    # Todas as notas do processo (antes parava em 5.000).
+    notas = list(
+        notas_service.iterar_notas(
+            db,
+            tipo_nota=tipo_nota,
+            direcao_nota=direcao_nota,
+            sort="recentes",
+            processo_id=processo_id,
+            status_documento=status,
+            conferencia_status=conferencia_status,
+            busca=busca,
+        )
     )
 
     notas = _filtrar_notas_operacionais(
@@ -702,7 +694,13 @@ def resumo_processo(db: Session, processo_id: int) -> dict:
 
     notas = [aplicar_campos_operacionais(nota) for nota in db.query(Nota).filter(Nota.processo_id == processo_id).all()]
 
-    arquivos = arquivos_repo.list_arquivos(db, processo_id=processo_id, limit=5000, offset=0)
+    # Conta no banco por tipo (antes listava ate 5.000 arquivos e parava).
+    arquivos_por_tipo: dict[str, int] = {}
+    for tipo, quantidade in (
+        db.query(Arquivo.tipo, func.count(Arquivo.id)).filter(Arquivo.processo_id == processo_id).group_by(Arquivo.tipo).all()
+    ):
+        canonico = _canonical_tipo_arquivo(tipo)
+        arquivos_por_tipo[canonico] = arquivos_por_tipo.get(canonico, 0) + int(quantidade)
 
     status_values = [(nota.status_documento or "").lower() for nota in notas]
 
@@ -712,9 +710,9 @@ def resumo_processo(db: Session, processo_id: int) -> dict:
 
         "total_notas": len(notas),
 
-        "total_xml": sum(1 for arquivo in arquivos if _canonical_tipo_arquivo(arquivo.tipo) == "XML"),
+        "total_xml": arquivos_por_tipo.get("XML", 0),
 
-        "total_pdf": sum(1 for arquivo in arquivos if _canonical_tipo_arquivo(arquivo.tipo) in {"PDF_ORIGINAL", "PDF_ESPELHO"}),
+        "total_pdf": arquivos_por_tipo.get("PDF_ORIGINAL", 0) + arquivos_por_tipo.get("PDF_ESPELHO", 0),
 
         "corretas": sum(1 for nota in notas if getattr(nota, "status_fila_final", None) == "correta"),
 
@@ -871,96 +869,14 @@ def _format_value(value) -> str:
 
 
 def _buscar_notas_relatorio(db: Session, filtros: NotasDownloadFiltros, grupo: str | None = None) -> list[Nota]:
-    notas = notas_service.listar_notas(
-
-        db,
-        grupo=grupo,
-        empresa_id=filtros.empresa_id,
-
-        certificado_id=filtros.certificado_id,
-
-        processo_id=filtros.processo_id,
-
-        status_documento=filtros.status_documento,
-
-        numero=filtros.numero,
-
-        prestador_cnpj=filtros.prestador_cnpj,
-
-        tomador_cnpj=filtros.tomador_cnpj,
-
-        chave=filtros.chave,
-
-        busca=filtros.busca,
-
-        data_inicio=filtros.data_inicio,
-
-        data_fim=filtros.data_fim,
-
-        competencia_inicio=filtros.competencia_inicio,
-
-        competencia_fim=filtros.competencia_fim,
-
-        conferencia_status=filtros.conferencia_status,
-
-        prioridade=filtros.prioridade,
-
-        responsavel=filtros.responsavel,
-
-        status_nota_pdf=filtros.status_nota_pdf,
-
-        simples_nacional_xml=filtros.simples_nacional_xml,
-
-        consulta_simples_api=None,
-
-        status_simples_nacional=filtros.status_simples_nacional,
-
-        incidencia_iss=filtros.incidencia_iss,
-
-        divergencia=filtros.divergencia,
-
-        sla_status=filtros.sla_status,
-
-        tipo_nota=filtros.tipo_nota,
-
-        direcao_nota=filtros.direcao_nota,
-
-        limit=5000,
-
-        offset=0,
-
-        sort=filtros.sort,
-
-        somente_exportaveis=True,
-
-    )
-
-    empresa_cnpj = ""
-
-    if filtros.empresa_id:
-
-        empresa = db.get(Empresa, filtros.empresa_id)
-
-        empresa_cnpj = empresa.cnpj if empresa is not None else ""
-
-    return _filtrar_notas_operacionais(
-
-        notas,
-
-        empresa_cnpj=empresa_cnpj,
-
-        tipo_nota=filtros.tipo_nota,
-
-        somente_divergentes=filtros.somente_divergentes,
-
-        valor_min=filtros.valor_min,
-
-        valor_max=filtros.valor_max,
-
-    )
-
-
-
+    # Mesma selecao do ZIP. Antes parava em 5.000 linhas sem avisar.
+    max_notas = max(1, int(settings.relatorio_max_notas or 20000))
+    try:
+        return notas_service.buscar_notas_exportacao(db, filtros, grupo, max_notas)
+    except notas_service.LimiteExportacaoExcedido as exc:
+        raise PortalSupportError(
+            f"Limite de {exc.max_notas} notas por planilha excedido. Refine os filtros para exportar um periodo menor."
+        ) from exc
 
 
 def _parse_decimal_optional(value) -> Decimal | None:

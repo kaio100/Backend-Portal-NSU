@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
@@ -28,7 +28,10 @@ class RelatorioConferenciaRequest(BaseModel):
 
 @router.post("/conferencia")
 def exportar_conferencia(payload: RelatorioConferenciaRequest, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_usuario)):
-    path, filename = portal_support_service.exportar_conferencia_xlsx(db, payload.filtros, grupo=usuario.grupo)
+    try:
+        path, filename = portal_support_service.exportar_conferencia_xlsx(db, payload.filtros, grupo=usuario.grupo)
+    except portal_support_service.PortalSupportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FileResponse(
         path=path,
         filename=filename,

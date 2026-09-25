@@ -81,11 +81,11 @@ Legenda: `JWT` = usuário autenticado; `ADM` = `require_admin`; `OP` = operador/
 | Método | Rota | Arquivo/função | Auth | Entrada → saída |
 |---|---|---|---|---|
 | GET | `/notas` | `notas.py::list_notas` | JWT | filtros, `limit/offset` → `NotaListItem[]` |
-| GET | `/notas/todas` | `notas.py::list_todas_notas` | JWT | filtros → todas as direções |
+| GET | `/notas/todas` | `notas.py::list_todas_notas` | JWT | filtros → todas as direções; `limit`/`offset` opcionais (sem `limit` devolve tudo; `total` é sempre o do filtro inteiro) |
 | GET | `/notas/emitidas` | `notas.py::list_notas_emitidas` | JWT | filtros → emitidas |
 | GET | `/notas/recebidas` | `notas.py::list_notas_recebidas` | JWT | filtros → recebidas |
 | POST | `/notas/download-lote` | `notas.py::download_lote_notas` | JWT | `NotasDownloadLoteRequest` → ZIP |
-| GET | `/notas/download-lote` | `notas.py::download_lote_notas_get` | JWT | query filters → ZIP |
+| GET | `/notas/download-lote` | `notas.py::download_lote_notas_get` | JWT | query filters → ZIP (mesmos filtros do POST, inclusive divergentes e faixa de valor) |
 | GET | `/notas/resumo` | `notas.py::get_notas_resumo` | JWT | filtros → contagens/valores |
 | GET | `/notas/chave/{chave}` | `notas.py::get_nota_por_chave` | JWT/TEN | chave → detalhe |
 | GET | `/notas/{nota_id}` | `notas.py::get_nota` | JWT/TEN | ID → detalhe |
@@ -108,7 +108,7 @@ Legenda: `JWT` = usuário autenticado; `ADM` = `require_admin`; `OP` = operador/
 
 | Método | Rota | Arquivo/função | Auth | Entrada → saída |
 |---|---|---|---|---|
-| POST | `/relatorios/conferencia` | `relatorios.py::exportar_conferencia` | JWT | filtros → XLSX |
+| POST | `/relatorios/conferencia` | `relatorios.py::exportar_conferencia` | JWT | filtros → XLSX; 400 acima de `RELATORIO_MAX_NOTAS` |
 | GET | `/cnpj/status` | `cnpj.py::status_cnpj` | JWT | → provider/cache |
 | GET | `/cnpj/{cnpj}` | `cnpj.py::consultar_cnpj` | JWT | CNPJ → dados/cache |
 | GET | `/health` | `health.py` | público | → liveness |

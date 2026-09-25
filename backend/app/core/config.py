@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     nsu_max_vazios_consecutivos: int = 5
     notas_recebidas_dia_corte_mes_anterior: int = 3
     download_lote_max_notas: int = 10000
+    # Teto da planilha de conferencia; passando disso a exportacao pede para
+    # refinar o filtro em vez de cortar linhas sem avisar.
+    relatorio_max_notas: int = 20000
     download_storage_workers: int = 16
     download_temp_max_age_hours: int = 24
     certificado_upload_max_bytes: int = 5 * 1024 * 1024
