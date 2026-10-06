@@ -16,6 +16,8 @@ class ConsultaIniciarRequest(BaseModel):
     pausa: float = Field(default_factory=lambda: settings.consultas_default_pausa, ge=0)
     gerar_pdf_espelho: bool = True
     forcar: bool = False
+    # So no job: rele desde antes do 1o dia do mes anterior (nao vai para o monitor).
+    releitura_mes_anterior: bool = False
 
     @field_validator("empresa_ids", "certificado_ids")
     @classmethod
@@ -24,6 +26,25 @@ class ConsultaIniciarRequest(BaseModel):
             return None
         ids = sorted({int(item) for item in value if int(item) > 0})
         return ids or None
+
+
+class ConsultaReleituraRequest(BaseModel):
+    """Empresas a reler desde o 1o dia do mes anterior (pelo menos uma)."""
+
+    empresa_ids: list[int] = Field(min_length=1)
+
+    @field_validator("empresa_ids")
+    @classmethod
+    def exigir_ids(cls, value: list[int]) -> list[int]:
+        ids = sorted({int(item) for item in value if int(item) > 0})
+        if not ids:
+            raise ValueError("Informe ao menos uma empresa.")
+        return ids
+
+
+class ConsultaReleituraResponse(BaseModel):
+    processos_criados: int
+    certificados_ignorados: int
 
 
 class ConsultaWorkerStatus(BaseModel):

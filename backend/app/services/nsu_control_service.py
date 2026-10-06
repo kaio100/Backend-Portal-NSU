@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import Empresa, Nota, NsuControle
+from backend.app.db.models import Empresa, Nota, NsuControle, Processo
 from backend.app.core.config import settings
 
 
@@ -86,12 +86,51 @@ def janela_reconciliacao(now: datetime | None = None) -> date | None:
     return None
 
 
+def ultima_consulta_finalizada(db: Session, empresa_id: int) -> datetime | None:
+    valor = (
+        db.query(func.max(Processo.finished_at))
+        .filter(Processo.empresa_id == empresa_id)
+        .filter(Processo.tipo == "consulta_nfse")
+        .filter(Processo.status == "finalizado")
+        .scalar()
+    )
+    if valor is not None and valor.tzinfo is None:
+        valor = valor.replace(tzinfo=dt_timezone.utc)
+    return valor
+
+
+def _agora_aware(now: datetime | None) -> datetime:
+    if now is None:
+        return datetime.now(dt_timezone.utc)
+    if now.tzinfo is None:
+        return now.replace(tzinfo=ZoneInfo(settings.nsu_reconciliacao_timezone or "America/Sao_Paulo"))
+    return now
+
+
+def voltou_de_parada(db: Session, empresa_id: int, now: datetime | None = None) -> bool:
+    """A empresa ja foi consultada antes, mas nao nas ultimas N horas."""
+    horas = int(settings.nsu_releitura_apos_horas_sem_consulta or 0)
+    if horas <= 0:
+        return False
+    ultima = ultima_consulta_finalizada(db, empresa_id)
+    return ultima is not None and ultima < _agora_aware(now) - timedelta(hours=horas)
+
+
 def planejar_inicio_consulta(
     db: Session,
     empresa_id: int,
     certificado_id: int | None,
     now: datetime | None = None,
+    forcar_releitura: bool = False,
 ) -> dict:
+    """Define de qual NSU a consulta parte.
+
+    Normal: o ultimo NSU confirmado menos uma margem pequena. Releitura
+    profunda (desde antes do 1o dia do mes anterior, com margem maior): uma
+    vez por noite na janela de reconciliacao, logo que a empresa volta de uma
+    parada (ver `voltou_de_parada`) ou quando pedida por um operador. Notas ja
+    gravadas so tem os dados fiscais do XML reescritos; a conferencia fica.
+    """
     confirmado = obter_ultimo_nsu(db, empresa_id, certificado_id=certificado_id)
     controle = (
         db.query(NsuControle)
@@ -100,14 +139,20 @@ def planejar_inicio_consulta(
         .first()
     )
     janela = janela_reconciliacao(now)
-    profunda = bool(janela is not None and (controle is None or controle.ultima_reconciliacao_em != janela))
+    noturna = bool(janela is not None and (controle is None or controle.ultima_reconciliacao_em != janela))
+    apos_parada = not noturna and not forcar_releitura and voltou_de_parada(db, empresa_id, now)
+    profunda = noturna or forcar_releitura or apos_parada
+    motivo = "janela_noturna" if noturna else "pedido_operador" if forcar_releitura else "apos_parada" if apos_parada else None
     recuo = (
         int(settings.nsu_lookback_reconciliacao or 1000)
         if profunda
         else int(settings.nsu_lookback_normal or 50)
     )
     recuo = max(0, recuo)
-    nsu_mes_anterior = nsu_base_mes_anterior(db, empresa_id, janela) if profunda and janela else None
+    referencia = janela or _agora_aware(now).astimezone(
+        ZoneInfo(settings.nsu_reconciliacao_timezone or "America/Sao_Paulo")
+    ).date()
+    nsu_mes_anterior = nsu_base_mes_anterior(db, empresa_id, referencia) if profunda else None
     if nsu_mes_anterior is not None:
         nsu_inicio = max(0, nsu_mes_anterior - recuo)
     else:
@@ -119,6 +164,7 @@ def planejar_inicio_consulta(
         "margem_seguranca": recuo,
         "nsu_mes_anterior": nsu_mes_anterior,
         "reconciliacao_profunda": profunda,
+        "motivo_releitura": motivo,
         "janela_reconciliacao": janela,
     }
 

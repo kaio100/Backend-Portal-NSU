@@ -271,6 +271,7 @@ def _create_consulta_job(db: Session, certificado: Certificado, options: Consult
                 "limite": limite,
                 "pausa": pausa,
                 "gerar_pdf_espelho": options.gerar_pdf_espelho,
+                "releitura_mes_anterior": bool(options.releitura_mes_anterior),
             },
         },
     )
@@ -342,6 +343,21 @@ def _consulta_avulsa(db: Session, options: ConsultaIniciarRequest, grupo: str) -
     )
 
 
+def solicitar_releitura_mes_anterior(db: Session, empresa_ids: list[int], grupo: str = "planning_hub") -> dict[str, Any]:
+    """Enfileira, para cada certificado elegivel das empresas, uma consulta que
+    rele desde antes do 1o dia do mes anterior. Nao mexe no monitor; empresas
+    de outro grupo sao ignoradas pelo filtro de grupo; certificado com consulta
+    ja na fila ou rodando e pulado (a releitura nao concorre com ela)."""
+    if not empresa_ids:
+        raise ValueError("Informe ao menos uma empresa.")
+    options = ConsultaIniciarRequest(automatico=False, empresa_ids=empresa_ids, releitura_mes_anterior=True)
+    resultado = _consulta_avulsa(db, options, grupo)
+    return {
+        "processos_criados": len(resultado["processos_criados"]),
+        "certificados_ignorados": int(resultado["certificados_ignorados"]),
+    }
+
+
 def _cancelar_consultas_dos_certificados(db: Session, certificado_ids: list[int], motivo: str) -> int:
     if not certificado_ids:
         return 0
@@ -387,7 +403,7 @@ def iniciar_consultas_automaticas(
     # O NSU inicial e o modo forcar valem apenas para esta partida. Ciclos
     # automaticos posteriores devem continuar do NSU central ja alcancado e
     # nao recriar a mesma faixa indefinidamente.
-    filtros_ciclos = options.model_copy(update={"nsu_inicio": None, "forcar": False})
+    filtros_ciclos = options.model_copy(update={"nsu_inicio": None, "forcar": False, "releitura_mes_anterior": False})
     config.filtros_json = filtros_ciclos.model_dump()
     db.add(config)
     db.commit()
@@ -436,6 +452,7 @@ def iniciar_certificado_sem_substituir_monitor(
             "certificado_ids": _somar(filtros_atuais.certificado_ids, options.certificado_ids),
             "nsu_inicio": None,
             "forcar": False,
+            "releitura_mes_anterior": False,
         }
     )
 

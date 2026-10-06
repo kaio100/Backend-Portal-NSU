@@ -620,6 +620,7 @@ def executar_consulta_nfse_legado(
                 db,
                 empresa_id=int(empresa.id),
                 certificado_id=int(certificado.id),
+                forcar_releitura=bool(payload.get("releitura_mes_anterior")),
             )
             nsu_inicio_efetivo = int(plano_nsu["nsu_inicio"])
             reconciliacao_profunda = bool(plano_nsu["reconciliacao_profunda"])
@@ -646,6 +647,7 @@ def executar_consulta_nfse_legado(
                     "nsu_inicio": nsu_inicio_efetivo,
                     "recuo": plano_nsu["recuo"],
                     "reconciliacao_profunda": reconciliacao_profunda,
+                    "motivo_releitura": plano_nsu.get("motivo_releitura"),
                     "janela_reconciliacao": str(janela_reconciliacao) if janela_reconciliacao else None,
                 },
             )

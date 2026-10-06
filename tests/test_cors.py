@@ -59,3 +59,12 @@ def test_cors_applies_to_notas_route() -> None:
         response = client.get("/notas", headers={"Origin": FRONTEND_ORIGIN})
 
     assert response.headers.get("access-control-allow-origin") == FRONTEND_ORIGIN
+
+
+def test_cors_expoe_content_disposition_para_downloads() -> None:
+    # Sem o header exposto o navegador nao le o nome do arquivo baixado.
+    with TestClient(app) as client:
+        response = client.get("/health", headers={"Origin": FRONTEND_ORIGIN})
+
+    expostos = response.headers.get("access-control-expose-headers", "").lower()
+    assert "content-disposition" in expostos

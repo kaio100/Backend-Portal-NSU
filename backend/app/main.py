@@ -282,6 +282,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
+    # Sem isso o navegador (frontend em outro dominio) nao le o nome do arquivo
+    # nos downloads de XML/PDF/ZIP/XLSX e salva com um nome padrao.
+    expose_headers=["Content-Disposition"],
 )
 
 # /health e /db/health ficam sem API key: sao usados por health checks de

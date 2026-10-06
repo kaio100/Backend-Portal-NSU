@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     nsu_reconciliacao_hora_inicio: int = 19
     nsu_reconciliacao_hora_fim: int = 5
     nsu_reconciliacao_timezone: str = "America/Sao_Paulo"
+    # Empresa que volta depois deste numero de horas sem consulta finalizada
+    # (monitor restrito, worker parado) rele na hora desde o 1o dia do mes
+    # anterior, sem esperar a janela noturna. 0 = desligado.
+    nsu_releitura_apos_horas_sem_consulta: int = 6
     nsu_max_vazios_consecutivos: int = 5
     notas_recebidas_dia_corte_mes_anterior: int = 3
     download_lote_max_notas: int = 10000

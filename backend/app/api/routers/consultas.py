@@ -8,6 +8,8 @@ from backend.app.db.models import Usuario
 from backend.app.schemas.consultas import (
     ConsultaDesativarRequest,
     ConsultaIniciarRequest,
+    ConsultaReleituraRequest,
+    ConsultaReleituraResponse,
     ConsultaStatusResponse,
 )
 from backend.app.services import consultas_service
@@ -49,3 +51,13 @@ def desativar_consultas(
         grupo=usuario.grupo,
     )
     return consultas_service.montar_status(db, grupo=usuario.grupo)
+
+
+@router.post("/releitura-mes-anterior", response_model=ConsultaReleituraResponse, dependencies=[Depends(require_operator)])
+def releitura_mes_anterior(
+    payload: ConsultaReleituraRequest,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
+):
+    """Rele no ADN, desde o 1o dia do mes anterior, as empresas informadas."""
+    return consultas_service.solicitar_releitura_mes_anterior(db, payload.empresa_ids, grupo=usuario.grupo)
