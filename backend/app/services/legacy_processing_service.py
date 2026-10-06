@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
+from backend.app.core.tempo import agora_local
 from backend.app.db.models import Empresa, Job, Nota, Processo
 from backend.app.db.session import SessionLocal, executar_escrita_com_retry, renovar_snapshot
 from backend.app.repositories import certificados_repo, empresas_repo
@@ -411,7 +412,7 @@ def _executar_baixa_empresa_compat(
             resultado = legacy.consultar_dfe(config, nsu_atual, lote=bool(settings.worker_adn_lote))
             consultas_realizadas += 1
             raw_path = legacy.DIR_RAW / (
-                f"dfe_consulta_nsu_{nsu_atual}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                f"dfe_consulta_nsu_{nsu_atual}_{agora_local().strftime('%Y%m%d_%H%M%S')}.json"
             )
             legacy.salvar_json(raw_path, resultado)
 
@@ -514,7 +515,9 @@ def executar_consulta_nfse_legado(
     legacy = None
     try:
         temp_pfx_path.write_bytes(pfx_bytes)
-        run_started_at = datetime.now()
+        # UTC explicito: comparado com updated_at do banco (em UTC). Com a hora
+        # local sem fuso, fora de um servidor em UTC a janela ficava 3h errada.
+        run_started_at = datetime.now(timezone.utc)
         logs_service.registrar_log(
             db,
             processo.id,

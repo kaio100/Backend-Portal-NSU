@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import os
 import socket
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -36,7 +37,7 @@ from backend.app.core.observability import configure_logging
 from backend.app.db.models import Empresa, MonitoramentoConfig
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.repositories import jobs_repo
-from backend.app.services import consultas_service
+from backend.app.services import consultas_service, operacao_service
 from backend.app.services.legacy_processing_service import limpar_pfx_temporarios
 from backend.app.services.notas_download_service import limpar_zips_temporarios
 from backend.app.services.valor_liquido_backfill_service import recalcular_notas_salvas
@@ -47,6 +48,20 @@ configure_logging()
 
 # Intervalo da varredura por grupos novos sem worker dedicado.
 SUPERVISOR_GRUPOS_INTERVALO = 60
+# Limpeza de logs antigos: uma vez por dia (o primeiro ciclo ja limpa).
+LIMPEZA_LOGS_INTERVALO = 24 * 3600
+_rotina_estado: dict[str, float] = {"ultima_limpeza_logs": float("-inf")}
+
+
+def _rotina_operacao() -> dict:
+    """Vigia da fila (aviso por e-mail/webhook) e retencao de logs."""
+    resultado: dict = {}
+    with SessionLocal() as db:
+        resultado["avisos"] = operacao_service.verificar_e_avisar(db)
+        if time.monotonic() - _rotina_estado["ultima_limpeza_logs"] >= LIMPEZA_LOGS_INTERVALO:
+            _rotina_estado["ultima_limpeza_logs"] = time.monotonic()
+            resultado["logs_removidos"] = operacao_service.limpar_logs_antigos(db)
+    return resultado
 
 
 def _worker_groups() -> list[str]:
@@ -109,6 +124,9 @@ async def _supervisionar_grupos(
             recuperados = await asyncio.to_thread(_recuperar_jobs_travados)
             if recuperados:
                 print(f"Supervisor: {recuperados} job(s) sem heartbeat voltaram para a fila")
+            rotina = await asyncio.to_thread(_rotina_operacao)
+            if rotina.get("avisos") or rotina.get("logs_removidos"):
+                print(f"Supervisor: rotina de operacao {rotina}")
             novos = [g for g in await asyncio.to_thread(_worker_groups) if g not in grupos_cobertos]
         except Exception as exc:
             print(f"Supervisor de grupos falhou e continuara ativo: {exc}")

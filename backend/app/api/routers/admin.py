@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, timedelta
 import re
 import unicodedata
 
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.deps import PAPEIS_VALIDOS, eh_super_admin, get_db, require_admin, require_super_admin
 from backend.app.core.security import hash_password
+from backend.app.core.tempo import agora_local, data_local, hoje_local, inicio_do_dia_utc
 from backend.app.db.models import AcessoUsuario, Arquivo, ConferenciaHistorico, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, Usuario
 from backend.app.db.session import SessionLocal
 from backend.app.services.notas_archive_service import arquivar_notas_anos_anteriores
@@ -63,7 +64,7 @@ def _usuario_no_escopo(db: Session, usuario_id: int, admin: Usuario) -> Usuario:
 
 
 def _executar_arquivamento_background(ano: int, grupo: str | None) -> None:
-    _arquivamento_estado.update(status="executando", iniciado_em=datetime.now().isoformat(), finalizado_em=None, resultado=None, erro=None)
+    _arquivamento_estado.update(status="executando", iniciado_em=agora_local().isoformat(), finalizado_em=None, resultado=None, erro=None)
     try:
         with SessionLocal() as db:
             resultado = arquivar_notas_anos_anteriores(db, get_storage_service(), ano_operacional=ano, executar=True, grupo=grupo)
@@ -71,7 +72,7 @@ def _executar_arquivamento_background(ano: int, grupo: str | None) -> None:
     except Exception as exc:
         _arquivamento_estado.update(status="erro", erro=str(exc))
     finally:
-        _arquivamento_estado["finalizado_em"] = datetime.now().isoformat()
+        _arquivamento_estado["finalizado_em"] = agora_local().isoformat()
 
 
 def _slug_grupo(value: str) -> str:
@@ -95,8 +96,8 @@ def _usuario_dict(usuario: Usuario) -> dict:
 @router.get("/overview")
 def overview(admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
     grupo = _escopo(admin)
-    hoje = date.today()
-    inicio_hoje = datetime.combine(hoje, time.min)
+    # "Hoje" e o dia de Brasilia: com o container em UTC o contador zerava as 21h.
+    inicio_hoje = inicio_do_dia_utc(hoje_local())
 
     def do_grupo(query, modelo):
         if grupo is None:
@@ -127,14 +128,14 @@ def overview(admin: Usuario = Depends(require_admin), db: Session = Depends(get_
 @router.get("/acessos")
 def acessos(dias: int = 14, admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
     dias = max(7, min(dias, 90))
-    inicio = date.today() - timedelta(days=dias - 1)
-    query = db.query(AcessoUsuario).filter(AcessoUsuario.created_at >= datetime.combine(inicio, time.min))
+    inicio = hoje_local() - timedelta(days=dias - 1)
+    query = db.query(AcessoUsuario).filter(AcessoUsuario.created_at >= inicio_do_dia_utc(inicio))
     if _escopo(admin) is not None:
         query = query.filter(AcessoUsuario.grupo == _escopo(admin))
     eventos = query.all()
     por_dia = {inicio + timedelta(days=i): {"acessos": 0, "usuarios": set()} for i in range(dias)}
     for evento in eventos:
-        dia = evento.created_at.date()
+        dia = data_local(evento.created_at)
         if dia in por_dia:
             por_dia[dia]["acessos"] += 1
             por_dia[dia]["usuarios"].add(evento.usuario_id)

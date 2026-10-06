@@ -28,8 +28,9 @@ from sqlalchemy.orm import Session
 
 
 from backend.app.core.config import settings
+from backend.app.core.tempo import agora_local, hoje_local
 from backend.app.db.models import Arquivo, Empresa, Evento, Nota, NsuControle, Processo
-from backend.app.repositories import arquivos_repo, notas_repo, processos_repo
+from backend.app.repositories import arquivos_repo, processos_repo
 
 from backend.app.schemas.notas import NotasDownloadFiltros
 
@@ -1415,7 +1416,7 @@ def exportar_conferencia_xlsx(db: Session, filtros: NotasDownloadFiltros, grupo:
     empresa_cnpjs = _relatorio_empresa_cnpjs(db, notas)
     cnpjs_consulta = {cnpj for nota in notas for cnpj, _nome, _tipo in [_relatorio_party(nota, empresa_cnpjs.get(int(nota.empresa_id), ""))] if cnpj}
     api_data = _receita_cache_cnpjs(db, cnpjs_consulta)
-    gerado_em = datetime.now().date()
+    gerado_em = hoje_local()
     rows = [
         _relatorio_row(nota, xml_resumos.get(int(nota.id)), empresa_cnpjs.get(int(nota.empresa_id), ""), api_data, gerado_em)
         for nota in notas
@@ -1440,7 +1441,7 @@ def exportar_conferencia_xlsx(db: Session, filtros: NotasDownloadFiltros, grupo:
     _add_relatorio_sheet(wb, "Todas as Notas", rows, "TabelaTodasNotas", headers)
     _add_relatorio_sheet(wb, "Notas Divergentes", divergentes, "TabelaNotasDivergentes", headers)
     _add_relatorio_sheet(wb, "Notas Corretas", corretas, "TabelaNotasCorretas", headers)
-    filename = f"relatorio_conferencia_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    filename = f"relatorio_conferencia_{agora_local().strftime('%Y%m%d_%H%M%S')}.xlsx"
     descriptor, temp_name = tempfile.mkstemp(prefix="relatorio_conferencia_", suffix=".xlsx")
     os.close(descriptor)
     temp_path = Path(temp_name)

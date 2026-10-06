@@ -36,8 +36,10 @@ def assert_consultas_contract(payload: dict) -> None:
         "totais",
         "processos_rodando",
         "processos_pendentes",
+        "monitor",
     }
     assert isinstance(payload["consultando"], bool)
+    assert payload["monitor"]["escopo"] in {"global", "restrito"}
     assert isinstance(payload["automatico_ativo"], bool)
     assert isinstance(payload["mensagem"], str)
     assert set(payload["worker"]) == {"enabled", "dry_run", "sleep"}
@@ -619,11 +621,18 @@ def test_autocadastro_nao_substitui_certificados_do_monitor_ativo(monkeypatch):
     )
 
     with TestClient(app) as client:
+        # Monitor ligado e restrito por empresa e certificado (escolha feita no Motor ADN).
+        with SessionLocal() as db:
+            config = consultas_service.get_monitoramento_config(db, "planning_hub")
+            config.automatico_ativo = True
+            config.filtros_json = {"automatico": True, "empresa_ids": [999001], "certificado_ids": [999001]}
+            db.commit()
         primeiro = post_autocadastro(client, auto_iniciar=True).json()
         with SessionLocal() as db:
             config = db.query(MonitoramentoConfig).filter(MonitoramentoConfig.grupo == "planning_hub").one()
             empresas_antes = set(config.filtros_json["empresa_ids"])
             certificados_antes = set(config.filtros_json["certificado_ids"])
+            assert 999001 in empresas_antes and 999001 in certificados_antes
 
         segundo = post_autocadastro(client, auto_iniciar=True).json()
 

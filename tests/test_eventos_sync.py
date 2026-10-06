@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.app.db.models import Arquivo, Empresa, Evento, Nota
+from backend.app.db.models import Arquivo, Certificado, Empresa, Evento, Job, LockProcessamento, LogProcesso, Nota, NsuControle, Processo
 from backend.app.db.session import SessionLocal, init_db
 from backend.app.main import app
 from backend.app.services import eventos_sync_service
@@ -40,7 +40,7 @@ def _b64gz(data: bytes) -> str:
 def _banco_limpo():
     init_db()
     with SessionLocal() as db:
-        for modelo in (Arquivo, Evento, Nota, Empresa):
+        for modelo in (Arquivo, Evento, Nota, LogProcesso, Job, LockProcessamento, NsuControle, Processo, Certificado, Empresa):
             db.query(modelo).delete()
         db.commit()
     yield

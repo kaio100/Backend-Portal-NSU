@@ -24,7 +24,11 @@ from backend.app.db.models import (
     Empresa,
     Evento,
     Grupo,
+    Job,
+    LockProcessamento,
+    LogProcesso,
     Nota,
+    NsuControle,
     Processo,
     RedefinicaoSenhaToken,
     Usuario,
@@ -36,7 +40,7 @@ from backend.app.services import email_service
 
 MODELOS = (
     ConferenciaHistorico, VerificacaoEmailToken, RedefinicaoSenhaToken, ConviteCadastro, AcessoUsuario,
-    Evento, Arquivo, Nota, Processo, Certificado, Usuario, Empresa,
+    Evento, Arquivo, Nota, LogProcesso, Job, LockProcessamento, NsuControle, Processo, Certificado, Usuario, Empresa,
 )
 
 

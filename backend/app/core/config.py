@@ -93,6 +93,24 @@ class Settings(BaseSettings):
     super_admin_emails: str = ""
     convite_validade_dias: int = 7
     codigo_email_validade_minutos: int = 15
+    # Fuso das datas de negocio (dia de hoje no painel, nome de arquivos,
+    # data da planilha). O container roda em UTC.
+    fuso_horario: str = "America/Sao_Paulo"
+    # Token para /metrics e /health/operacao. Sem ele, em producao as duas
+    # rotas respondem 404.
+    metrics_token: str | None = None
+    # Vigia da operacao: e-mails (separados por virgula) que recebem aviso de
+    # fila parada ou excesso de falhas. Vazio = sem aviso por e-mail.
+    alerta_emails: str = ""
+    alerta_fila_parada_minutos: int = 60
+    alerta_falhas_por_hora: int = 10
+    alerta_intervalo_horas: int = 6
+    # Avisa quando uma empresa com certificado valido fica este numero de horas
+    # sem nenhuma consulta finalizada (0 = desligado). O ciclo normal passa
+    # por todas as empresas em ~1h30.
+    alerta_empresa_sem_consulta_horas: int = 6
+    # Dias de logs_processos mantidos; 0 = nunca apaga.
+    logs_retencao_dias: int = 0
     log_level: str = "INFO"
 
     @field_validator("database_url", mode="before")
@@ -126,12 +144,23 @@ class Settings(BaseSettings):
         if len(str(self.jwt_secret)) < 32:
             raise ValueError("JWT_SECRET deve ter pelo menos 32 caracteres em producao.")
         try:
-            Fernet(str(self.secrets_key).encode("utf-8"))
+            for chave in self.secrets_key_list:
+                Fernet(chave.encode("utf-8"))
         except (TypeError, ValueError) as exc:
-            raise ValueError("SECRETS_KEY deve ser uma chave Fernet valida em producao.") from exc
+            raise ValueError("SECRETS_KEY deve conter chaves Fernet validas em producao.") from exc
         if self.resend_enabled and not (str(self.resend_api_key or "").strip() and str(self.resend_from_email or "").strip()):
             raise ValueError("RESEND_ENABLED=true exige RESEND_API_KEY e RESEND_FROM_EMAIL.")
         return self
+
+    @property
+    def secrets_key_list(self) -> list[str]:
+        # Varias chaves separadas por virgula: a primeira cifra, todas decifram
+        # (troca de chave sem perder as senhas de certificado ja gravadas).
+        return [chave.strip() for chave in str(self.secrets_key or "").split(",") if chave.strip()]
+
+    @property
+    def alerta_email_list(self) -> list[str]:
+        return [email.strip() for email in self.alerta_emails.split(",") if email.strip()]
 
     @property
     def super_admin_email_set(self) -> set[str]:

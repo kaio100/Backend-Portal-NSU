@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
@@ -18,13 +18,25 @@ def build_certificado_senha_ref(certificado_id: int) -> str:
     return f"certificado:{certificado_id}:senha"
 
 
-def _get_fernet() -> Fernet:
-    if not settings.secrets_key:
+def _get_fernet() -> MultiFernet:
+    # SECRETS_KEY aceita varias chaves separadas por virgula: a primeira cifra
+    # e todas decifram. Para trocar a chave: coloque a nova na frente, rode
+    # scripts/rotacionar_segredos --aplicar e depois remova a antiga.
+    chaves = settings.secrets_key_list
+    if not chaves:
         raise SecretsServiceError(SECRETS_KEY_ERROR)
     try:
-        return Fernet(settings.secrets_key.encode("utf-8"))
+        return MultiFernet([Fernet(chave.encode("utf-8")) for chave in chaves])
     except Exception as exc:
         raise SecretsServiceError("SECRETS_KEY invalida. Gere uma chave Fernet valida.") from exc
+
+
+def recifrar(encrypted_value: str) -> str:
+    """Recifra com a primeira chave (rotacao)."""
+    try:
+        return _get_fernet().rotate(encrypted_value.encode("utf-8")).decode("utf-8")
+    except InvalidToken as exc:
+        raise SecretsServiceError("Nao foi possivel descriptografar o segredo.") from exc
 
 
 def encrypt_secret(value: str) -> str:

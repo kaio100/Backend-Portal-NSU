@@ -8,13 +8,13 @@ import zipfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Iterable
 
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
+from backend.app.core.tempo import agora_local
 from backend.app.core.observability import alert_failure, metrics
 from backend.app.db.models import Arquivo, Nota
 from backend.app.repositories import arquivos_repo, notas_repo
@@ -280,7 +280,7 @@ def gerar_zip_notas(
         temp_path.unlink(missing_ok=True)
         raise NotasDownloadLoteError("Nenhum arquivo disponivel para as notas filtradas.")
 
-    filename = f"notas_nfse_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    filename = f"notas_nfse_{agora_local().strftime('%Y%m%d_%H%M%S')}.zip"
     logger.info(
         "Download lote finalizado: notas=%s arquivos=%s ausentes=%s tamanho_zip=%s",
         len(notas),

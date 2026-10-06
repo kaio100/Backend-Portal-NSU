@@ -92,6 +92,39 @@ def _list_processos(db: Session, statuses: tuple[str, ...], limit: int, grupo: s
     return list(_status_filter(query, statuses).order_by(Processo.id.desc()).limit(limit).all())
 
 
+def descrever_monitor(db: Session, config: MonitoramentoConfig, grupo: str) -> dict[str, Any]:
+    """Diz se o monitor consulta todas as empresas do grupo ou so algumas.
+
+    So SQL: roda a cada atualizacao da tela e nao pode abrir senhas.
+    """
+    filtros = ConsultaIniciarRequest(**(config.filtros_json or {}))
+    restrito = filtros.empresa_ids is not None or filtros.certificado_ids is not None
+
+    base = (
+        db.query(Empresa.id, Empresa.nome)
+        .join(Certificado, Certificado.empresa_id == Empresa.id)
+        .filter(Empresa.grupo == grupo, Empresa.ativo.is_(True), Certificado.ativo.is_(True))
+        .distinct()
+    )
+    total = base.count()
+    monitoradas = base
+    if filtros.empresa_ids is not None:
+        monitoradas = monitoradas.filter(Empresa.id.in_(filtros.empresa_ids))
+    if filtros.certificado_ids is not None:
+        monitoradas = monitoradas.filter(Certificado.id.in_(filtros.certificado_ids))
+    empresas = monitoradas.order_by(Empresa.nome.asc()).all() if restrito else []
+    quantidade = len(empresas) if restrito else total
+
+    return {
+        "escopo": "restrito" if restrito else "global",
+        "empresa_ids": filtros.empresa_ids,
+        "certificado_ids": filtros.certificado_ids,
+        "empresas": [{"id": int(empresa_id), "nome": nome} for empresa_id, nome in empresas],
+        "empresas_monitoradas": quantidade,
+        "empresas_fora_do_monitor": max(0, total - quantidade),
+    }
+
+
 def montar_status(db: Session, limit: int = 10, grupo: str = "planning_hub") -> dict[str, Any]:
     config = get_monitoramento_config(db, grupo)
     processos_rodando = _list_processos(db, RODANDO_STATUSES, limit, grupo)
@@ -124,6 +157,7 @@ def montar_status(db: Session, limit: int = 10, grupo: str = "planning_hub") -> 
         },
         "processos_rodando": processos_rodando,
         "processos_pendentes": processos_pendentes,
+        "monitor": descrever_monitor(db, config, grupo),
     }
 
 
@@ -365,13 +399,19 @@ def iniciar_certificado_sem_substituir_monitor(
     options: ConsultaIniciarRequest,
     grupo: str = "planning_hub",
 ) -> dict[str, Any]:
-    """Enfileira um certificado novo sem retirar os anteriores do monitor."""
+    """Enfileira um certificado novo sem retirar os anteriores do monitor.
+
+    O autocadastro nunca restringe o monitor. Com o monitor parado, so a
+    consulta do certificado novo e enfileirada (antes o monitor era ligado
+    consultando apenas essa empresa). Com o monitor ligado, o certificado e
+    somado apenas as dimensoes ja restritas: um filtro ausente significa
+    "todas" e continua ausente.
+    """
     config = get_monitoramento_config(db, grupo)
     if not config.automatico_ativo:
-        return iniciar_consultas_automaticas(db, options=options, grupo=grupo)
+        return _consulta_avulsa(db, options.model_copy(update={"automatico": False}), grupo)
 
-    filtros_atuais_raw = config.filtros_json
-    filtros_atuais = ConsultaIniciarRequest(**(filtros_atuais_raw or {}))
+    filtros_atuais = ConsultaIniciarRequest(**(config.filtros_json or {}))
 
     # O NSU e o modo forcar do autocadastro valem somente para o job imediato.
     resultado = enqueue_consultas_pendentes(
@@ -381,26 +421,23 @@ def iniciar_certificado_sem_substituir_monitor(
         grupo=grupo,
     )
 
-    # Ausencia de filtros representa monitoramento global e deve continuar
-    # global. Em um monitor restrito, o novo certificado e sua empresa sao
-    # acrescentados ao conjunto existente em vez de substitui-lo.
-    if filtros_atuais_raw is None or (
-        filtros_atuais.empresa_ids is None and filtros_atuais.certificado_ids is None
-    ):
-        filtros_ciclos = filtros_atuais.model_copy(update={"nsu_inicio": None, "forcar": False})
-    else:
-        empresa_ids = sorted(set(filtros_atuais.empresa_ids or []) | set(options.empresa_ids or [])) or None
-        certificado_ids = sorted(
-            set(filtros_atuais.certificado_ids or []) | set(options.certificado_ids or [])
-        ) or None
-        filtros_ciclos = filtros_atuais.model_copy(
-            update={
-                "empresa_ids": empresa_ids,
-                "certificado_ids": certificado_ids,
-                "nsu_inicio": None,
-                "forcar": False,
-            }
-        )
+    # Os filtros se combinam (empresa E certificado). Em 01/10/2026 o monitor
+    # tinha so certificado_ids; somar a empresa nova a um empresa_ids vazio
+    # criou a lista [empresa nova] e o monitor passou a consultar so ela,
+    # deixando 78 de 84 empresas sem consulta por 5 dias.
+    def _somar(atuais: list[int] | None, novos: list[int] | None) -> list[int] | None:
+        if atuais is None:
+            return None
+        return sorted(set(atuais) | set(novos or []))
+
+    filtros_ciclos = filtros_atuais.model_copy(
+        update={
+            "empresa_ids": _somar(filtros_atuais.empresa_ids, options.empresa_ids),
+            "certificado_ids": _somar(filtros_atuais.certificado_ids, options.certificado_ids),
+            "nsu_inicio": None,
+            "forcar": False,
+        }
+    )
 
     config.filtros_json = filtros_ciclos.model_dump()
     db.add(config)

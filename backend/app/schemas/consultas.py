@@ -40,6 +40,21 @@ class ConsultaTotaisStatus(BaseModel):
     cancelados: int
 
 
+class ConsultaMonitorEmpresa(BaseModel):
+    id: int
+    nome: str
+
+
+class ConsultaMonitorStatus(BaseModel):
+    # global = consulta todas as empresas ativas do grupo; restrito = so as listadas.
+    escopo: str
+    empresa_ids: list[int] | None = None
+    certificado_ids: list[int] | None = None
+    empresas: list[ConsultaMonitorEmpresa] = []
+    empresas_monitoradas: int
+    empresas_fora_do_monitor: int
+
+
 class ConsultaStatusResponse(BaseModel):
     consultando: bool
     automatico_ativo: bool
@@ -48,6 +63,7 @@ class ConsultaStatusResponse(BaseModel):
     totais: ConsultaTotaisStatus
     processos_rodando: list[ProcessoRead]
     processos_pendentes: list[ProcessoRead]
+    monitor: ConsultaMonitorStatus | None = None
 
 
 class ConsultaDesativarRequest(BaseModel):

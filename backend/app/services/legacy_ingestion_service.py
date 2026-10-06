@@ -14,6 +14,7 @@ from xml.etree import ElementTree
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
+from backend.app.core.tempo import hoje_local
 from backend.app.core.observability import alert_failure
 from backend.app.db.models import Evento, Nota, Processo
 from backend.app.repositories import arquivos_repo, notas_repo
@@ -731,7 +732,7 @@ def _regenerar_pdf_espelho_evento(
 
     storage_key = nota.pdf_espelho_storage_key
     if not storage_key:
-        competencia = nota.competencia or nota.data_emissao or date.today()
+        competencia = nota.competencia or nota.data_emissao or hoje_local()
         empresa_cnpj = str(processo.empresa.cnpj if processo.empresa else processo.empresa_id)
         storage_key = build_pdf_espelho_key(
             empresa_cnpj,
