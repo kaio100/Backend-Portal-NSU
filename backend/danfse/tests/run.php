@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use GuilhermeViana\Nfsenacional\Danfse\DanfseGenerator;
 use GuilhermeViana\Nfsenacional\Danfse\Formatter;
+use GuilhermeViana\Nfsenacional\Danfse\Pdf\GradeCanvas;
 use GuilhermeViana\Nfsenacional\Danfse\Template\DanfseTemplate;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -37,7 +38,13 @@ $templatePath = dirname(__DIR__) . '/src/Danfse/Template/danfse.php';
 $templateSource = (string) file_get_contents($templatePath);
 
 check(str_contains($templateSource, '--danfse-border-width: 1pt;'), 'Espessura centralizada em 1pt.');
-check(str_contains($templateSource, '--danfse-border-color: #000000;'), 'Cor centralizada em preto.');
+// As linhas usam a cor-marcador da grade: o GradeCanvas as guarda e desenha
+// em preto depois do conteudo. Sem o canvas, a cor-marcador ja e quase preta.
+check(str_contains($templateSource, '--danfse-border-color: <?php echo $corGrade; ?>;'), 'Cor das linhas centralizada na grade.');
+check(str_contains($html, '--danfse-border-color: ' . GradeCanvas::COR_GRADE . ';'), 'Grade aplicada no HTML.');
+check(max(array_map('hexdec', str_split(substr(GradeCanvas::COR_GRADE, 1), 2))) <= 3, 'Cor-marcador visualmente preta.');
+$pdf = $generator->generateFromXml((string) file_get_contents($xmlPath));
+check(str_starts_with($pdf, '%PDF'), 'PDF gerado com a grade desenhada por ultimo.');
 check(!preg_match('/0\\.5pt|thin|dashed|1px|0\\.25pt|0\\.3pt/', $templateSource), 'Sem espessuras finas no template.');
 check(!preg_match('/height\\s*:\\s*0\\.[0-9]+px/', $templateSource), 'Sem linhas simuladas por altura fracionaria.');
 

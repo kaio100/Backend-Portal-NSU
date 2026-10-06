@@ -100,6 +100,16 @@ $generator->generate(
 );
 ```
 
+## Grade de linhas (desenhada por último)
+
+As linhas do layout (moldura, divisórias e recibo) são uma camada separada do conteúdo:
+
+- No template (`src/Danfse/Template/danfse.php`) toda borda usa `var(--danfse-border-color)`, que recebe a cor-marcador `GradeCanvas::COR_GRADE`. As bordas continuam no CSS com a mesma espessura, então o layout e a posição das linhas não mudam.
+- `src/Danfse/Pdf/GradeCanvas.php` (canvas do Dompdf, ativado em `DanfseGenerator::generatePdf` pela opção `pdfBackend`) guarda os traços com essa cor, com a geometria calculada pelo Dompdf, em vez de desenhá-los na hora.
+- No callback `end_page_render`, depois de todo o conteúdo da página (fundos, textos, logotipo, QR Code e carimbos), a grade é desenhada em preto e opacidade total. Os segmentos das tabelas com borda colapsada são unidos num traço único.
+
+Toda linha nova do layout deve usar `var(--danfse-border-color)`; uma borda com outra cor seria desenhada junto com o conteúdo, podendo ficar por baixo de fundos e imagens.
+
 ## API principal
 
 - `DanfseGenerator::generateFromXmlFile(string $xmlPath, array $options = []): string`

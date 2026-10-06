@@ -8,6 +8,7 @@ use CuyZ\Valinor\MapperBuilder;
 use GuilhermeViana\Nfsenacional\Danfse\Exception\NfseException;
 use GuilhermeViana\Nfsenacional\Danfse\Config\DanfseConfig;
 use GuilhermeViana\Nfsenacional\Danfse\Dto\NFSe;
+use GuilhermeViana\Nfsenacional\Danfse\Pdf\GradeCanvas;
 use GuilhermeViana\Nfsenacional\Danfse\Template\DanfseTemplate;
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -247,11 +248,33 @@ class DanfseGenerator
         // Fontes locais completas evitam espaçamento irregular em glifos acentuados.
         $options->set('isFontSubsettingEnabled', false);
         $options->set('isUnicodeEnabled', true);
+        // Grade de linhas separada do conteudo: o CanvasFactory do Dompdf usa
+        // a classe informada em pdfBackend quando ela ja esta carregada.
+        class_exists(GradeCanvas::class);
+        $options->set('pdfBackend', GradeCanvas::class);
 
         $dompdf = new Dompdf($options);
+        // A grade e desenhada depois de todo o conteudo de cada pagina
+        // (fundos, textos, logotipo, QR Code e carimbos).
+        $dompdf->setCallbacks([[
+            'event' => 'end_page_render',
+            'f' => static function ($frame, $canvas): void {
+                if ($canvas instanceof GradeCanvas) {
+                    $canvas->desenharGrade();
+                }
+            },
+        ]]);
         $dompdf->loadHtml($html, 'UTF-8');
         $dompdf->setPaper('A4', 'portrait');
         $dompdf->render();
+
+        $canvas = $dompdf->getCanvas();
+        if (!$canvas instanceof GradeCanvas) {
+            throw new NfseException('Canvas da grade do DANFSe nao foi carregado.');
+        }
+        if ($canvas->gradePendente() !== []) {
+            throw new NfseException('Grade do DANFSe nao foi desenhada em todas as paginas.');
+        }
 
         $footerRaw = trim((string) ($resolvedConfig->footerText ?? ''));
         if ($footerRaw !== '') {

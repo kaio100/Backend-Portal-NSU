@@ -4,6 +4,7 @@
 /** @var string $qrCode */
 /** @var \DanfseNacional\Config\MunicipalityBranding $municipality */
 /** @var string $fontFacesCss */
+/** @var string $corGrade */
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -12,9 +13,14 @@
     <title>DANFSe - <?php echo $data['numero_nfse']; ?></title>
     <style>
         <?php echo $fontFacesCss; ?>
+        /* Grade de linhas: todas as bordas do layout usam esta cor-marcador.
+           As bordas continuam aqui com a mesma espessura, entao o layout e a
+           posicao de cada linha nao mudam; o GradeCanvas guarda esses tracos e
+           os desenha em preto depois de todo o conteudo da pagina. Toda linha
+           nova do layout deve usar var(--danfse-border-color). */
         :root {
             --danfse-border-width: 1pt;
-            --danfse-border-color: #000000;
+            --danfse-border-color: <?php echo $corGrade; ?>;
         }
 
         * {
@@ -87,6 +93,14 @@
 
         .first-section table td {
             padding-bottom: 0 !important;
+        }
+
+        /* A ultima linha do bloco de identificacao encostava 0.26pt na
+           divisoria. Troca 1pt de espaco de cima pelo de baixo: a altura da
+           linha (e a posicao da divisoria) fica igual e o texto nao toca a grade. */
+        .first-section table tr.ultima-linha-id td {
+            padding-top: 0 !important;
+            padding-bottom: 1pt !important;
         }
 
         .label {
@@ -366,7 +380,7 @@
                     <span class="value"><?php echo $data['emissao_dps']; ?></span>
                 </td>
             </tr>
-            <tr>
+            <tr class="ultima-linha-id">
                 <td class="shaded">
                     <span class="label label-id">Emitente da NFS-e</span>
                     <span class="value"><?php echo $data['emitente_nfse']; ?></span>

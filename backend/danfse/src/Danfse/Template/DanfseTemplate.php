@@ -15,6 +15,7 @@ use GuilhermeViana\Nfsenacional\Danfse\Enums\TpRetISSQN;
 use GuilhermeViana\Nfsenacional\Danfse\Enums\TribISSQN;
 use GuilhermeViana\Nfsenacional\Danfse\Data\Municipios;
 use GuilhermeViana\Nfsenacional\Danfse\Formatter;
+use GuilhermeViana\Nfsenacional\Danfse\Pdf\GradeCanvas;
 
 /**
  * Constrói o array de dados para o template e gera o QR Code.
@@ -42,6 +43,9 @@ class DanfseTemplate
         $municipality = $config->municipality;
         $qrCode = $this->generateQrCode($data['chave_acesso']);
         $fontFacesCss = $this->buildFontFacesCss();
+        // Cor-marcador das linhas do layout: o GradeCanvas guarda esses tracos
+        // e os desenha por ultimo, em preto, acima de todo o conteudo.
+        $corGrade = GradeCanvas::COR_GRADE;
         array_walk_recursive($data, fn(&$v) => $v = is_string($v) ? htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') : $v);
 
         $templatePath = __DIR__ . '/danfse.php';
