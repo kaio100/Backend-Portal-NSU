@@ -29,6 +29,7 @@ data/danfse_layout_reference/
 data/danfse_validation/
 data/tmp_pdf_status/
 data/tmp_*/
+data/post_deploy_*/
 storage/
 saida_adn_nfse/
 relatorios/

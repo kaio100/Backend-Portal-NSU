@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.config import settings
 from backend.app.core.tempo import hoje_local
 from backend.app.core.observability import alert_failure
-from backend.app.db.models import Evento, Nota, Processo
+from backend.app.db.models import Arquivo, Evento, Nota, Processo
 from backend.app.repositories import arquivos_repo, notas_repo
 from backend.app.services.danfse_service import DanfseService, friendly_pdf_filename
 from backend.app.services.nfse_status_service import (
@@ -885,8 +885,11 @@ def _build_pdf_key(cnpj: str, ano: str, mes: str, filename: str, tipo: str) -> s
     return build_pdf_espelho_key(cnpj, ano, mes, filename)
 
 
-def _put_file_if_needed(storage: StorageService, storage_key: str, source_path: Path, content_type: str) -> tuple[dict[str, Any], bool]:
+def _put_file_if_needed(storage: StorageService, storage_key: str, source_path: Path, content_type: str,
+                        existing_checksum: str | None = None) -> tuple[dict[str, Any], bool]:
     data = source_path.read_bytes()
+    if existing_checksum and existing_checksum != _sha256(data):
+        return storage.put_bytes(storage_key, data, content_type=content_type), True
     if storage.exists(storage_key):
         meta = {
             "backend": storage.backend,
@@ -932,6 +935,82 @@ def _registrar_arquivo(
     return created
 
 
+class _StorageDoLote:
+    """Uma listagem por pasta R2 em vez de um HEAD por documento."""
+
+    def __init__(self, storage: StorageService):
+        self.storage = storage
+        self.pastas: dict[str, set[str]] = {}
+
+    def __getattr__(self, name):
+        return getattr(self.storage, name)
+
+    def exists(self, key: str) -> bool:
+        if self.storage.backend != "r2":
+            return self.storage.exists(key)
+        prefix = key.rsplit("/", 1)[0] + "/"
+        if prefix not in self.pastas:
+            try:
+                self.pastas[prefix] = set(self.storage.list_keys(prefix))
+            except Exception:
+                # Falha de listagem nao significa arquivo ausente.
+                return self.storage.exists(key)
+        return key in self.pastas[prefix]
+
+    def put_bytes(self, key: str, data: bytes, content_type: str | None = None):
+        result = self.storage.put_bytes(key, data, content_type=content_type)
+        prefix = key.rsplit("/", 1)[0] + "/"
+        if prefix in self.pastas:
+            self.pastas[prefix].add(key)
+        return result
+
+
+def _metadados_do_lote(db: Session, empresa_id: int, chaves: list[str]):
+    notas: dict[str, dict] = {}
+    arquivos: dict[str, dict] = {}
+    com_eventos: set[str] = set()
+    for inicio in range(0, len(chaves), 500):
+        lote = chaves[inicio:inicio + 500]
+        registros = db.query(Nota.id, Nota.chave, Nota.xml_storage_key,
+                             Nota.pdf_espelho_storage_key, Nota.status_documento, Nota.ultimo_nsu).filter(
+                                 Nota.empresa_id == empresa_id, Nota.chave.in_(lote)).all()
+        notas.update({r.chave: dict(r._mapping) for r in registros})
+        ids = [r.id for r in registros]
+        if ids:
+            for r in db.query(Arquivo.storage_key, Arquivo.checksum, Arquivo.tamanho_bytes,
+                              Arquivo.nota_id, Arquivo.tipo).filter(
+                                  Arquivo.empresa_id == empresa_id, Arquivo.nota_id.in_(ids)).all():
+                arquivos[r.storage_key] = dict(r._mapping)
+        com_eventos.update(r[0] for r in db.query(Evento.chave_afetada).filter(
+            Evento.empresa_id == empresa_id, Evento.chave_afetada.in_(lote)).all())
+    return notas, arquivos, com_eventos
+
+
+def _nota_inalterada(nota, arquivos, storage, row, xml_path, xml_key, resumo,
+                     afetadas, gerar_pdf):
+    if not nota or nota["chave"] in afetadas or resumo.get("tipo_xml") == "evento":
+        return False
+    # Carimbos e substituicoes seguem pelo fluxo fiscal completo.
+    if resumo.get("chave_substituida") or nota["status_documento"] != resumo.get("status_documento"):
+        return False
+    if nota["status_documento"] in {"cancelada", "substituida"}:
+        return False
+    nsu = _parse_int(row.get("ultimo_nsu", ""))
+    if nsu is not None and (nota["ultimo_nsu"] is None or nsu > nota["ultimo_nsu"]):
+        return False
+    xml = arquivos.get(xml_key)
+    if (nota["xml_storage_key"] != xml_key or not xml or xml["nota_id"] != nota["id"]
+            or xml["checksum"] != _sha256(xml_path.read_bytes()) or not storage.exists(xml_key)):
+        return False
+    if gerar_pdf:
+        pdf_key = nota["pdf_espelho_storage_key"]
+        pdf = arquivos.get(pdf_key)
+        if (not pdf or pdf["nota_id"] != nota["id"] or not pdf["checksum"]
+                or not pdf["tamanho_bytes"] or not storage.exists(pdf_key)):
+            return False
+    return True
+
+
 def ingerir_saida_legado(
     db: Session,
     storage: StorageService,
@@ -954,6 +1033,7 @@ def ingerir_saida_legado(
         "linhas_index": 0,
         "notas_criadas": 0,
         "notas_atualizadas": 0,
+        "notas_inalteradas": 0,
         "arquivos_importados": 0,
         "arquivos_existentes": 0,
         "arquivos_registrados": 0,
@@ -979,17 +1059,27 @@ def ingerir_saida_legado(
     # nota no indice. Levantamos os estados antes de gerar qualquer espelho
     # para que a ordem das linhas nao produza um PDF autorizado sem carimbo.
     status_evento_por_chave: dict[str, tuple[str, str | None]] = {}
+    resumos_xml: dict[Path, tuple[tuple[int, int], dict]] = {}
+    afetadas: set[str] = set()
     for event_row in rows:
         event_xml_path = _resolve_path(event_row.get("xml_path", ""), Path.cwd())
         if event_xml_path is None:
             continue
         try:
+            stat_antes = event_xml_path.stat()
             event_resumo = _parse_xml_resumo(event_xml_path)
+            stat_depois = event_xml_path.stat()
+            assinatura = (stat_depois.st_mtime_ns, stat_depois.st_size)
+            if assinatura == (stat_antes.st_mtime_ns, stat_antes.st_size):
+                resumos_xml[event_xml_path] = (assinatura, event_resumo)
         except Exception:
             # A leitura principal abaixo continua responsavel por registrar
             # XMLs invalidos nos contadores normais da ingestao.
             continue
         _prever_status_por_chave(status_evento_por_chave, event_resumo)
+        for campo in ("chave_afetada", "chave_substituida"):
+            if event_resumo.get(campo):
+                afetadas.add(event_resumo[campo])
     if only_chaves is not None:
         rows = [row for row in rows if (row.get("chave") or "").strip() in only_chaves]
     if updated_after is not None:
@@ -1009,6 +1099,11 @@ def ingerir_saida_legado(
     counters["linhas_index"] = len(rows)
     counters["proxima_linha_index"] = safe_start_row + len(rows)
     empresa_cnpj = str(processo.empresa.cnpj if processo.empresa else processo.empresa_id)
+    empresa_id = int(processo.empresa_id)
+    notas_lote, arquivos_lote, com_eventos = _metadados_do_lote(
+        db, empresa_id, list({(row.get("chave") or "").strip() for row in rows}))
+    afetadas.update(com_eventos)
+    storage = _StorageDoLote(storage)
 
     linhas_processadas = 0
     for indice_linha, row in enumerate(rows):
@@ -1042,12 +1137,24 @@ def ingerir_saida_legado(
                 counters["arquivos_ausentes"] += 1
                 continue
 
-            xml_resumo = _parse_xml_resumo(xml_path)
+            resumo_cache = resumos_xml.get(xml_path)
+            stat_xml = xml_path.stat()
+            if resumo_cache and resumo_cache[0] == (stat_xml.st_mtime_ns, stat_xml.st_size):
+                xml_resumo = resumo_cache[1]
+            else:
+                xml_resumo = _parse_xml_resumo(xml_path)
+            if _nota_inalterada(notas_lote.get(chave), arquivos_lote, storage, row,
+                                xml_path, xml_storage_key, xml_resumo, afetadas, gerar_pdf_espelho):
+                counters["notas_inalteradas"] += 1
+                # Fecha a transacao de leitura sem modificar a nota/conferencia.
+                db.commit()
+                continue
             if xml_resumo.get("tipo_xml") == "evento":
                 nsu_evento = _parse_int(row.get("ultimo_nsu", "")) or _parse_int(row.get("primeiro_nsu", ""))
                 if xml_storage_key is not None:
                     xml_bytes = xml_path.read_bytes()
-                    meta, imported = _put_file_if_needed(storage, xml_storage_key, xml_path, "application/xml")
+                    meta, imported = _put_file_if_needed(storage, xml_storage_key, xml_path, "application/xml",
+                                                        arquivos_lote.get(xml_storage_key, {}).get("checksum"))
                     counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
                     if _registrar_arquivo(
                         db,
@@ -1199,7 +1306,8 @@ def ingerir_saida_legado(
 
             if xml_path is not None and xml_storage_key is not None:
                 xml_bytes = xml_path.read_bytes()
-                meta, imported = _put_file_if_needed(storage, xml_storage_key, xml_path, "application/xml")
+                meta, imported = _put_file_if_needed(storage, xml_storage_key, xml_path, "application/xml",
+                                                    arquivos_lote.get(xml_storage_key, {}).get("checksum"))
                 counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
                 if _registrar_arquivo(
                     db,
@@ -1237,7 +1345,13 @@ def ingerir_saida_legado(
                 ):
                     counters["arquivos_registrados"] += 1
             elif pdf_espelho_reutilizado and pdf_storage_key is not None:
-                pdf_bytes = storage.get_bytes(pdf_storage_key)
+                registrado = arquivos_lote.get(pdf_storage_key)
+                if registrado and registrado["checksum"] and registrado["tamanho_bytes"] is not None:
+                    pdf_size = registrado["tamanho_bytes"]
+                    pdf_checksum = registrado["checksum"]
+                else:
+                    pdf_bytes = storage.get_bytes(pdf_storage_key)
+                    pdf_size, pdf_checksum = len(pdf_bytes), _sha256(pdf_bytes)
                 counters["arquivos_existentes"] += 1
                 if _registrar_arquivo(
                     db,
@@ -1248,8 +1362,8 @@ def ingerir_saida_legado(
                     pdf_tipo,
                     pdf_storage_key,
                     "application/pdf",
-                    len(pdf_bytes),
-                    _sha256(pdf_bytes),
+                    pdf_size,
+                    pdf_checksum,
                     pdf_filename or Path(pdf_storage_key).name,
                 ):
                     counters["arquivos_registrados"] += 1

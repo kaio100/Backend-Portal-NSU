@@ -152,6 +152,19 @@ os arquivos direto no disco.
 
 ## Manutencao
 
+O worker mantem um heartbeat independente durante download e ingestao final
+(a cada 30 segundos). O supervisor so recupera jobs sem atividade por
+`JOBS_TRAVADOS_MINUTOS` (padrao 15); o heartbeat renova tambem o lock do
+certificado e termina junto com a execucao.
+
+Na releitura, XMLs identicos com nota e arquivos completos sao contabilizados
+como `notas_inalteradas`, sem regravar a conferencia nem baixar novamente o
+PDF. Eventos, substituicoes, XMLs alterados e arquivos ausentes continuam
+sendo processados. Metadados sao consultados em lotes de 500 chaves, e o R2
+e listado uma vez por pasta em cada chamada de ingestao. Essa verificacao
+nao e uma auditoria de integridade dos bytes remotos: para isso use os
+scripts de reconciliacao de storage.
+
 Notas baixadas do ADN entram no portal pela ingestao da saida legada. Se uma
 consulta for interrompida no meio, as linhas restantes do `index_nfse.csv`
 ficam sem nota no banco e o NSU ja avancou, entao elas nao voltam sozinhas.

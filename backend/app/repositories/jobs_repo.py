@@ -157,6 +157,7 @@ def recuperar_jobs_travados(db: Session, minutos: int) -> int:
         db.query(Job)
         .filter(Job.status == "rodando")
         .filter(or_(Job.updated_at.is_(None), Job.updated_at < limite))
+        .with_for_update(skip_locked=True)
         .all()
     )
     if not travados:

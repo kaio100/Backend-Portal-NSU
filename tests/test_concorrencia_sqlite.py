@@ -14,7 +14,7 @@ import sqlite3
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from backend.app.db.models import Arquivo, Empresa, Evento, Job, LogProcesso, Nota, NsuControle, Processo
+from backend.app.db.models import Arquivo, Empresa, Evento, Job, LockProcessamento, LogProcesso, Nota, NsuControle, Processo
 from backend.app.db.session import SessionLocal, executar_escrita_com_retry, init_db, renovar_snapshot
 from backend.app.services import legacy_ingestion_service
 from backend.app.services.storage_service import get_storage_service
@@ -24,12 +24,12 @@ from backend.app.services.storage_service import get_storage_service
 def _banco_limpo():
     init_db()
     with SessionLocal() as db:
-        for modelo in (LogProcesso, Job, Evento, Arquivo, Nota, NsuControle, Processo, Empresa):
+        for modelo in (LockProcessamento, LogProcesso, Job, Evento, Arquivo, Nota, NsuControle, Processo, Empresa):
             db.query(modelo).delete()
         db.commit()
     yield
     with SessionLocal() as db:
-        for modelo in (LogProcesso, Job, Evento, Arquivo, Nota, NsuControle, Processo, Empresa):
+        for modelo in (LockProcessamento, LogProcesso, Job, Evento, Arquivo, Nota, NsuControle, Processo, Empresa):
             db.query(modelo).delete()
         db.commit()
 
@@ -266,3 +266,173 @@ def test_falha_em_uma_nota_nao_desfaz_as_anteriores(tmp_path, monkeypatch):
     assert result["erros"] == 1
     assert result["notas_criadas"] == 5
     assert chaves == [f"{i:044d}" for i in range(6) if i != 2]
+
+
+def test_releitura_identica_preserva_conferencia_sem_baixar_pdfs(tmp_path, monkeypatch):
+    from backend.app.services.storage_service import LocalFilesystemStorage, build_pdf_espelho_key
+    from backend.app.repositories import arquivos_repo
+
+    class R2Contado(LocalFilesystemStorage):
+        backend = "r2"
+        listagens = 0
+        downloads = 0
+
+        def list_keys(self, prefix=""):
+            self.listagens += 1
+            return super().list_keys(prefix)
+
+        def get_bytes(self, key):
+            self.downloads += 1
+            return super().get_bytes(key)
+
+    _index_com_notas(tmp_path, 4)
+    storage = R2Contado(tmp_path / "storage")
+    for xml in (tmp_path / "xml").glob("*.xml"):
+        xml.write_text(xml.read_text().replace("<valores>", "<cStat>100</cStat><valores>"))
+    with SessionLocal() as db:
+        empresa = Empresa(nome="Releitura", cnpj="22333444000155", ambiente="producao", ativo=True)
+        db.add(empresa)
+        db.flush()
+        processo = Processo(empresa_id=empresa.id, tipo="consulta_nfse", status="rodando")
+        db.add(processo)
+        db.commit()
+        legacy_ingestion_service.ingerir_saida_legado(db, storage, processo, tmp_path, gerar_pdf_espelho=False)
+        for nota in db.query(Nota).all():
+            key = build_pdf_espelho_key(empresa.cnpj, "0000", "00", f"{nota.chave}.pdf")
+            storage.put_bytes(key, b"%PDF existente", "application/pdf")
+            arquivos_repo.create_arquivo(db, dict(empresa_id=empresa.id, nota_id=nota.id, tipo="pdf_espelho",
+                storage_backend="r2", storage_key=key, checksum="checksum-pdf", tamanho_bytes=14))
+            nota.pdf_espelho_storage_key = key
+            nota.conferencia_status = "conferida"
+            nota.responsavel = "Operador"
+            nota.conferencia_observacao = "Nao alterar"
+        db.commit()
+        antes = {n.id: n.updated_at for n in db.query(Nota).all()}
+        storage.listagens = storage.downloads = 0
+        monkeypatch.setattr(legacy_ingestion_service.notas_repo, "upsert_nota_by_chave",
+                            lambda *_a, **_k: pytest.fail("XML identico nao deve passar pelo upsert"))
+        resultado = legacy_ingestion_service.ingerir_saida_legado(db, storage, processo, tmp_path)
+        assert resultado["notas_inalteradas"] == 4
+        assert resultado["erros"] == 0
+        assert storage.listagens == 2  # XML e PDF: nao cresce com o numero de notas.
+        assert storage.downloads == 0
+        for nota in db.query(Nota).all():
+            assert nota.updated_at == antes[nota.id]
+            assert (nota.conferencia_status, nota.responsavel, nota.conferencia_observacao) == (
+                "conferida", "Operador", "Nao alterar")
+
+
+def test_xml_alterado_atualiza_banco_e_storage_e_xml_ausente_e_reparado(tmp_path):
+    from backend.app.services.storage_service import LocalFilesystemStorage
+    _index_com_notas(tmp_path, 1)
+    storage = LocalFilesystemStorage(tmp_path / "storage")
+    with SessionLocal() as db:
+        empresa = Empresa(nome="Alteracao", cnpj="22333444000155", ambiente="producao", ativo=True)
+        db.add(empresa)
+        db.flush()
+        processo = Processo(empresa_id=empresa.id, tipo="consulta_nfse", status="rodando")
+        db.add(processo)
+        db.commit()
+        legacy_ingestion_service.ingerir_saida_legado(db, storage, processo, tmp_path, gerar_pdf_espelho=False)
+        nota = db.query(Nota).one()
+        key = nota.xml_storage_key
+        xml = tmp_path / "xml" / f"{0:044d}.xml"
+        xml.write_text(xml.read_text().replace("10.00", "25.00"))
+        resultado = legacy_ingestion_service.ingerir_saida_legado(db, storage, processo, tmp_path, gerar_pdf_espelho=False)
+        assert resultado["notas_inalteradas"] == 0
+        assert resultado["erros"] == 0
+        assert b"25.00" in storage.get_bytes(key)
+        assert float(db.query(Nota).one().valor_servico) == 25
+        storage.delete(key)
+        resultado = legacy_ingestion_service.ingerir_saida_legado(db, storage, processo, tmp_path, gerar_pdf_espelho=False)
+        assert resultado["notas_inalteradas"] == 0
+        assert storage.exists(key)
+
+
+def test_nsu_novo_com_xml_identico_avanca_e_pdf_ausente_e_reposto(tmp_path, monkeypatch):
+    import hashlib
+    from backend.app.services.storage_service import LocalFilesystemStorage, build_pdf_espelho_key
+    from backend.app.repositories import arquivos_repo
+
+    _index_com_notas(tmp_path, 1)
+    indice = tmp_path / "index_nfse.csv"
+    linhas = indice.read_text().splitlines()
+    indice.write_text(linhas[0] + ";ultimo_nsu\n" + linhas[1] + ";7\n")
+    storage = LocalFilesystemStorage(tmp_path / "storage")
+    monkeypatch.setattr(legacy_ingestion_service, "extrair_dados_nfse",
+                        lambda *_a, **_k: {"emit_nome": "P", "numero_nfse": "1"})
+    with SessionLocal() as db:
+        empresa = Empresa(nome="NSU", cnpj="22333444000155", ambiente="producao", ativo=True)
+        db.add(empresa)
+        db.flush()
+        processo = Processo(empresa_id=empresa.id, tipo="consulta_nfse", status="rodando")
+        db.add(processo)
+        db.commit()
+        legacy_ingestion_service.ingerir_saida_legado(db, storage, processo, tmp_path, gerar_pdf_espelho=False)
+        nota = db.query(Nota).one()
+        key = build_pdf_espelho_key(empresa.cnpj, "0000", "00", "P NFS-e 1.pdf")
+        conteudo = b"%PDF existente"
+        storage.put_bytes(key, conteudo, "application/pdf")
+        arquivos_repo.create_arquivo(db, dict(empresa_id=empresa.id, nota_id=nota.id, tipo="PDF_ESPELHO",
+            storage_backend="local", storage_key=key, checksum=hashlib.sha256(conteudo).hexdigest(),
+            tamanho_bytes=len(conteudo)))
+        nota.pdf_espelho_storage_key = key
+        db.commit()
+        indice.write_text(linhas[0] + ";ultimo_nsu\n" + linhas[1] + ";8\n")
+        monkeypatch.setattr(storage, "get_bytes", lambda *_a: pytest.fail("PDF registrado nao deve ser baixado"))
+        result = legacy_ingestion_service.ingerir_saida_legado(db, storage, processo, tmp_path)
+        assert result["erros"] == 0
+        assert result["notas_inalteradas"] == 0
+        assert db.query(Nota).one().ultimo_nsu == 8
+        storage.delete(key)
+        novo_pdf = tmp_path / "novo.pdf"
+        novo_pdf.write_bytes(b"%PDF reparado")
+        monkeypatch.setattr(legacy_ingestion_service, "_gerar_pdf_espelho_path", lambda *_a, **_k: novo_pdf)
+        result = legacy_ingestion_service.ingerir_saida_legado(db, storage, processo, tmp_path)
+        assert result["erros"] == 0
+        assert result["notas_inalteradas"] == 0
+        assert storage.exists(key)
+
+
+def test_heartbeat_independente_impede_recuperacao_enquanto_ingestao_esta_bloqueada(monkeypatch):
+    import threading
+    from datetime import datetime, timedelta, timezone
+    from backend.app.services import job_lease_service
+    from backend.app.repositories.jobs_repo import recuperar_jobs_travados
+
+    velho = datetime.now(timezone.utc) - timedelta(hours=2)
+    with SessionLocal() as db:
+        empresa = Empresa(nome="Heartbeat", cnpj="22333444000155", ambiente="producao", ativo=True)
+        db.add(empresa)
+        db.flush()
+        processo = Processo(empresa_id=empresa.id, tipo="consulta_nfse", status="rodando", updated_at=velho)
+        db.add(processo)
+        db.flush()
+        job = Job(empresa_id=empresa.id, processo_id=processo.id, tipo="consulta_nfse",
+                  status="rodando", locked_by="worker-teste", updated_at=velho)
+        db.add(job)
+        db.add(LockProcessamento(empresa_id=empresa.id, certificado_id=123, locked_by="worker-teste",
+                               locked_at=velho, expires_at=velho))
+        job.certificado_id = 123
+        db.commit()
+        ids = job.id, processo.id
+    renovado = threading.Event()
+    original = job_lease_service.renovar_lease
+
+    def renovar(*args):
+        result = original(*args)
+        renovado.set()
+        return result
+
+    monkeypatch.setattr(job_lease_service, "renovar_lease", renovar)
+    with job_lease_service.manter_lease(*ids, "worker-teste", intervalo=0.02):
+        # Simula ingestao ocupada: o chamador nao executa nenhum heartbeat.
+        assert renovado.wait(3)
+        with SessionLocal() as db:
+            assert recuperar_jobs_travados(db, 15) == 0
+            assert db.get(Job, ids[0]).status == "rodando"
+            assert db.query(LockProcessamento).one().expires_at.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc)
+            db.get(Job, ids[0]).status = "cancelado"
+            db.commit()
+    assert not original(*ids, "worker-teste")
+    assert not any(t.name == f"heartbeat-job-{ids[0]}" for t in threading.enumerate())

@@ -210,6 +210,8 @@ def _contar_saida_legada(pasta_saida: str | None) -> dict[str, Any]:
 def _ingestao_tem_movimento(ingestao: dict[str, Any]) -> bool:
     chaves = (
         "notas_criadas",
+        "notas_atualizadas",
+        "notas_inalteradas",
         "arquivos_importados",
         "arquivos_registrados",
         "pdfs_espelho_gerados",
@@ -783,6 +785,7 @@ def executar_consulta_nfse_legado(
                 {
                     "notas_criadas": ingestao.get("notas_criadas"),
                     "notas_atualizadas": ingestao.get("notas_atualizadas"),
+                    "notas_inalteradas": ingestao.get("notas_inalteradas"),
                     "arquivos_importados": ingestao.get("arquivos_importados"),
                     "arquivos_existentes": ingestao.get("arquivos_existentes"),
                     "arquivos_registrados": ingestao.get("arquivos_registrados"),

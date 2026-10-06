@@ -11,6 +11,7 @@ from backend.app.db.models import Job
 from backend.app.repositories import jobs_repo, processos_repo
 from backend.app.services import legacy_processing_service, locks_service, logs_service
 from backend.app.services.storage_service import get_storage_service
+from backend.app.services.job_lease_service import manter_lease
 
 logger = logging.getLogger(__name__)
 
@@ -179,13 +180,16 @@ def processar_job_consulta_nfse_real(db: Session, job: Job, worker_id: str) -> d
         logs_service.registrar_log(db, processo.id, processo.empresa_id, "info", "Processo marcado como rodando")
         db.commit()
 
-        result = legacy_processing_service.executar_consulta_nfse_legado(
-            db=db,
-            storage=get_storage_service(),
-            processo=processo,
-            job=job,
-            worker_id=worker_id,
-        )
+        # A ingestao final pode durar mais que o limite do supervisor. Seu
+        # heartbeat nao pode depender da thread incremental ja encerrada.
+        with manter_lease(int(job.id), int(processo.id), worker_id):
+            result = legacy_processing_service.executar_consulta_nfse_legado(
+                db=db,
+                storage=get_storage_service(),
+                processo=processo,
+                job=job,
+                worker_id=worker_id,
+            )
         if _foi_cancelado(db, processo, job):
             jobs_repo.mark_job_cancelado(db, job, "Processo cancelado durante a execucao.")
             processos_repo.cancelar_processo(db, processo)
