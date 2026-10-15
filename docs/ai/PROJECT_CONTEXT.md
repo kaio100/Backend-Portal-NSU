@@ -1,6 +1,6 @@
 # Contexto do projeto: domínio, atores e regras
 
-> Verificado contra o código em 08/10/2026, commit `a0cfbaf4`. Regras marcadas com † foram herdadas do mapa de 15/09–06/10 e tiveram só a função âncora conferida em 08/10, não o comportamento linha a linha.
+> Verificado contra o código em 15/10/2026, commit `ae9d4e2d` (branch `ajustes/seguranca-admin-paginacao`, não implantada). Regras marcadas com † foram herdadas do mapa de 15/09–06/10 e tiveram só a função âncora conferida em 08/10, não o comportamento linha a linha.
 
 ## Para que serve
 
@@ -17,7 +17,7 @@ As empresas atendidas pelas equipes da Planning recebem e emitem NFS-e (padrão 
 | **Chave de acesso** | Identificador de 50 dígitos da NFS-e (contém o CNPJ do emitente) |
 | **Evento** | Documento do ADN que muda a situação de uma nota: cancelamento (e101101, e105104), substituição (e105102) e outros |
 | **DANFSe / PDF espelho** | PDF gerado pelo portal a partir do XML (biblioteca PHP em `backend/danfse`). O PDF "oficial" do ADN foi desativado |
-| **Grupo** | Equipe isolada (`planning_hub`, `planning_ma`). Empresas e usuários pertencem a um grupo |
+| **Grupo** | Equipe isolada (`planning_hub`, `planning_ma`). Empresas e usuários pertencem a um grupo; funciona como um muro: um grupo não vê nada do outro |
 | **Admin geral** | Admin cujo e-mail está em `SUPER_ADMIN_EMAILS`. Único que vê e administra todos os grupos |
 | **Processo / Job** | Uma consulta ao ADN para um certificado (`processos`) e sua unidade de execução na fila (`processos_jobs`) |
 | **Monitor** | `monitoramento_config` por grupo: liga o agendador automático e guarda os filtros (`empresa_ids`, `certificado_ids`) |
@@ -29,8 +29,8 @@ As empresas atendidas pelas equipes da Planning recebem e emitem NFS-e (padrão 
 ## Atores
 
 - **Operador** (padrão de quem entra por convite): consulta, confere, exporta, gera convite, pede releitura e cadastra certificado (ver ARCH-007).
-- **Admin do grupo**: o que o operador faz, mais gestão de usuários do grupo, empresas, senhas de certificado e arquivamento.
-- **Admin geral**: cria, edita e exclui grupos e move usuários entre grupos.
+- **Admin do grupo**: o que o operador faz, mais gestão de usuários do grupo, empresas, senhas de certificado e arquivamento. O painel `/admin` exige senha + 2FA a cada 30 min.
+- **Admin geral**: cria, edita e exclui grupos, move usuários entre grupos e reseta o 2FA de outros admins. `/auth/me` devolve `super_admin=true` para ele.
 - **Sistemas externos**: ADN (consulta), Cloudflare R2 (arquivos), Resend (e-mail), Supabase/Postgres (banco), Invertexto (CNPJ, opcional), base local da Receita (`cnpj_receita.sqlite3`).
 
 ## Fluxos que geram valor
@@ -46,7 +46,7 @@ As empresas atendidas pelas equipes da Planning recebem e emitem NFS-e (padrão 
 |---|---|---|---|
 | REG-001 | Todo dado operacional é limitado ao `grupo` do usuário; sem correspondência → 404. Admin também fica no próprio grupo; só o admin geral vê todos. Grupo desativado bloqueia os usuários dele | `api/deps.py::require_*_grupo`, `get_current_usuario`; `admin.py::_escopo` | Rota nova precisa do filtro. Serviços aceitam `grupo=None` como "todos": nunca passe `None` vindo de rota de usuário |
 | REG-002 | Usuário precisa estar ativo e com e-mail verificado. Só existem os papéis `admin` e `operador`. O JWT carrega `ver` = `usuarios.token_version`; trocar ou redefinir a senha incrementa a versão e derruba as sessões | `deps.py`, `core/security.py`, `contas_service.py` | JWT de usuário desativado, não verificado ou com versão antiga dá 401 |
-| REG-003 | Login limitado por IP real + e-mail (8 tentativas em 5 min). Atrás do proxy, o IP é o último do `X-Forwarded-For`. Login com e-mail inexistente leva o mesmo tempo | `core/rate_limit.py`, `core/rede.py`, `routers/auth.py` | Limite em memória, por processo |
+| REG-003 | Login limitado no banco (`tentativas_acesso`, chaves com hash): IP real + e-mail 8 em 5 min, por conta 20 em 15 min, por IP 60 em 15 min; 2FA 10 em 15 min; sessão admin 5 em 5 min. Atrás do proxy, o IP é o último do `X-Forwarded-For`. Login com e-mail inexistente leva o mesmo tempo | `core/rate_limit.py` (`RateLimiterBanco`), `core/rede.py`, `routers/auth.py` | Vale entre réplicas e sobrevive a restart. Resposta 429 |
 | REG-004 | Empresa tem CNPJ de 14 dígitos, único no banco inteiro (não por grupo) | `models.Empresa`, `empresas_service.py` | Autocadastro de CNPJ de outro grupo é recusado ("pertence a outro grupo") |
 | REG-005 | Certificado elegível para consulta: ativo, empresa ativa do grupo, `storage_key` válido, senha salva e legível, não vencido | `consultas_service.list_certificados_elegiveis` | Vencido ou com senha ilegível sai da fila com log de aviso/erro |
 | REG-006 | Não se cria processo para certificado com consulta pendente ou rodando, salvo `forcar` | `consultas_service._active_consulta_certificado_ids` | Verificação seguida de insert, sem constraint: duas requisições simultâneas podem duplicar (FIND-L03) |
@@ -86,3 +86,8 @@ As empresas atendidas pelas equipes da Planning recebem e emitem NFS-e (padrão 
 | REG-040 | Releitura profunda parte de antes do 1º dia do mês anterior (− `NSU_LOOKBACK_RECONCILIACAO`, 1000): (1) uma vez por noite na janela 19h–05h; (2) quando a empresa volta depois de `NSU_RELEITURA_APOS_HORAS_SEM_CONSULTA` (6) sem consulta finalizada; (3) por `POST /consultas/releitura-mes-anterior`. Nota com XML idêntico, NSU já registrado e arquivos completos é pulada (`notas_inalteradas`) | `nsu_control_service.planejar_inicio_consulta/voltou_de_parada`, `consultas_service.solicitar_releitura_mes_anterior` | É a rede de segurança para documentos pulados pelo NSU |
 | REG-041 | Documento emitido antes de `NOTAS_DATA_CORTE` é descartado no download (o NSU avança sobre ele) | `adn_nfse_downloader.processar_documento`, `legacy_processing_service` (`data_corte_documentos`) | Releitura de período antigo não reimporta |
 | REG-042 | Certificado vencido não entra na fila; erro de senha/certificado (`ValueError`) não é repetido | `consultas_service.list_certificados_elegiveis`, `adn_nfse_downloader.requisicao_json_com_retry` | Antes eram ~90 falhas por dia (até 06/10) |
+| REG-043 | Rotas `/admin/*` exigem, além do JWT de admin, sessão admin aberta com senha + código TOTP (`POST /auth/admin/sessao`, 30 min, header `X-Admin-Token`). Sem sessão: 403 `admin_sessao_necessaria`. 2FA obrigatório por padrão (`ADMIN_2FA_OBRIGATORIO`). Alterações ficam em `auditoria_painel_admin` | `api/deps.py::require_admin_sessao/auditar_admin`, `routers/auth.py`, `core/totp.py`, `services/admin_seguranca_service.py` | A tabela `auditoria_admin` de produção é outra (schema diferente, vazia): não reutilizar. Reset de 2FA: `scripts/resetar_2fa_admin` (simular antes) |
+| REG-044 | `GET /notas` pagina por cursor: ordem estável com desempate por `id`; `X-Next-Cursor` só quando a página veio cheia; OFFSET mantido para clientes antigos | `notas_repo.chaves_ordem/codificar_cursor/decodificar_cursor`, `notas_service.proximo_cursor`, `routers/notas.py` | Mudar `sort` ou as chaves invalida cursores em uso (o cliente recomeça) |
+| REG-045 | "Limpar" erros no admin não apaga nada: grava `erros_vistos.visto_ate` por grupo (todos os grupos para o admin geral); `/admin/erros` mostra só o que veio depois | `admin.limpar_erros/_somente_nao_vistos`, `models.ErroVisto` | Logs sem empresa não têm grupo e continuam aparecendo para o admin geral (frontend BUG-033) |
+| REG-046 | Volumetria do admin respeita o grupo (`_escopo`); "por grupo" só para o admin geral | `volumetria_service.calcular` | Agregações em SQL; período pelo parâmetro `dias` |
+

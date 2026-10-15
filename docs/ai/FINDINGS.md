@@ -1,6 +1,6 @@
 # Achados abertos, riscos e dívida
 
-> Atualizado em 08/10/2026, commit `a0cfbaf4`. Fonte principal: `../historico/AUDITORIA_BACKEND_2026-10-08.md` (evidências completas, logs do Railway). Status: **CONFIRMADO**, **FORTEMENTE_INDICADO**, **HIPOTESE**, **NAO_DETERMINADO**. Severidade = impacto potencial.
+> Atualizado em 15/10/2026, commit `ae9d4e2d`. Fonte principal: `../historico/AUDITORIA_BACKEND_2026-10-08.md` (evidências completas, logs do Railway). Status: **CONFIRMADO**, **FORTEMENTE_INDICADO**, **HIPOTESE**, **NAO_DETERMINADO**. Severidade = impacto potencial.
 >
 > Regra: item corrigido sai da tabela de abertos e vai para "Resolvidos", com commit e data. Item novo segue o modelo do fim do arquivo.
 
@@ -34,6 +34,7 @@
 | FIND-L07 | média | FORTEMENTE_INDICADO | ZIP e XLSX gerados de forma síncrona na requisição (até 10.000 notas, 16 threads, arquivo temporário) | `notas_download_service`, `portal_support_service` |
 | FIND-L08 | baixa | CONFIRMADO | Métricas em memória: somem no restart | `core/observability.py` |
 | FIND-L09 | alta | CONFIRMADO | Isolamento entre grupos só na aplicação; RLS do Supabase é opcional (scripts `aplicar_seguranca_rls`/`auditar_rls_supabase`); serviços aceitam `grupo=None` = todos | `api/deps.py`, services |
+| SEC-B314 | média | CONFIRMADO (Bandit B314/B405, Semgrep) | XML de terceiros (ADN e upload do DANFSe avulso) lido com `xml.etree`, sem proteção contra expansão de entidades. Recomendação: `defusedxml.ElementTree` como substituto direto | `services/danfse_service.py:24`, `services/legacy_ingestion_service.py`, `scripts/corrigir_status_fiscal.py`, `scripts/reconciliar_notas_certificados.py` |
 | FIND-L10 | alta | NAO_DETERMINADO (rotação) | Segredos e PFX no histórico do Git (achado de 06/10); rotação não reconferida | `../historico/SEGURANCA_CERTIFICADOS_2026-10-06.md`, `SECURITY.md` |
 
 ## Detalhes e recomendações

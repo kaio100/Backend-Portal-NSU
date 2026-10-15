@@ -1,9 +1,9 @@
 # Índice de arquivos versionados
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `a60141b7`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `ae9d4e2d`. Não editar à mão.
 
 
-347 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
+350 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
 
 
 ## `./`
@@ -111,6 +111,7 @@
 | `0002_historico_conferencia.py` | 46 | Historico da analise fiscal (notas_conferencia_historico). |
 | `0003_contas_convite.py` | 40 | Contas por convite: versao de token, verificacao de e-mail e fim do papel leitura. |
 | `0004_seguranca_admin.py` | 66 | Seguranca: limite de tentativas no banco, 2FA de administrador e auditoria do admin. |
+| `0005_erros_vistos.py` | 33 | Erros ja vistos no painel admin (botao "Limpar" sem apagar o historico). |
 
 ## `backend/app/repositories/`
 
@@ -227,6 +228,7 @@
 | `storage_naming_service.py` | 54 |  |
 | `storage_service.py` | 361 |  |
 | `valor_liquido_backfill_service.py` | 47 |  |
+| `volumetria_service.py` | 192 | Numeros agregados para a secao Volumetria do painel administrativo. |
 
 ## `backend/app/worker/`
 
@@ -390,13 +392,13 @@
 |---|---:|---|
 | `00_LEIA_PRIMEIRO.md` | 62 |  |
 | `API.md` | 58 |  |
-| `ARCHITECTURE_CURRENT.md` | 129 |  |
-| `CHANGELOG.md` | 43 |  |
+| `ARCHITECTURE_CURRENT.md` | 135 |  |
+| `CHANGELOG.md` | 44 |  |
 | `CHANGE_IMPACT.md` | 73 |  |
 | `DATABASE.md` | 80 |  |
-| `FINDINGS.md` | 99 |  |
+| `FINDINGS.md` | 100 |  |
 | `OPERATIONS.md` | 139 |  |
-| `PROJECT_CONTEXT.md` | 88 |  |
+| `PROJECT_CONTEXT.md` | 93 |  |
 | `SECURITY.md` | 60 |  |
 
 ## `docs/ai/DECISIONS/`
@@ -466,6 +468,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `conftest.py` | 67 |  |
+| `test_admin_volumetria_erros.py` | 95 | Painel admin: "Limpar" erros sem apagar historico e numeros da Volumetria. |
 | `test_adn_data_cutoff.py` | 46 |  |
 | `test_auth_account.py` | 101 |  |
 | `test_certificados_contagem.py` | 26 |  |

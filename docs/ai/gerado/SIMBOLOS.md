@@ -1,9 +1,9 @@
 # Índice de símbolos Python
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `a60141b7`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `ae9d4e2d`. Não editar à mão.
 
 
-1019 símbolos de nível de módulo.
+1024 símbolos de nível de módulo.
 
 Classes e funções de nível de módulo, com os métodos das classes. Para o comportamento, leia o código; este índice só localiza.
 
@@ -43,6 +43,7 @@ Classes e funções de nível de módulo, com os métodos das classes. Para o co
 - `backend/app/db/migrations/versions/0002_historico_conferencia.py`: `upgrade` :24 · `downgrade` :44
 - `backend/app/db/migrations/versions/0003_contas_convite.py`: `upgrade` :26 · `downgrade` :39
 - `backend/app/db/migrations/versions/0004_seguranca_admin.py`: `upgrade` :26 · `downgrade` :65
+- `backend/app/db/migrations/versions/0005_erros_vistos.py`: `upgrade` :21 · `downgrade` :32
 - `backend/app/db/models.py`: **`TimestampMixin`** :24 · **`Grupo`** :33 · **`Empresa`** :42 · **`Certificado`** :63 (senha_configurada, possui_senha, possui_storage_key, empresa_nome, empresa_cnpj, alias, client_name, file_name, status) · **`Processo`** :121 · **`Job`** :150 · **`MonitoramentoConfig`** :171 · **`NsuControle`** :183 · **`Nota`** :198 · **`ConferenciaHistorico`** :305 · **`Evento`** :326 · **`Arquivo`** :349 · **`LogProcesso`** :369 · **`LockProcessamento`** :384 · **`CnpjCache`** :401 · **`Secret`** :421 · **`Usuario`** :430 · **`AcessoUsuario`** :456 · **`ConviteCadastro`** :467 · **`VerificacaoEmailToken`** :483 · **`RedefinicaoSenhaToken`** :499 · **`TentativaAcesso`** :514 · **`AuditoriaAdmin`** :528 · **`ErroVisto`** :548
 - `backend/app/db/session.py`: `_connect_args` :14 · `_ensure_sqlite_parent` :23 · `executar_escrita_com_retry` :36 · `renovar_snapshot` :53 · `sqlite_write_lock` :70 · **`PortalSession`** :115 · `get_db` :122 · `init_db` :130 · `migrate_db` :147 · `_aplicar_migracoes_alembic` :169 · `_ensure_runtime_columns` :179
 - `backend/app/main.py`: `_rotina_operacao` :56 · `_worker_groups` :67 · `_build_api_workers` :74 · `_recuperar_jobs_travados` :83 · `_run_api_worker` :88 · `_supervisionar_grupos` :110 · `_run_consultas_scheduler` :143 · `_enqueue_consultas_automaticas` :156 · `_recalcular_valores_liquidos_salvos` :169 · `lifespan` :178 · `_documentation_options` :224 · `security_headers` :239 · `_parse_cors_origins` :251
@@ -135,6 +136,7 @@ Classes e funções de nível de módulo, com os métodos das classes. Para o co
 - `backend/app/services/storage_naming_service.py`: `_clean_name` :11 · `safe_folder_name` :24 · `safe_file_name` :28 · `build_zip_empresa_folder` :32 · `_chave_curta` :37 · `build_nota_base_filename` :42
 - `backend/app/services/storage_service.py`: **`StorageKeyError`** :10 · **`StorageService`** :14 (put_bytes, get_bytes, put_file, exists, delete, list_keys, list_prefix, object_size, generate_presigned_url, get_path) · **`LocalFilesystemStorage`** :48 (__init__, put_bytes, get_bytes, put_file, exists, delete, list_keys, get_path, generate_presigned_url) · **`R2StorageService`** :115 (__init__, put_bytes, get_bytes, put_file, exists, delete, list_keys, object_size, generate_presigned_url, get_path) · `normalize_storage_key` :244 · `normalize_storage_prefix` :266 · `_is_not_found_error` :273 · `_clean_segment` :282 · `_date_key` :289 · `build_xml_key` :301 · `build_pdf_oficial_key` :305 · `build_pdf_espelho_key` :309 · `build_export_key` :313 · `build_raw_key` :317 · `build_json_key` :321 · `build_log_key` :325 · `build_certificado_key` :335 · `get_storage_service` :346
 - `backend/app/services/valor_liquido_backfill_service.py`: `recalcular_notas_salvas` :10
+- `backend/app/services/volumetria_service.py`: `_como_data` :19 · `_dias` :29 · `calcular` :33
 - `backend/app/worker/jobs.py`: `_job_processavel` :19 · `_foi_cancelado` :23 · `_devolver_job_para_fila` :29 · `_registrar_job_reservado` :33 · `processar_job_simulado` :50 · `processar_job_consulta_nfse_real` :145 · `processar_job` :247
 - `backend/app/worker/scheduler.py`: `enqueue_consultas` :12 · `build_parser` :25 · `main` :32
 - `backend/app/worker/worker.py`: `build_parser` :14 · `processar_proximo_job` :22 · `main` :57

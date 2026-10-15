@@ -1,6 +1,6 @@
 # Arquitetura atual
 
-> Verificado contra o código em 08/10/2026, commit `a0cfbaf4`, e contra o Railway (config do serviço, logs e métricas de 01–08/10). Banco não consultado nesta data.
+> Verificado contra o código em 15/10/2026, commit `ae9d4e2d` (branch `ajustes/seguranca-admin-paginacao`, não implantada). Implantação e números do Railway: medição de 01–08/10.
 
 ## Implantação
 
@@ -49,7 +49,7 @@ api/routers/*      HTTP, validação de entrada, auth e filtro por grupo (deps.p
 schemas/*          contratos Pydantic, aliases, campos somente leitura
 services/*         regras de negócio, orquestração, integrações (ADN, R2, PHP, Resend)
 repositories/*     consultas reutilizáveis (nem todo service usa: muitos fazem db.query direto)
-db/models.py       20 tabelas SQLAlchemy; db/session.py engine + migrate_db
+db/models.py       23 tabelas SQLAlchemy; db/session.py engine + migrate_db
 worker/*           claim de job, execução, agendador avulso
 adn_nfse_downloader.py   motor legado do ADN, carregado dinamicamente por job
 backend/danfse/    biblioteca PHP do DANFSe (dompdf)
@@ -64,7 +64,10 @@ Boundaries reais (não confundir):
 ## Fluxos
 
 ### Login e grupo
-`POST /auth/login` → `auth_service.autenticar` (PBKDF2, tempo constante) → JWT HS256 `{sub, empresa_id, ver, iat, exp}` → em cada request `deps.get_current_usuario` carrega o usuário, confere ativo, e-mail verificado, `token_version` e grupo ativo. O grupo do usuário é o filtro de tudo (REG-001).
+`POST /auth/login` → limites no banco (`RateLimiterBanco`, tabela `tentativas_acesso`: IP+e-mail 8/5 min, conta 20/15 min, IP 60/15 min) → `auth_service.autenticar` (PBKDF2, tempo constante) → JWT HS256 `{sub, empresa_id, ver, iat, exp}` de 12 h → em cada request `deps.get_current_usuario` carrega o usuário, confere ativo, e-mail verificado, `token_version` e grupo ativo. Token com `escopo` (sessão admin) é recusado como token do portal. O grupo do usuário é o filtro de tudo (REG-001).
+
+### Painel admin (sessão própria)
+`/auth/2fa/iniciar` → `/auth/2fa/confirmar` (TOTP RFC 6238, `core/totp.py`) → `POST /auth/admin/sessao` (senha + código) → token `escopo=admin` de `ADMIN_SESSAO_MINUTOS` (30) → header `X-Admin-Token`. O router `admin` inteiro depende de `require_admin_sessao` (403 `admin_sessao_necessaria`) e de `auditar_admin` (grava as alterações em `auditoria_painel_admin`). REG-043.
 
 ### Consulta ao ADN (coração do sistema)
 ```text
@@ -94,6 +97,9 @@ Tempos: a chamada ao ADN tem timeout de 240 s e até 5 tentativas (espera de 20�
 
 ### Conferência
 `PATCH /notas/{id}/conferencia` → `notas_service.salvar_conferencia` (409 sem `retificar` quando já há responsável) → histórico em `notas_conferencia_historico`.
+
+### Listagem de notas
+`GET /notas` → `notas_service` → `notas_repo` com paginação por cursor (keyset): chave de ordenação por `sort` (`recentes` = `importado_em, updated_at, id`; `emissao` = data de emissão + id), cursor opaco (`codificar_cursor`/`decodificar_cursor`), próxima página no cabeçalho `X-Next-Cursor` (exposto no CORS). OFFSET continua aceito para clientes antigos. As varreduras internas (`_percorrer_repo`) também andam por cursor. No SQLite as comparações de data usam `julianday`. REG-044.
 
 ### Exportação
 `POST|GET /notas/download-lote` → `notas_service.buscar_notas_exportacao` (sem canceladas/substituídas; teto 10.000) → até 16 threads baixam do R2 → ZIP temporário → resposta e apagamento. `POST /relatorios/conferencia` → XLSX (teto 20.000). Tudo síncrono dentro da requisição.

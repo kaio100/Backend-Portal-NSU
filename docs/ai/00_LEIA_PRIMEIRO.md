@@ -1,6 +1,6 @@
 # Leia primeiro — Backend Portal NFS-e
 
-> Verificado contra o código em 08/10/2026, commit `a0cfbaf4` (main). Produção: Railway, deploy `42f3951f`.
+> Verificado contra o código em 15/10/2026, commit `ae9d4e2d` (branch `ajustes/seguranca-admin-paginacao`, ainda não implantada). Produção: Railway.
 
 ## O que é
 
