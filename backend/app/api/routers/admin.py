@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 import unicodedata
 
@@ -20,9 +20,9 @@ from backend.app.api.deps import (
 )
 from backend.app.core.security import hash_password
 from backend.app.core.tempo import agora_local, data_local, hoje_local, inicio_do_dia_utc
-from backend.app.db.models import AcessoUsuario, Arquivo, AuditoriaAdmin, ConferenciaHistorico, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, Usuario
+from backend.app.db.models import AcessoUsuario, Arquivo, AuditoriaAdmin, ErroVisto, ConferenciaHistorico, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, Usuario
 from backend.app.db.session import SessionLocal
-from backend.app.services import admin_seguranca_service
+from backend.app.services import admin_seguranca_service, volumetria_service
 from backend.app.services.notas_archive_service import arquivar_notas_anos_anteriores
 from backend.app.services.storage_service import get_storage_service
 
@@ -105,6 +105,12 @@ def _usuario_dict(usuario: Usuario) -> dict:
     }
 
 
+def _somente_nao_vistos(query, modelo, coluna_data):
+    """Erros depois do ultimo "Limpar" do grupo da empresa (sem apagar nada)."""
+    query = query.outerjoin(ErroVisto, ErroVisto.grupo == Empresa.grupo)
+    return query.filter(or_(ErroVisto.visto_ate.is_(None), coluna_data > ErroVisto.visto_ate))
+
+
 @router.get("/overview")
 def overview(admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
     grupo = _escopo(admin)
@@ -133,7 +139,9 @@ def overview(admin: Usuario = Depends(require_admin), db: Session = Depends(get_
         "arquivos": do_grupo(db.query(Arquivo), Arquivo).count(),
         "processos": do_grupo(db.query(Processo), Processo).count(),
         "processos_finalizados": do_grupo(db.query(Processo), Processo).filter(Processo.status == "finalizado").count(),
-        "erros": do_grupo(db.query(Processo), Processo).filter(or_(Processo.status == "erro", Processo.erro_resumo.isnot(None))).count(),
+        "erros": _somente_nao_vistos(
+            _query_processos_com_empresa(db, grupo), Processo, Processo.updated_at
+        ).filter(or_(Processo.status == "erro", Processo.erro_resumo.isnot(None))).count(),
     }
 
 
@@ -280,11 +288,11 @@ def redefinir_senha(usuario_id: int, payload: RedefinirSenha, admin: Usuario = D
 def erros(limit: int = 50, admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
     limit = max(1, min(limit, 200))
     grupo = _escopo(admin)
-    query_processos = db.query(Processo)
-    query_logs = db.query(LogProcesso)
+    query_processos = _somente_nao_vistos(_query_processos_com_empresa(db, grupo), Processo, Processo.updated_at)
+    query_logs = db.query(LogProcesso).outerjoin(Empresa, Empresa.id == LogProcesso.empresa_id)
     if grupo is not None:
-        query_processos = query_processos.join(Empresa, Empresa.id == Processo.empresa_id).filter(Empresa.grupo == grupo)
-        query_logs = query_logs.join(Empresa, Empresa.id == LogProcesso.empresa_id).filter(Empresa.grupo == grupo)
+        query_logs = query_logs.filter(Empresa.grupo == grupo)
+    query_logs = _somente_nao_vistos(query_logs, LogProcesso, LogProcesso.created_at)
     processos = (
         query_processos
         .filter(or_(Processo.status == "erro", Processo.erro_resumo.isnot(None)))
@@ -310,6 +318,35 @@ def erros(limit: int = 50, admin: Usuario = Depends(require_admin), db: Session 
             "empresa_id": log.empresa_id, "mensagem": log.mensagem, "created_at": log.created_at,
         } for log in logs)
     return sorted(items, key=lambda item: item["created_at"] or datetime.min, reverse=True)[:limit]
+
+
+def _query_processos_com_empresa(db: Session, grupo: str | None):
+    query = db.query(Processo).join(Empresa, Empresa.id == Processo.empresa_id)
+    return query.filter(Empresa.grupo == grupo) if grupo is not None else query
+
+
+@router.post("/erros/limpar")
+def limpar_erros(admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
+    """Marca os erros ate agora como vistos (do grupo do admin; de todos, para o admin geral).
+    Processos e logs continuam no banco; a acao fica na auditoria."""
+    grupo = _escopo(admin)
+    grupos = [grupo] if grupo is not None else [g.codigo for g in db.query(Grupo).all()]
+    agora = datetime.now(timezone.utc)
+    for codigo in grupos:
+        visto = db.get(ErroVisto, codigo)
+        if visto is None:
+            db.add(ErroVisto(grupo=codigo, visto_ate=agora, usuario_id=admin.id))
+        else:
+            visto.visto_ate = agora
+            visto.usuario_id = admin.id
+    db.commit()
+    return {"ok": True, "visto_ate": agora.isoformat(), "grupos": grupos}
+
+
+@router.get("/volumetria")
+def volumetria(dias: int = 30, admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
+    """Notas, valores, consultas ao ADN e certificados agregados para os graficos do painel."""
+    return volumetria_service.calcular(db, _escopo(admin), dias)
 
 
 @router.get("/arquivamento")

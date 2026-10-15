@@ -1,9 +1,9 @@
 # Índice de arquivos versionados
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `a0cfbaf4`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `a60141b7`. Não editar à mão.
 
 
-308 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
+347 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
 
 
 ## `./`
@@ -14,6 +14,7 @@
 | `.env.docker.example` |  |  |
 | `.env.example` |  |  |
 | `.gitignore` |  |  |
+| `CLAUDE.md` | 9 |  |
 | `Dockerfile` |  |  |
 | `README.md` | 240 |  |
 | `RETENCOES_REGRAS.xlsx` |  |  |
@@ -50,7 +51,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `__init__.py` | 1 |  |
-| `admin.py` | 390 |  |
+| `admin.py` | 427 |  |
 | `arquivos.py` | 71 |  |
 | `auth.py` | 272 |  |
 | `certificados.py` | 496 |  |
@@ -82,6 +83,7 @@
 | `rede.py` | 35 | IP de quem fez a requisicao, mesmo atras do proxy do Railway. |
 | `security.py` | 102 |  |
 | `tempo.py` | 43 | Datas de negocio no fuso do escritorio. |
+| `totp.py` | 54 | Codigos de verificacao em duas etapas (TOTP, RFC 6238), compativeis com |
 
 ## `backend/app/db/`
 
@@ -89,7 +91,7 @@
 |---|---:|---|
 | `__init__.py` | 1 |  |
 | `base.py` | 5 |  |
-| `models.py` | 545 |  |
+| `models.py` | 560 |  |
 | `session.py` | 346 |  |
 
 ## `backend/app/db/migrations/`
@@ -108,6 +110,7 @@
 | `0001_baseline.py` | 29 | Linha de base do versionamento de esquema. |
 | `0002_historico_conferencia.py` | 46 | Historico da analise fiscal (notas_conferencia_historico). |
 | `0003_contas_convite.py` | 40 | Contas por convite: versao de token, verificacao de e-mail e fim do papel leitura. |
+| `0004_seguranca_admin.py` | 66 | Seguranca: limite de tentativas no banco, 2FA de administrador e auditoria do admin. |
 
 ## `backend/app/repositories/`
 
@@ -131,7 +134,7 @@
 |---|---:|---|
 | `__init__.py` | 1 |  |
 | `arquivos.py` | 50 |  |
-| `auth.py` | 100 |  |
+| `auth.py` | 110 |  |
 | `certificados.py` | 56 |  |
 | `consultas.py` | 92 |  |
 | `empresas.py` | 106 |  |
@@ -160,6 +163,7 @@
 | `diagnosticar_banco.py` | 41 |  |
 | `diagnosticar_nsu_certificado.py` | 103 |  |
 | `enfileirar_reprocessamento_certificados.py` | 75 |  |
+| `exportar_openapi.py` | 28 | Exporta o contrato da API (OpenAPI) para o frontend gerar os tipos TypeScript. |
 | `gerar_espelhos_ausentes.py` | 106 | Gera PDFs espelho ausentes a partir dos XMLs ja armazenados. |
 | `importar_base_cnpj_receita.py` | 216 |  |
 | `limpar_orfaos_storage.py` | 103 | Acha (e, com --aplicar, apaga) arquivos do storage que nenhum registro usa. |
@@ -175,6 +179,7 @@
 | `reconciliar_storage.py` | 46 | Compara referencias de XML/PDF no banco com os objetos existentes no storage. |
 | `regenerar_carimbos_pdfs.py` | 135 | Regenera PDFs espelho de notas canceladas ou substituidas. |
 | `regenerar_espelhos_competencia.py` | 161 | Regenera exclusivamente PDFs espelho de uma competência e certificado. |
+| `resetar_2fa_admin.py` | 42 | Zera a verificacao em duas etapas de um administrador que perdeu o celular. |
 | `rotacionar_segredos.py` | 53 | Recifra as senhas de certificado com a chave nova de SECRETS_KEY. |
 | `sincronizar_cnpjs_portal.py` | 189 |  |
 | `sincronizar_eventos_lote.py` | 202 | Varre notas autorizadas e consulta seus eventos no ADN. |
@@ -187,6 +192,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `__init__.py` | 1 |  |
+| `admin_seguranca_service.py` | 103 | Verificacao em duas etapas do administrador, sessao do painel e auditoria. |
 | `arquivos_service.py` | 56 |  |
 | `auth_service.py` | 47 |  |
 | `certificado_metadata_service.py` | 124 |  |
@@ -378,36 +384,82 @@
 | `RETENCOES_REGRAS.xlsx` |  |  |
 | `consultas_auto.json` | 20 |  |
 
-## `docs/`
-
-| Arquivo | Linhas | Descrição (docstring) |
-|---|---:|---|
-| `ANALISE_CANOPUS_CONSULTAS_2026-10-06.md` | 0 |  |
-| `ANALISE_DOCUMENTACAO_2026-10-06.md` | 0 |  |
-| `DEPLOY_PRODUCAO.md` | 0 |  |
-| `PENDENCIAS_BACKEND_PORTAL.md` | 0 |  |
-| `REVISAO_TECNICA_MAPA.md` | 0 |  |
-
 ## `docs/ai/`
 
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
-| `01_PROJECT_OVERVIEW.md` | 0 |  |
-| `02_ARCHITECTURE.md` | 0 |  |
-| `03_FILE_MAP.md` | 0 |  |
-| `04_FUNCTION_MAP.md` | 0 |  |
-| `05_DATA_FLOW.md` | 0 |  |
-| `06_DATABASE_MAP.md` | 0 |  |
-| `07_API_MAP.md` | 0 |  |
-| `08_BUSINESS_RULES.md` | 0 |  |
-| `09_DEPENDENCY_MAP.md` | 0 |  |
-| `10_RISK_REGISTER.md` | 0 |  |
-| `11_BUGS_AND_TECH_DEBT.md` | 0 |  |
-| `12_CHANGE_IMPACT_MAP.md` | 0 |  |
-| `13_CRITICAL_FILES.md` | 0 |  |
-| `14_AI_HANDOFF.md` | 0 |  |
-| `15_MENTAL_MAP.md` | 0 |  |
-| `16_AGENT_QUICK_START.md` | 0 |  |
+| `00_LEIA_PRIMEIRO.md` | 62 |  |
+| `API.md` | 58 |  |
+| `ARCHITECTURE_CURRENT.md` | 129 |  |
+| `CHANGELOG.md` | 43 |  |
+| `CHANGE_IMPACT.md` | 73 |  |
+| `DATABASE.md` | 80 |  |
+| `FINDINGS.md` | 99 |  |
+| `OPERATIONS.md` | 139 |  |
+| `PROJECT_CONTEXT.md` | 88 |  |
+| `SECURITY.md` | 60 |  |
+
+## `docs/ai/DECISIONS/`
+
+| Arquivo | Linhas | Descrição (docstring) |
+|---|---:|---|
+| `ADR-0001-isolamento-por-grupo.md` | 26 |  |
+| `ADR-0002-esquema-alembic-idempotente.md` | 21 |  |
+| `ADR-0003-nsu-confirmado-no-fim-do-job.md` | 20 |  |
+| `ADR-0004-status-fiscal-pela-estrutura-do-xml.md` | 14 |  |
+| `ADR-0005-contas-por-convite.md` | 17 |  |
+| `ADR-0006-processo-unico-api-worker-agendador.md` | 24 |  |
+| `ADR-0007-canceladas-fora-das-exportacoes.md` | 14 |  |
+| `ADR-0008-pdf-espelho-php.md` | 16 |  |
+| `ADR_TEMPLATE.md` | 49 |  |
+| `README.md` | 16 |  |
+
+## `docs/ai/FERRAMENTAS/`
+
+| Arquivo | Linhas | Descrição (docstring) |
+|---|---:|---|
+| `COMANDOS.md` | 67 |  |
+| `INSTALACAO.md` | 82 |  |
+| `LIMITACOES.md` | 23 |  |
+| `MCP.md` | 55 |  |
+| `README.md` | 54 |  |
+| `VALIDACAO.md` | 27 |  |
+
+## `docs/historico/`
+
+| Arquivo | Linhas | Descrição (docstring) |
+|---|---:|---|
+| `ANALISE_CANOPUS_CONSULTAS_2026-10-06.md` | 84 |  |
+| `ANALISE_DOCUMENTACAO_2026-10-06.md` | 70 |  |
+| `AUDITORIA_BACKEND_2026-10-08.md` | 220 |  |
+| `DEPLOY_PRODUCAO.md` | 27 |  |
+| `MONITORAMENTO_RAILWAY_2026-10-06.md` | 45 |  |
+| `PENDENCIAS_BACKEND_PORTAL.md` | 46 |  |
+| `POS_DEPLOY_2026-10-06.md` | 55 |  |
+| `README.md` | 18 |  |
+| `REVISAO_TECNICA_MAPA.md` | 471 |  |
+| `SEGURANCA_CERTIFICADOS_2026-10-06.md` | 62 |  |
+
+## `docs/historico/ai-snapshot-2026-09-15/`
+
+| Arquivo | Linhas | Descrição (docstring) |
+|---|---:|---|
+| `01_PROJECT_OVERVIEW.md` | 63 |  |
+| `02_ARCHITECTURE.md` | 93 |  |
+| `03_FILE_MAP.md` | 680 |  |
+| `04_FUNCTION_MAP.md` | 1120 |  |
+| `05_DATA_FLOW.md` | 116 |  |
+| `06_DATABASE_MAP.md` | 70 |  |
+| `07_API_MAP.md` | 145 |  |
+| `08_BUSINESS_RULES.md` | 46 |  |
+| `09_DEPENDENCY_MAP.md` | 89 |  |
+| `10_RISK_REGISTER.md` | 31 |  |
+| `11_BUGS_AND_TECH_DEBT.md` | 47 |  |
+| `12_CHANGE_IMPACT_MAP.md` | 75 |  |
+| `13_CRITICAL_FILES.md` | 42 |  |
+| `14_AI_HANDOFF.md` | 106 |  |
+| `15_MENTAL_MAP.md` | 81 |  |
+| `16_AGENT_QUICK_START.md` | 84 |  |
 
 ## `tests/`
 
@@ -448,12 +500,14 @@
 | `test_notas_recentes.py` | 496 |  |
 | `test_notas_tipo_direcao.py` | 171 |  |
 | `test_operational_fields.py` | 584 |  |
+| `test_paginacao_cursor.py` | 96 | Paginacao por cursor em /notas (X-Next-Cursor): continua de onde a pagina |
 | `test_portal_support_endpoints.py` | 1201 |  |
 | `test_prestador_pessoa_fisica.py` | 49 |  |
 | `test_rbac.py` | 71 |  |
 | `test_releitura_mes_anterior.py` | 158 | Releitura desde o 1o dia do mes anterior: na volta de uma parada e a pedido. |
 | `test_retencoes_regras.py` | 266 |  |
 | `test_security_config.py` | 74 |  |
+| `test_seguranca_admin.py` | 195 | Brechas fechadas em 15/10/2026: limite de tentativas no banco, 2FA e sessao |
 | `test_sincronizar_cnpjs_portal.py` | 22 |  |
 | `test_storage_r2.py` | 198 |  |
 

@@ -543,3 +543,18 @@ class AuditoriaAdmin(Base):
     detalhes: Mapped[str | None] = mapped_column(Text, nullable=True)
     ip: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class ErroVisto(Base):
+    """Ate quando os erros de um grupo ja foram vistos no painel admin ("Limpar").
+
+    Nao apaga processos nem logs (sao historico): /admin/erros so passa a mostrar
+    o que aconteceu depois de visto_ate.
+    """
+
+    __tablename__ = "erros_vistos"
+
+    grupo: Mapped[str] = mapped_column(String(40), primary_key=True)
+    visto_ate: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False)
+    usuario_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+

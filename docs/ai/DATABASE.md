@@ -23,11 +23,14 @@
 | `0001_baseline` | Nada: marca o ponto de partida. Registra que produção tem sobras de set/2026 fora dos modelos: tabelas `feedbacks`, `auditoria_admin`, `configuracoes_sistema` e colunas extras em `usuarios`, `certificados` e `processos` |
 | `0002_historico_conferencia` | Cria `notas_conferencia_historico` se não existir |
 | `0003_contas_convite` | `usuarios.email_verificado`, `usuarios.token_version`, `redefinicoes_senha_tokens.tentativas`; converte papel `leitura` → `operador` |
+| `0005_erros_vistos` | Tabela `erros_vistos` (grupo, `visto_ate`, `usuario_id`): o "Limpar" do painel admin |
 | `0004_seguranca_admin` | `usuarios.totp_segredo_cifrado`, `totp_ativo`, `totp_ultimo_passo`; tabelas `tentativas_acesso` e `auditoria_painel_admin` (o nome evita a sobra `auditoria_admin`, que em produção tem outras colunas e está vazia — conferido em 15/10) |
 
 Mudança nova de esquema: modelo **e** revisão Alembic idempotente, no mesmo commit. Linha de comando: `alembic -c alembic.ini current|revision -m "..."`.
 
-## Tabelas (22 no modelo)
+## Tabelas (23 no modelo)
+
+`erros_vistos`: PK `grupo`; até quando os erros do grupo já foram vistos no painel admin. `/admin/erros` e o contador de `/admin/overview` só mostram o que veio depois (processos e logs continuam no banco).
 
 | Tabela | Identidade / constraints | Conteúdo | Escrita por |
 |---|---|---|---|
