@@ -26,6 +26,8 @@
 | ARCH-016 | média | CONFIRMADO | Testes rodam como admin por padrão (`conftest.py` autouse), em SQLite (sem FK, pool ou deadlock), sem Postgres no CI; Python local 3.10 × produção 3.11 | `tests/conftest.py`, `.github/workflows/ci.yml` |
 | ARCH-017 | info | CONFIRMADO | Variáveis no Railway que o código não lê: `LOCAL_SIGNUP_ENABLED`, `FRONTEND_CRIAR_CONTA_URL`, `FRONTEND_RESET_PASSWORD_URL` | Railway × `config.py` |
 | ARCH-018 | média | FORTEMENTE_INDICADO | Planilha fiscal de produção pode não ser a do Git: `data/RETENCOES_REGRAS.xlsx` ganha da raiz, `data/` é o volume e o `.dockerignore` exclui `data/`; mudanças em `data/RETENCOES_REGRAS.xlsx` no repo não chegam à produção | `retencoes_regras_service.REGRAS_XLSX_PATH`, `.dockerignore`, volume `/app/data` |
+| ARCH-019 | baixa | CONFIRMADO (Vulture + `git grep`) | Código morto: 22 funções/classes sem nenhuma referência (nem em testes), 2 arquivos de dados sem leitura no código e 1 import/parâmetro sobrando. Lista em "Detalhes" | ver Detalhes |
+| ARCH-020 | alta | CONFIRMADO (métricas 15/10) | Banco Supabase no plano Micro com CPU em 91% sob uso normal + worker; login de 5 a 60 s. Plano em `PLANO_CARGA_BANCO.md` | Supabase, `useLiveStatus` (10 s), `/certificados` N+1, lista de notas |
 | FIND-L01 | média | CONFIRMADO | Regras de atribuição automática da fila (`/fila-regras-atribuicao*` do backend antigo) não existem | `../historico/PENDENCIAS_BACKEND_PORTAL.md` |
 | FIND-L02 | alta | CONFIRMADO | Banco e storage sem transação comum: o objeto vai ao R2 antes do commit; órfãos ou linhas sem objeto | `legacy_ingestion_service`, `certificados_service`; mitigação: `scripts/limpar_orfaos_storage`, `reconciliar_storage` |
 | FIND-L03 | média | CONFIRMADO (código) | Verificação de consulta ativa seguida de insert, sem constraint: duas requisições simultâneas criam consultas iguais | `consultas_service.enqueue_consultas_pendentes` |
@@ -63,6 +65,19 @@
 **ARCH-018.** Conferir no container se existe `/app/data/RETENCOES_REGRAS.xlsx` e qual o log "Planilha de regras fiscais carregada: N subitens de <caminho>" no startup. Definir uma fonte única versionada (ou variável de caminho) e registrar o checksum da planilha usada.
 
 **ARCH-016.** Job de CI com serviço Postgres; fixture de operador e de outro grupo como padrão nos testes de rota; Python 3.11 local.
+
+**ARCH-019 (código morto, 15/10/2026).** Achado com `vulture --min-confidence 60` e conferido com `git grep -w` (0 referências fora da própria definição). Validadores do Pydantic, middleware e listeners de evento foram descartados como falsos positivos, porque o framework os chama via decorador.
+- Repositórios: `jobs_repo.get_job`, `jobs_repo.get_next_pending_job`, `locks_repo._como_utc`, `notas_repo.count_notas_grupo`, `usuarios_repo.get_usuario`, `usuarios_repo.list_usuarios`.
+- Services: `consultas_service.has_active_consulta_for_certificado`, `notas_service.classificar_tipo_nota`, `nsu_control_service.sincronizar_com_notas`, `operational_fields_service.consulta_simples_api_from_payload`, `portal_support_service._format_value` e `_relatorio_money`, `storage_service.build_export_key`, `build_raw_key`, `build_json_key` e `build_log_key`.
+- API e schemas: `deps.require_certificado_grupo` (só aparece na lista do gerador de índices), `schemas/arquivos.ArquivoDownloadInfo`, `schemas/notas.NotaArquivoResumo`.
+- Scripts: `db_migration_common.table_names_for_models`.
+- Sobras pequenas: import `List` não usado em `adn_nfse_downloader.py:38`; parâmetro `commit_every` ignorado em `legacy_ingestion_service.py:1022`.
+- Arquivos: `data/consultas_auto.json` (o estado do agendador hoje fica em `monitoramento_config`; só o README cita o arquivo) e `empresas.example.json` (nenhum código lê). `RETENCOES_REGRAS.xlsx` da raiz é idêntica à de `data/` e serve de reserva no import (ARCH-018), então **não** é morta.
+- Usados só em testes (manter ou decidir): `portal_support_service._normalizar_invertexto_payload`, `retencoes_regras_service.resolver_subitem_lc116` (citado na REG-033), `StorageService.list_prefix`.
+- Scripts de uso único, já executados, que só o `OPERATIONS.md` cita: `migrar_sqlite_para_postgres`, `validar_migracao_postgres`, `migrar_storage_para_r2`, `migrar_rbac`, `promover_usuarios_locais`, `backfill_documentos_partes`. Não são código morto (são ferramentas manuais), mas podem ir para um arquivo histórico se a decisão for não mantê-los.
+- Nenhum módulo da aplicação ficou sem import.
+
+Recomendação: apagar a lista "sem referência" num commit só, com a suíte completa antes e depois; não apagar os usados em testes nem os scripts sem decisão do responsável.
 
 ## Resolvidos (referência)
 

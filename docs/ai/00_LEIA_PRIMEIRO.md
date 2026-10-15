@@ -20,6 +20,7 @@ React/Vite (repo `Frontend-Portal-NSU`) chama a API FastAPI. Autenticação JWT 
 | Mexer em rota ou contrato HTTP | `API.md` + `gerado/ROTAS.md` |
 | Saber o que quebra se eu mudar X | `CHANGE_IMPACT.md` |
 | Problemas abertos, riscos e dívida | `FINDINGS.md` |
+| Plano em andamento para reduzir a CPU do banco (mapa mental) | `PLANO_CARGA_BANCO.md` |
 | Segredos, certificados, permissões | `SECURITY.md` |
 | Deploy, variáveis, logs, scripts e incidentes | `OPERATIONS.md` |
 | Por que algo foi decidido assim | `DECISIONS/` |

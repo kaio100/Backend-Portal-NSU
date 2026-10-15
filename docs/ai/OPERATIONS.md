@@ -15,7 +15,7 @@
 | Banco | Supabase `xiqiuumoaqhxajqtppmf` (`ca-central-1`, Postgres 17), só como Postgres |
 | Arquivos | Cloudflare R2 (`STORAGE_BACKEND=r2`) |
 | Frontend | `https://frontend-portal-nsu.vercel.app` (CORS fixo no código) |
-| Deploy ativo em 08/10 | `42f3951f` = commit `a0cfbaf4`, desde 07/10 17:11 UTC |
+| Deploy ativo em 15/10 | `c66adfba` = commit `5221ce60`, desde 19:41 UTC, **com `API_WORKER_ENABLED=false` e `EMBEDDED_SCHEDULER_ENABLED=false`** (worker e agendador pausados para aliviar o banco; religar quando o Supabase estiver folgado) |
 | Recursos (7 dias até 08/10) | CPU média 0,06 vCPU (limite 24); memória 0,5–3,2 GB (média 2,2); disco 2,2 → 5,8 GB |
 
 ## Deploy
@@ -24,7 +24,8 @@
 2. Push na `main` → build → o `CMD` roda `python -m backend.app.scripts.migrar_banco` (advisory lock + Alembic) e só então sobe o `uvicorn`. Migração que falha impede a subida.
 3. Depois: `GET /health`, `/db/health`, `/storage/health` com HTTP 200; no log, "Agendador de consultas automaticas iniciado" e, em até 15 min, "Agendador de consultas: {...}".
 4. Scripts pós-deploy, quando o commit exigir: sempre simulação primeiro, depois `--aplicar`/`--executar`. Ex.: `corrigir_status_fiscal` (após mudança de classificação), `sincronizar_eventos_lote --todas --desde AAAA-MM-DD`.
-5. **Rollback:** "Rollback" do deploy anterior no Railway. As revisões Alembic não têm `downgrade` útil (são aditivas): voltar o código não desfaz colunas novas, o que é seguro enquanto o código antigo as ignora.
+5. **Acompanhe o log da subida.** Se aparecer `statement timeout` em "Aplicando migracoes", o container entra em loop e o site fica em 502 (incidente de 15/10). Rollback não ajuda se a versão anterior roda a mesma migração: corrija a migração e publique de novo.
+6. **Rollback:** "Rollback" do deploy anterior no Railway. As revisões Alembic não têm `downgrade` útil (são aditivas): voltar o código não desfaz colunas novas, o que é seguro enquanto o código antigo as ignora.
 
 ## Ambiente local
 
@@ -109,6 +110,7 @@
 4. Eventos de notas antigas: `sincronizar_eventos_lote --todas --desde AAAA-MM-DD` (sem `--executar` só conta).
 
 ### Lentidão e `QueuePool`
+Primeiro olhe a CPU do banco no Supabase (Reports → Database). Em 15/10 ela estava em 91% com o disco parado, e até consultas simples estouravam o `statement_timeout`. Nesse estado, pausar o worker (variáveis acima) não bastou: a saída foi aumentar a computação do Supabase. Plano de redução de carga em `PLANO_CARGA_BANCO.md`.
 Ver se coincide com o worker processando (log de jobs) e com `GET /notas`/`/notas/todas` em 499, e nos logs do Postgres consultas com `OFFSET` alto ou várias iguais em paralelo (incidente de 15/10: contagem da Conferência e listagens com OFFSET). Desde a branch de 15/10 as listagens usam cursor e o frontend não repete pedido após timeout. Correção estrutural restante (pool separado para o worker) em ARCH-002.
 
 ### Admin perdeu o celular (2FA)
