@@ -105,9 +105,13 @@ def _usuario_dict(usuario: Usuario) -> dict:
     }
 
 
+# Chave de erros_vistos para erros cuja empresa nao existe mais (sem grupo); so o admin geral os ve.
+ERROS_SEM_GRUPO = "__sem_grupo__"
+
+
 def _somente_nao_vistos(query, modelo, coluna_data):
     """Erros depois do ultimo "Limpar" do grupo da empresa (sem apagar nada)."""
-    query = query.outerjoin(ErroVisto, ErroVisto.grupo == Empresa.grupo)
+    query = query.outerjoin(ErroVisto, ErroVisto.grupo == func.coalesce(Empresa.grupo, ERROS_SEM_GRUPO))
     return query.filter(or_(ErroVisto.visto_ate.is_(None), coluna_data > ErroVisto.visto_ate))
 
 
@@ -330,9 +334,17 @@ def limpar_erros(admin: Usuario = Depends(require_admin), db: Session = Depends(
     """Marca os erros ate agora como vistos (do grupo do admin; de todos, para o admin geral).
     Processos e logs continuam no banco; a acao fica na auditoria."""
     grupo = _escopo(admin)
-    grupos = [grupo] if grupo is not None else [g.codigo for g in db.query(Grupo).all()]
+    if grupo is not None:
+        grupos = [grupo]
+    else:
+        # O admin geral limpa tambem empresas cujo grupo nao tem linha em `grupos`
+        # e logs de empresa ja removida (sem grupo).
+        codigos = {g.codigo for g in db.query(Grupo).all()}
+        codigos |= {codigo for (codigo,) in db.query(Empresa.grupo).distinct() if codigo}
+        grupos = sorted(codigos)
     agora = datetime.now(timezone.utc)
-    for codigo in grupos:
+    marcar = grupos if grupo is not None else [*grupos, ERROS_SEM_GRUPO]
+    for codigo in marcar:
         visto = db.get(ErroVisto, codigo)
         if visto is None:
             db.add(ErroVisto(grupo=codigo, visto_ate=agora, usuario_id=admin.id))

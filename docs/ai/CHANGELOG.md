@@ -3,6 +3,7 @@
 Uma linha por mudança relevante, mais recente primeiro. Detalhe: `git show <commit>`. Os documentos de estado atual (`docs/ai/*`) não carregam histórico; ele fica aqui.
 
 ## 2026-10-15
+- `POST /admin/erros/limpar` do admin geral passa a marcar também os grupos citados pelas empresas (mesmo sem linha em `grupos`) e a chave `__sem_grupo__` (erros de empresa removida); antes esses erros continuavam aparecendo. Teste `test_limpar_do_admin_geral_inclui_empresa_de_grupo_sem_cadastro`.
 - Documentação: ARCHITECTURE_CURRENT, CHANGE_IMPACT, PROJECT_CONTEXT (REG-043 a REG-046) e FINDINGS (SEC-B314, `defusedxml`) atualizados para `ae9d4e2d`. Auditoria de 15/10: import-linter 3/3 contratos; Bandit/Semgrep apontam `xml.etree` (SEC-B314), SHA-1 de impressão digital de certificado e SQL textual em scripts de admin (os dois últimos aceitos).
 - Painel admin: `GET /admin/volumetria` (notas por dia e mês, valores, tomadas × prestadas, situação, top empresas, por grupo, pendentes por responsável, consultas ao ADN por dia, duração média, certificados por vencimento; `volumetria_service`) e `POST /admin/erros/limpar` (marca os erros como vistos por grupo, sem apagar processos nem logs; tabela `erros_vistos`, migração `0005_erros_vistos`). `/auth/me` informa `super_admin`.
 - Branch `ajustes/seguranca-admin-paginacao` (sem commit): paginação por cursor em `/notas` (`cursor` + cabeçalho `X-Next-Cursor`) e em todas as varreduras internas (`_percorrer_repo`), no lugar do OFFSET que deixou as páginas finais com 10–16 s e esgotou o pool em 15/10.

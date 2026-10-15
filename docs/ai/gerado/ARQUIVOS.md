@@ -1,6 +1,6 @@
 # Índice de arquivos versionados
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `ae9d4e2d`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `12cf6026`. Não editar à mão.
 
 
 350 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
@@ -51,7 +51,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `__init__.py` | 1 |  |
-| `admin.py` | 427 |  |
+| `admin.py` | 439 |  |
 | `arquivos.py` | 71 |  |
 | `auth.py` | 272 |  |
 | `certificados.py` | 496 |  |
@@ -393,7 +393,7 @@
 | `00_LEIA_PRIMEIRO.md` | 62 |  |
 | `API.md` | 58 |  |
 | `ARCHITECTURE_CURRENT.md` | 135 |  |
-| `CHANGELOG.md` | 44 |  |
+| `CHANGELOG.md` | 45 |  |
 | `CHANGE_IMPACT.md` | 73 |  |
 | `DATABASE.md` | 80 |  |
 | `FINDINGS.md` | 100 |  |
@@ -468,7 +468,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `conftest.py` | 67 |  |
-| `test_admin_volumetria_erros.py` | 95 | Painel admin: "Limpar" erros sem apagar historico e numeros da Volumetria. |
+| `test_admin_volumetria_erros.py` | 123 | Painel admin: "Limpar" erros sem apagar historico e numeros da Volumetria. |
 | `test_adn_data_cutoff.py` | 46 |  |
 | `test_auth_account.py` | 101 |  |
 | `test_certificados_contagem.py` | 26 |  |

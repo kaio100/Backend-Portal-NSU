@@ -75,6 +75,34 @@ def test_limpar_erros_esconde_os_vistos_sem_apagar_e_mostra_os_novos():
         assert [e["mensagem"] for e in client.get("/admin/erros").json()] == ["Novo erro"]
 
 
+
+def test_limpar_do_admin_geral_inclui_empresa_de_grupo_sem_cadastro():
+    from backend.app.core.config import settings
+
+    _preparar()
+    with SessionLocal() as db:
+        # Grupo so no texto da empresa, sem linha em `grupos` (dados antigos/importados).
+        orfa = Empresa(nome="Grupo sem cadastro", cnpj="55444333000122", ambiente="producao", ativo=True,
+                       grupo="grupo_sem_cadastro")
+        db.add(orfa)
+        db.commit()
+        processo = Processo(empresa_id=orfa.id, tipo="consulta_nfse", status="finalizado")
+        db.add(processo)
+        db.commit()
+        db.add(LogProcesso(processo_id=processo.id, empresa_id=orfa.id, level="ERROR", mensagem="Falha sem empresa",
+                           created_at=datetime.now(timezone.utc)))
+        db.commit()
+    original = settings.super_admin_emails
+    object.__setattr__(settings, "super_admin_emails", "portal-test@example.com")
+    try:
+        with TestClient(app) as client:
+            mensagens = [e["mensagem"] for e in client.get("/admin/erros").json()]
+            assert "Falha sem empresa" in mensagens
+            assert client.post("/admin/erros/limpar").status_code == 200
+            assert client.get("/admin/erros").json() == []
+    finally:
+        object.__setattr__(settings, "super_admin_emails", original)
+
 def test_volumetria_agrega_no_banco_e_respeita_o_grupo():
     _preparar()
     with TestClient(app) as client:

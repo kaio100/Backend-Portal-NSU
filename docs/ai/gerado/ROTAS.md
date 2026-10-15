@@ -1,29 +1,29 @@
 # Índice de rotas HTTP
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `ae9d4e2d`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `12cf6026`. Não editar à mão.
 
 
 110 rotas declaradas nos routers. **Acesso**: a dependência mais forte encontrada (router, decorador, parâmetro ou chamada direta). **Grupo**: o corpo da função chama um filtro por grupo (`require_*_grupo`, `usuario.grupo`, escopo do admin). É uma detecção textual: confira o código antes de concluir que uma rota é segura ou insegura.
 
 | Rota | Método | Função | Linha | Acesso | Grupo |
 |---|---|---|---:|---|---|
-| `/admin/acessos` | GET | `admin.py::acessos` | 149 | admin | sim |
-| `/admin/arquivamento` | GET | `admin.py::status_arquivamento` | 353 | admin | sim |
-| `/admin/arquivamento` | POST | `admin.py::executar_arquivamento` | 387 | admin | sim |
-| `/admin/auditoria` | GET | `admin.py::auditoria` | 400 | admin | sim |
-| `/admin/erros` | GET | `admin.py::erros` | 288 | admin | sim |
-| `/admin/erros/limpar` | POST | `admin.py::limpar_erros` | 329 | admin | sim |
-| `/admin/grupos` | GET | `admin.py::listar_grupos` | 222 | admin | sim |
-| `/admin/grupos` | POST | `admin.py::criar_grupo` | 236 | admin geral | — |
-| `/admin/grupos/{grupo_id}` | DELETE | `admin.py::excluir_grupo` | 263 | admin geral | — |
-| `/admin/grupos/{grupo_id}` | PATCH | `admin.py::editar_grupo` | 250 | admin geral | — |
-| `/admin/overview` | GET | `admin.py::overview` | 115 | admin | sim |
-| `/admin/usuarios` | GET | `admin.py::usuarios` | 169 | admin | sim |
-| `/admin/usuarios/{usuario_id}` | DELETE | `admin.py::excluir_usuario` | 207 | admin | sim |
-| `/admin/usuarios/{usuario_id}` | PATCH | `admin.py::atualizar_usuario` | 177 | admin | sim |
-| `/admin/usuarios/{usuario_id}/2fa/reset` | POST | `admin.py::resetar_2fa_usuario` | 423 | admin geral | sim |
-| `/admin/usuarios/{usuario_id}/redefinir-senha` | POST | `admin.py::redefinir_senha` | 278 | admin | sim |
-| `/admin/volumetria` | GET | `admin.py::volumetria` | 347 | admin | sim |
+| `/admin/acessos` | GET | `admin.py::acessos` | 153 | admin | sim |
+| `/admin/arquivamento` | GET | `admin.py::status_arquivamento` | 365 | admin | sim |
+| `/admin/arquivamento` | POST | `admin.py::executar_arquivamento` | 399 | admin | sim |
+| `/admin/auditoria` | GET | `admin.py::auditoria` | 412 | admin | sim |
+| `/admin/erros` | GET | `admin.py::erros` | 292 | admin | sim |
+| `/admin/erros/limpar` | POST | `admin.py::limpar_erros` | 333 | admin | sim |
+| `/admin/grupos` | GET | `admin.py::listar_grupos` | 226 | admin | sim |
+| `/admin/grupos` | POST | `admin.py::criar_grupo` | 240 | admin geral | — |
+| `/admin/grupos/{grupo_id}` | DELETE | `admin.py::excluir_grupo` | 267 | admin geral | — |
+| `/admin/grupos/{grupo_id}` | PATCH | `admin.py::editar_grupo` | 254 | admin geral | — |
+| `/admin/overview` | GET | `admin.py::overview` | 119 | admin | sim |
+| `/admin/usuarios` | GET | `admin.py::usuarios` | 173 | admin | sim |
+| `/admin/usuarios/{usuario_id}` | DELETE | `admin.py::excluir_usuario` | 211 | admin | sim |
+| `/admin/usuarios/{usuario_id}` | PATCH | `admin.py::atualizar_usuario` | 181 | admin | sim |
+| `/admin/usuarios/{usuario_id}/2fa/reset` | POST | `admin.py::resetar_2fa_usuario` | 435 | admin geral | sim |
+| `/admin/usuarios/{usuario_id}/redefinir-senha` | POST | `admin.py::redefinir_senha` | 282 | admin | sim |
+| `/admin/volumetria` | GET | `admin.py::volumetria` | 359 | admin | sim |
 | `/api/danfse/gerar` | POST | `danfse.py::gerar_danfse` | 16 | operador | — |
 | `/arquivos/{arquivo_id}/download` | GET | `arquivos.py::download_arquivo` | 38 | login | sim |
 | `/arquivos/{arquivo_id}/preview` | GET | `arquivos.py::visualizar_arquivo` | 58 | login | sim |
