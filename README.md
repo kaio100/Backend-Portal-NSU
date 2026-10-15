@@ -4,6 +4,10 @@ Backend FastAPI para cadastro de certificados, consultas ADN por NSU,
 ingestao de XML/PDF, controle de ultimo NSU, arquivos de notas e endpoints
 consumidos pelo frontend do Portal NFS-e.
 
+Documentacao tecnica (arquitetura, regras, banco, API, operacao, riscos e
+decisoes): comece por [`docs/ai/00_LEIA_PRIMEIRO.md`](docs/ai/00_LEIA_PRIMEIRO.md).
+Variaveis de ambiente, deploy e runbooks: [`docs/ai/OPERATIONS.md`](docs/ai/OPERATIONS.md).
+
 ## Estrutura principal
 
 - `backend/`: API, models, repositories, services e worker.
@@ -87,8 +91,10 @@ python -m backend.app.worker.scheduler
 Se usar worker separado, configure `API_WORKER_ENABLED=false` na API para evitar
 dois consumidores da mesma fila.
 
-Em producao, mantenha tambem `EMBEDDED_SCHEDULER_ENABLED=false` na API. O
-`docker-compose.yml` ja sobe API, worker e scheduler como processos separados.
+Com worker separado, mantenha tambem `EMBEDDED_SCHEDULER_ENABLED=false` na API.
+O `docker-compose.yml` ja sobe API, worker e scheduler como processos separados.
+A producao atual (Railway) NAO faz isso: um unico servico roda API, worker e
+agendador juntos (ver `docs/ai/DECISIONS/ADR-0006-processo-unico-api-worker-agendador.md`).
 
 ## Endpoints importantes
 
@@ -102,7 +108,8 @@ Em producao, mantenha tambem `EMBEDDED_SCHEDULER_ENABLED=false` na API. O
 - `POST /notas/download-lote`
 - `GET /arquivos/{id}/download`
 - `POST /consultas/iniciar`
-- `POST /consultas/cancelar`
+- `POST /consultas/desativar`
+- Lista completa e gerada do codigo: `docs/ai/gerado/ROTAS.md`
 - `GET /cnpj/status`
 - `GET /cnpj/{cnpj}`
 - `POST /api/danfse/gerar`: recebe `arquivo_xml` e retorna o DANFSe em PDF.
