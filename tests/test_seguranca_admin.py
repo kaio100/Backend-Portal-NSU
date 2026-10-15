@@ -180,3 +180,16 @@ def test_operador_nao_abre_sessao_admin_e_alteracoes_ficam_na_auditoria():
 def test_token_do_portal_dura_um_dia_de_trabalho():
     # O padrao do codigo; JWT_EXPIRE_MINUTES no ambiente ainda pode mudar.
     assert type(settings).model_fields["jwt_expire_minutes"].default == 720
+
+
+def test_me_informa_se_e_admin_geral():
+    _limpar()
+    _id, token = _usuario("comum@seguranca.test", admin=True)
+    original = settings.super_admin_emails
+    with TestClient(app) as client:
+        assert client.get("/auth/me", headers=_auth(token)).json()["super_admin"] is False
+        try:
+            object.__setattr__(settings, "super_admin_emails", "comum@seguranca.test")
+            assert client.get("/auth/me", headers=_auth(token)).json()["super_admin"] is True
+        finally:
+            object.__setattr__(settings, "super_admin_emails", original)

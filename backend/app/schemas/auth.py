@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -78,6 +78,16 @@ class UsuarioRead(BaseModel):
     grupo: str
     is_admin: bool = False
     papel: str = "operador"
+
+    @computed_field
+    @property
+    def super_admin(self) -> bool:
+        """Admin geral (SUPER_ADMIN_EMAILS): o unico que move usuarios entre grupos.
+        Mesma regra de deps.eh_super_admin; o frontend usa para mostrar ou esconder a troca."""
+        from backend.app.core.config import settings
+
+        eh_admin = self.is_admin or self.papel == "admin"
+        return eh_admin and self.email.strip().lower() in settings.super_admin_email_set
 
 
 class LoginResponse(BaseModel):
