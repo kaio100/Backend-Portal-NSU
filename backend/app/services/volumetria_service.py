@@ -44,7 +44,7 @@ def calcular(db: Session, grupo: str | None, dias: int = 30, hoje: date | None =
     valor = func.coalesce(func.sum(Nota.valor_servico), 0)
 
     # Notas por dia (periodo) e por mes (ultimos 12 meses + o atual), pela emissao.
-    por_dia = dict()
+    por_dia: dict[date, tuple[int, float]] = {}
     for dia, total, soma in (
         notas_do_escopo(db.query(Nota.data_emissao, func.count(Nota.id), valor))
         .filter(Nota.data_emissao >= inicio, Nota.data_emissao <= hoje)
@@ -74,7 +74,8 @@ def calcular(db: Session, grupo: str | None, dias: int = 30, hoje: date | None =
         meses.append({"mes": chave, "notas": int(por_mes[chave][0]), "valor": round(por_mes[chave][1], 2)})
         cursor = date(cursor.year + (cursor.month == 12), cursor.month % 12 + 1, 1)
 
-    no_periodo = lambda q: notas_do_escopo(q).filter(Nota.data_emissao >= inicio, Nota.data_emissao <= hoje)  # noqa: E731
+    def no_periodo(query):
+        return notas_do_escopo(query).filter(Nota.data_emissao >= inicio, Nota.data_emissao <= hoje)
 
     # Tomadas x prestadas: o CNPJ da empresa monitorada como tomador ou prestador.
     tipo = case(
