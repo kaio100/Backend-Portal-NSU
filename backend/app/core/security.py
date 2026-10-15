@@ -76,3 +76,27 @@ def decode_access_token(token: str) -> dict[str, Any]:
         return jwt.decode(token, settings.jwt_secret, algorithms=[_JWT_ALGORITHM])
     except jwt.PyJWTError as exc:
         raise TokenError("Token invalido ou expirado.") from exc
+
+
+ESCOPO_ADMIN = "admin"
+
+
+def create_admin_token(usuario_id: int, versao: int = 0) -> tuple[str, datetime]:
+    """Token curto do painel administrativo, emitido depois de senha + 2FA.
+
+    Vai no cabecalho X-Admin-Token, separado do token do portal, e nao serve
+    como token comum (get_current_usuario recusa tokens com escopo).
+    """
+    if not settings.jwt_secret:
+        raise TokenError("JWT_SECRET nao configurada. Defina uma chave no .env.")
+    now = datetime.now(timezone.utc)
+    expira = now + timedelta(minutes=settings.admin_sessao_minutos)
+    payload = {"sub": str(usuario_id), "ver": int(versao or 0), "escopo": ESCOPO_ADMIN, "iat": now, "exp": expira}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=_JWT_ALGORITHM), expira
+
+
+def decode_admin_token(token: str) -> dict[str, Any]:
+    payload = decode_access_token(token)
+    if payload.get("escopo") != ESCOPO_ADMIN:
+        raise TokenError("Token sem escopo de administrador.")
+    return payload

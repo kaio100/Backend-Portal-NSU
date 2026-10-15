@@ -85,3 +85,16 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     expires_in_minutes: int
     usuario: UsuarioRead
+
+
+class SenhaRequest(BaseModel):
+    senha: str = Field(min_length=1, max_length=128)
+
+
+class CodigoRequest(BaseModel):
+    codigo: str = Field(min_length=6, max_length=12)
+
+
+class AdminSessaoRequest(SenhaRequest):
+    codigo: str = Field(min_length=6, max_length=12)
+

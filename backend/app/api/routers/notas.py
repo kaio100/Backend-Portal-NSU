@@ -102,11 +102,15 @@ def list_notas(
     sort: str = Query(default="recentes", pattern="^(recentes|emissao)$"),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    # Ponteiro devolvido no cabecalho X-Next-Cursor da pagina anterior. Prefira-o
+    # ao offset: a pagina continua de onde parou sem o banco reler as anteriores.
+    cursor: str | None = Query(default=None, max_length=512),
+    response: Response = None,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_usuario),
 ):
     try:
-        return notas_service.listar_notas(
+        notas = notas_service.listar_notas(
             db,
             grupo=usuario.grupo,
             empresa_id=empresa_id,
@@ -138,9 +142,16 @@ def list_notas(
             limit=limit,
             offset=offset,
             arquivadas=arquivadas,
+            cursor=cursor,
         )
     except NotaServiceError as exc:
         _handle_error(exc)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    seguinte = notas_service.proximo_cursor(notas, limit, sort)
+    if seguinte and response is not None:
+        response.headers["X-Next-Cursor"] = seguinte
+    return notas
 
 
 @router.get("/todas", response_model=NotasTodasResponse)

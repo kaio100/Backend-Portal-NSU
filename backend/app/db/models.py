@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Date,
     DateTime,
@@ -442,6 +443,12 @@ class Usuario(TimestampMixin, Base):
     email_verificado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     # Vai no JWT; trocar ou redefinir a senha incrementa e derruba os tokens antigos.
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # Verificacao em duas etapas (TOTP), obrigatoria para abrir a sessao de administrador.
+    # O segredo fica cifrado com SECRETS_KEY; so vale depois de confirmado com um codigo.
+    totp_segredo_cifrado: Mapped[str | None] = mapped_column(Text, nullable=True)
+    totp_ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Ultimo passo de 30 s aceito: o mesmo codigo nao serve duas vezes.
+    totp_ultimo_passo: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     empresa: Mapped[Empresa] = relationship(back_populates="usuarios")
 
@@ -501,4 +508,38 @@ class RedefinicaoSenhaToken(Base):
     used_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ip_solicitante: Mapped[str | None] = mapped_column(String(80), nullable=True)
     tentativas: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class TentativaAcesso(Base):
+    """Uma tentativa em rota com limite (login, codigo, senha de certificado).
+
+    Fica no banco para o limite valer entre processos e sobreviver a deploy e
+    reinicio. `chave` e o hash do motivo + IP/e-mail: nao guarda dado pessoal.
+    """
+
+    __tablename__ = "tentativas_acesso"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chave: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    criado_em: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class AuditoriaAdmin(Base):
+    """Acao feita no painel administrativo ou tentativa de abrir a sessao de admin.
+
+    O nome nao e "auditoria_admin": essa tabela existe em producao como sobra de
+    set/2026, com outras colunas e vazia (ver 0001_baseline).
+    """
+
+    __tablename__ = "auditoria_painel_admin"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    grupo: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    acao: Mapped[str] = mapped_column(String(160), nullable=False)
+    resultado: Mapped[str] = mapped_column(String(40), nullable=False)
+    detalhes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

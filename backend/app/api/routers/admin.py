@@ -9,15 +9,26 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import PAPEIS_VALIDOS, eh_super_admin, get_db, require_admin, require_super_admin
+from backend.app.api.deps import (
+    PAPEIS_VALIDOS,
+    auditar_admin,
+    eh_super_admin,
+    get_db,
+    require_admin,
+    require_admin_sessao,
+    require_super_admin,
+)
 from backend.app.core.security import hash_password
 from backend.app.core.tempo import agora_local, data_local, hoje_local, inicio_do_dia_utc
-from backend.app.db.models import AcessoUsuario, Arquivo, ConferenciaHistorico, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, Usuario
+from backend.app.db.models import AcessoUsuario, Arquivo, AuditoriaAdmin, ConferenciaHistorico, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, Usuario
 from backend.app.db.session import SessionLocal
+from backend.app.services import admin_seguranca_service
 from backend.app.services.notas_archive_service import arquivar_notas_anos_anteriores
 from backend.app.services.storage_service import get_storage_service
 
-router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
+# Alem do papel de admin, o painel exige a sessao aberta com senha + 2FA, e toda
+# alteracao fica na auditoria (deps.require_admin_sessao e deps.auditar_admin).
+router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin_sessao), Depends(auditar_admin)])
 
 
 class UsuarioAdminUpdate(BaseModel):
@@ -89,6 +100,7 @@ def _usuario_dict(usuario: Usuario) -> dict:
         "ativo": usuario.ativo,
         "is_admin": usuario.is_admin,
         "papel": "admin" if usuario.is_admin else usuario.papel,
+        "totp_ativo": bool(getattr(usuario, "totp_ativo", False)),
         "created_at": usuario.created_at,
     }
 
@@ -345,3 +357,34 @@ def executar_arquivamento(payload: ArquivamentoExecutar, background_tasks: Backg
     # Cada admin arquiva so as empresas do proprio grupo.
     background_tasks.add_task(_executar_arquivamento_background, payload.ano, _escopo(admin))
     return {"status": "agendado", "ano_operacional": payload.ano}
+
+
+@router.get("/auditoria")
+def auditoria(limit: int = 100, admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
+    """Ultimas acoes no painel e tentativas de abrir a sessao de admin."""
+    query = db.query(AuditoriaAdmin)
+    grupo = _escopo(admin)
+    if grupo is not None:
+        query = query.filter(AuditoriaAdmin.grupo == grupo)
+    itens = query.order_by(AuditoriaAdmin.id.desc()).limit(max(1, min(limit, 500))).all()
+    return [
+        {
+            "id": item.id,
+            "email": item.email,
+            "grupo": item.grupo,
+            "acao": item.acao,
+            "resultado": item.resultado,
+            "detalhes": item.detalhes,
+            "ip": item.ip,
+            "created_at": item.created_at,
+        }
+        for item in itens
+    ]
+
+
+@router.post("/usuarios/{usuario_id}/2fa/reset", dependencies=[Depends(require_super_admin)])
+def resetar_2fa_usuario(usuario_id: int, admin: Usuario = Depends(require_admin), db: Session = Depends(get_db)):
+    """Admin geral: zera o 2FA de quem perdeu o celular; a pessoa configura de novo."""
+    usuario = _usuario_no_escopo(db, usuario_id, admin)
+    admin_seguranca_service.resetar_2fa(db, usuario)
+    return {"ok": True, "message": "Verificacao em duas etapas zerada. A pessoa precisa configurar de novo."}

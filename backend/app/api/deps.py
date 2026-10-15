@@ -1,11 +1,12 @@
 import hmac
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
-from backend.app.core.security import TokenError, decode_access_token
+from backend.app.core.rede import ip_cliente
+from backend.app.core.security import TokenError, decode_access_token, decode_admin_token
 from backend.app.db.models import Arquivo, Certificado, Empresa, Grupo, Nota, Processo, Usuario
 from backend.app.db.session import get_db
 from backend.app.services.storage_service import get_storage_service
@@ -47,6 +48,9 @@ def get_current_usuario(
     try:
         payload = decode_access_token(credentials.credentials)
         usuario_id = int(payload["sub"])
+        if payload.get("escopo"):
+            # Token do painel admin (X-Admin-Token) nao serve como token do portal.
+            raise TokenError("Token com escopo restrito.")
     except (TokenError, KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalido ou expirado.") from exc
 
@@ -76,6 +80,52 @@ def require_admin(usuario: Usuario = Depends(get_current_usuario)) -> Usuario:
     if not _eh_admin(usuario):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso exclusivo para administradores.")
     return usuario
+
+
+# Resposta 403 com este texto: o frontend pede senha + codigo de 2FA e tenta de novo.
+ADMIN_SESSAO_NECESSARIA = "admin_sessao_necessaria"
+
+
+def require_admin_sessao(
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+    usuario: Usuario = Depends(require_admin),
+) -> Usuario:
+    """Painel administrativo: alem de ser admin, exige a sessao curta aberta com
+    senha + 2FA (POST /auth/admin/sessao). ADMIN_2FA_OBRIGATORIO=false desliga."""
+    if not settings.admin_2fa_obrigatorio:
+        return usuario
+    if not x_admin_token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=ADMIN_SESSAO_NECESSARIA)
+    try:
+        payload = decode_admin_token(x_admin_token)
+        mesmo_usuario = int(payload["sub"]) == int(usuario.id)
+        mesma_versao = int(payload.get("ver") or 0) == int(getattr(usuario, "token_version", 0) or 0)
+    except (TokenError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=ADMIN_SESSAO_NECESSARIA) from exc
+    if not mesmo_usuario or not mesma_versao:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=ADMIN_SESSAO_NECESSARIA)
+    return usuario
+
+
+def auditar_admin(request: Request, usuario: Usuario = Depends(require_admin)):
+    """Registra cada alteracao feita pelo painel administrativo (POST/PATCH/DELETE)."""
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        yield
+        return
+    from backend.app.services.admin_seguranca_service import registrar
+
+    rota = getattr(request.scope.get("route"), "path", request.url.path)
+    resultado = "ok"
+    try:
+        yield
+    except HTTPException as exc:
+        resultado = f"erro {exc.status_code}"
+        raise
+    except Exception:
+        resultado = "erro 500"
+        raise
+    finally:
+        registrar(usuario, f"{request.method} {rota}", resultado, ip_cliente(request), dict(request.path_params) or None)
 
 
 def require_super_admin(usuario: Usuario = Depends(require_admin)) -> Usuario:

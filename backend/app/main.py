@@ -281,10 +281,11 @@ app.add_middleware(
     allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Admin-Token"],
     # Sem isso o navegador (frontend em outro dominio) nao le o nome do arquivo
-    # nos downloads de XML/PDF/ZIP/XLSX e salva com um nome padrao.
-    expose_headers=["Content-Disposition"],
+    # nos downloads de XML/PDF/ZIP/XLSX e salva com um nome padrao. X-Next-Cursor
+    # e o ponteiro da proxima pagina de /notas.
+    expose_headers=["Content-Disposition", "X-Next-Cursor"],
 )
 
 # /health e /db/health ficam sem API key: sao usados por health checks de

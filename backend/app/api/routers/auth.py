@@ -5,11 +5,14 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.deps import _eh_admin, get_current_usuario, get_db, require_admin, require_api_key, require_operator
 from backend.app.core.config import settings
-from backend.app.core.rate_limit import RateLimiter
+from backend.app.core.rate_limit import RateLimiterBanco
 from backend.app.core.rede import ip_cliente
 from backend.app.core.security import verify_password
 from backend.app.db.models import AcessoUsuario, Empresa, Grupo, Usuario
 from backend.app.schemas.auth import (
+    AdminSessaoRequest,
+    CodigoRequest,
+    SenhaRequest,
     ConviteCreate,
     CriarContaRequest,
     EmailRequest,
@@ -22,22 +25,30 @@ from backend.app.schemas.auth import (
     VerificarEmailRequest,
 )
 from backend.app.schemas.usuarios import UsuarioCreate
-from backend.app.services import auth_service, contas_service
+from backend.app.services import admin_seguranca_service, auth_service, contas_service
 from backend.app.services.auth_service import AuthError
+from backend.app.services.admin_seguranca_service import SegurancaAdminError
 from backend.app.services.contas_service import ContaError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Freios contra tentativa e erro, por IP real (atras do proxy) + e-mail.
-_login_rate_limiter = RateLimiter(max_attempts=8, window_seconds=300)
-_codigo_rate_limiter = RateLimiter(max_attempts=10, window_seconds=900)
-_envio_rate_limiter = RateLimiter(max_attempts=3, window_seconds=900)
-_cadastro_rate_limiter = RateLimiter(max_attempts=10, window_seconds=3600)
+# Freios contra tentativa e erro, gravados no banco (valem entre processos e
+# sobrevivem a deploy). O login tem tres: IP + e-mail, a conta vinda de qualquer
+# IP (ataque distribuido a uma conta) e o IP tentando varios e-mails.
+_login_rate_limiter = RateLimiterBanco(max_attempts=8, window_seconds=300)
+_login_conta_limiter = RateLimiterBanco(max_attempts=20, window_seconds=900)
+_login_ip_limiter = RateLimiterBanco(max_attempts=60, window_seconds=900)
+_codigo_rate_limiter = RateLimiterBanco(max_attempts=10, window_seconds=900)
+_envio_rate_limiter = RateLimiterBanco(max_attempts=3, window_seconds=900)
+_cadastro_rate_limiter = RateLimiterBanco(max_attempts=10, window_seconds=3600)
+# Por usuario: configurar o 2FA e abrir a sessao do painel admin (senha + codigo).
+_admin_2fa_limiter = RateLimiterBanco(max_attempts=10, window_seconds=900)
+_admin_sessao_limiter = RateLimiterBanco(max_attempts=5, window_seconds=300)
 
 _MENSAGEM_CODIGO_ENVIADO = "Se o e-mail estiver cadastrado, enviamos um codigo. Ele vale por poucos minutos."
 
 
-def _limitar(limitador: RateLimiter, chave: str) -> None:
+def _limitar(limitador: RateLimiterBanco, chave: str) -> None:
     if not limitador.allow(chave):
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em alguns minutos.")
 
@@ -49,6 +60,8 @@ def _erro_conta(exc: ContaError) -> HTTPException:
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     ip = ip_cliente(request)
+    _limitar(_login_ip_limiter, f"login-ip:{ip}")
+    _limitar(_login_conta_limiter, f"login-conta:{payload.email}")
     _limitar(_login_rate_limiter, f"{ip}:{payload.email}")
     try:
         usuario, token = auth_service.autenticar(db, payload.email, payload.senha)
@@ -76,6 +89,66 @@ def trocar_senha(payload: TrocarSenhaRequest, db: Session = Depends(get_db), usu
         raise HTTPException(status_code=400, detail="Senha atual incorreta.")
     contas_service.trocar_senha(db, usuario, payload.nova_senha)
     return MensagemResponse(mensagem="Senha alterada. Entre novamente com a senha nova.")
+
+
+# ------------------------------------------------------------- 2FA e sessao do painel admin
+
+
+def _erro_seguranca(exc: SegurancaAdminError) -> HTTPException:
+    return HTTPException(status_code=exc.status, detail=str(exc))
+
+
+@router.get("/2fa")
+def estado_2fa(usuario: Usuario = Depends(require_admin)):
+    return {"ativo": bool(usuario.totp_ativo), "obrigatorio": settings.admin_2fa_obrigatorio}
+
+
+@router.post("/2fa/iniciar")
+def iniciar_2fa(
+    payload: SenhaRequest, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(require_admin)
+):
+    """Gera o segredo (ainda inativo) para cadastrar no aplicativo autenticador."""
+    _limitar(_admin_2fa_limiter, f"2fa:{usuario.id}")
+    try:
+        resultado = admin_seguranca_service.iniciar_2fa(db, usuario, payload.senha)
+    except SegurancaAdminError as exc:
+        admin_seguranca_service.registrar(usuario, "iniciar_2fa", f"erro {exc.status}", ip_cliente(request))
+        raise _erro_seguranca(exc) from exc
+    admin_seguranca_service.registrar(usuario, "iniciar_2fa", "ok", ip_cliente(request))
+    return resultado
+
+
+@router.post("/2fa/confirmar", response_model=MensagemResponse)
+def confirmar_2fa(
+    payload: CodigoRequest, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(require_admin)
+):
+    _limitar(_admin_2fa_limiter, f"2fa:{usuario.id}")
+    try:
+        admin_seguranca_service.confirmar_2fa(db, usuario, payload.codigo)
+    except SegurancaAdminError as exc:
+        admin_seguranca_service.registrar(usuario, "confirmar_2fa", f"erro {exc.status}", ip_cliente(request))
+        raise _erro_seguranca(exc) from exc
+    admin_seguranca_service.registrar(usuario, "confirmar_2fa", "ok", ip_cliente(request))
+    return MensagemResponse(mensagem="Verificacao em duas etapas ativada.")
+
+
+@router.post("/admin/sessao")
+def abrir_sessao_admin(
+    payload: AdminSessaoRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(require_admin),
+):
+    """Abre a sessao do painel administrativo (senha + codigo de 2FA)."""
+    ip = ip_cliente(request)
+    _limitar(_admin_sessao_limiter, f"sessao-admin:{usuario.id}")
+    try:
+        token, expira = admin_seguranca_service.abrir_sessao_admin(db, usuario, payload.senha, payload.codigo)
+    except SegurancaAdminError as exc:
+        admin_seguranca_service.registrar(usuario, "abrir_sessao_admin", f"erro {exc.status}", ip)
+        raise _erro_seguranca(exc) from exc
+    admin_seguranca_service.registrar(usuario, "abrir_sessao_admin", "ok", ip)
+    return {"admin_token": token, "expira_em": expira.isoformat(), "expira_em_minutos": settings.admin_sessao_minutos}
 
 
 # ------------------------------------------------------------- convites

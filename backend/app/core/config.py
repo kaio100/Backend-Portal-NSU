@@ -77,7 +77,12 @@ class Settings(BaseSettings):
     secrets_key: str | None = None
     api_key: str | None = None
     jwt_secret: str | None = None
-    jwt_expire_minutes: int = 1440
+    # Sessao do portal: um dia de trabalho. Antes eram 24 h.
+    jwt_expire_minutes: int = 720
+    # Painel administrativo: exige uma sessao propria aberta com senha + codigo de 2FA.
+    # Desligar (false) so em emergencia: volta a valer apenas o papel de admin.
+    admin_2fa_obrigatorio: bool = True
+    admin_sessao_minutos: int = 30
     cors_origins: str = "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
     invertexto_enabled: bool = False
     invertexto_token: str | None = None

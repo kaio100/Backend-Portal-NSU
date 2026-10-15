@@ -7,7 +7,7 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from backend.app.api.deps import get_current_usuario, get_db, get_storage, require_admin, require_empresa_grupo
 from backend.app.core.config import settings
-from backend.app.core.rate_limit import RateLimiter
+from backend.app.core.rate_limit import RateLimiterBanco
 from backend.app.core.rede import ip_cliente
 from backend.app.db.models import Certificado, Empresa, Usuario
 from backend.app.schemas.certificados import (
@@ -27,7 +27,7 @@ empresa_router = APIRouter(prefix="/empresas/{empresa_id}/certificados", tags=["
 
 # Freio contra tentativas repetidas de adivinhar a senha de um certificado:
 # no maximo 5 tentativas a cada 5 minutos, por IP + certificado.
-_senha_rate_limiter = RateLimiter(max_attempts=5, window_seconds=300)
+_senha_rate_limiter = RateLimiterBanco(max_attempts=5, window_seconds=300)
 
 
 async def _ler_certificado_limitado(arquivo: UploadFile) -> bytes:

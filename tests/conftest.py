@@ -40,11 +40,11 @@ def authenticated_portal_user(request):
     negocio com uma identidade de portal conhecida, sem desativar a protecao
     na aplicacao nem precisar repetir a criacao de conta em cada caso.
     """
-    if request.path.name == "test_auth_account.py":
+    if request.path.name in {"test_auth_account.py", "test_seguranca_admin.py"}:
         yield
         return
 
-    from backend.app.api.deps import get_current_usuario
+    from backend.app.api.deps import get_current_usuario, require_admin_sessao
     from backend.app.main import app
 
     usuario = SimpleNamespace(
@@ -58,7 +58,10 @@ def authenticated_portal_user(request):
         papel="admin",
     )
     app.dependency_overrides[get_current_usuario] = lambda: usuario
+    # A sessao do painel admin (senha + 2FA) e testada em test_seguranca_admin.py.
+    app.dependency_overrides[require_admin_sessao] = lambda: usuario
     try:
         yield usuario
     finally:
         app.dependency_overrides.pop(get_current_usuario, None)
+        app.dependency_overrides.pop(require_admin_sessao, None)

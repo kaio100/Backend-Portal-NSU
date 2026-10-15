@@ -289,27 +289,24 @@ class LimiteExportacaoExcedido(NotaServiceError):
         super().__init__(f"O filtro tem mais de {max_notas} notas.")
 
 
-def _percorrer_repo(db: Session, sort: str = "id", lote: int = LOTE_NOTAS, **filtros_repo):
+def _percorrer_repo(
+    db: Session, sort: str = "id", lote: int = LOTE_NOTAS, cursor: str | None = None, **filtros_repo
+):
     """Entrega lotes de notas do banco ate acabar, sem teto.
 
-    Em ``sort="id"`` a paginacao e por id (estavel mesmo com o worker
-    gravando notas durante a leitura); nas outras ordens e por offset.
+    Pagina por cursor em qualquer ordem: cada lote continua logo depois da
+    ultima nota do anterior (estavel mesmo com o worker gravando durante a
+    leitura). `cursor` comeca depois de uma nota ja entregue.
     """
     lote = max(1, min(int(lote), 5000))
-    offset = 0
-    ultimo_id: int | None = None
     while True:
-        if sort == "id":
-            notas = notas_repo.list_notas(db, limit=lote, offset=0, sort="id", id_menor_que=ultimo_id, **filtros_repo)
-        else:
-            notas = notas_repo.list_notas(db, limit=lote, offset=offset, sort=sort, **filtros_repo)
+        notas = notas_repo.list_notas(db, limit=lote, offset=0, sort=sort, cursor=cursor, **filtros_repo)
         if not notas:
             return
         yield notas
         if len(notas) < lote:
             return
-        offset += lote
-        ultimo_id = int(notas[-1].id)
+        cursor = notas_repo.codificar_cursor(notas[-1], sort)
 
 
 def iterar_notas(
@@ -319,6 +316,7 @@ def iterar_notas(
     sort: str = "id",
     consultar_simples: bool = True,
     lote: int = LOTE_NOTAS,
+    cursor: str | None = None,
     **filtros_repo,
 ):
     """Percorre todas as notas dos filtros, anotadas e filtradas por tipo e
@@ -327,7 +325,7 @@ def iterar_notas(
     filtro_direcao = normalizar_direcao_nota(direcao_nota)
     if filtro_tipo and filtro_direcao and tipo_para_direcao(filtro_tipo) != filtro_direcao:
         return
-    for notas in _percorrer_repo(db, sort=sort, lote=lote, **filtros_repo):
+    for notas in _percorrer_repo(db, sort=sort, lote=lote, cursor=cursor, **filtros_repo):
         mapa_consulta_simples = _consultas_simples_api_lote(db, notas) if consultar_simples else {}
         for nota in notas:
             anotada = _anotar_detalhe_frontend(nota, mapa_consulta_simples.get(int(nota.id)))
@@ -439,7 +437,10 @@ def listar_notas(
     sort: str = "recentes",
     arquivadas: str = "ativas",
     somente_exportaveis: bool = False,
+    cursor: str | None = None,
 ) -> list[Nota]:
+    """Uma pagina de notas. Com `cursor` (de proximo_cursor) continua de onde a
+    pagina anterior parou e ignora `offset`."""
     filtro_tipo = normalizar_tipo_nota(tipo_nota)
     filtro_direcao = normalizar_direcao_nota(direcao_nota)
     if filtro_tipo and filtro_direcao and tipo_para_direcao(filtro_tipo) != filtro_direcao:
@@ -501,16 +502,18 @@ def listar_notas(
         # Tipo/direcao sem empresa so se sabe depois de anotar: percorre em
         # lotes ate completar a pagina. Antes lia 5.000 notas e as paginas
         # seguintes vinham vazias.
-        safe_offset = max(offset, 0)
+        safe_offset = 0 if cursor else max(offset, 0)
         alvo = safe_offset + min(max(limit, 1), 5000)
         coletadas: list[Nota] = []
-        for nota in iterar_notas(db, tipo_nota=filtro_tipo, direcao_nota=filtro_direcao, sort=sort, **filtros_repo):
+        for nota in iterar_notas(
+            db, tipo_nota=filtro_tipo, direcao_nota=filtro_direcao, sort=sort, cursor=cursor, **filtros_repo
+        ):
             coletadas.append(nota)
             if len(coletadas) >= alvo:
                 break
         return coletadas[safe_offset:alvo]
 
-    notas = notas_repo.list_notas(db, limit=limit, offset=offset, sort=sort, **filtros_repo)
+    notas = notas_repo.list_notas(db, limit=limit, offset=offset, sort=sort, cursor=cursor, **filtros_repo)
     mapa_consulta_simples = _consultas_simples_api_lote(db, notas)
     anotadas = [_anotar_detalhe_frontend(nota, mapa_consulta_simples.get(int(nota.id))) for nota in notas]
     if classificar:
@@ -520,6 +523,13 @@ def listar_notas(
             and (filtro_direcao is None or getattr(nota, "direcao_nota", None) == filtro_direcao)
         ]
     return anotadas
+
+
+def proximo_cursor(notas: list, limit: int, sort: str) -> str | None:
+    """Ponteiro da pagina seguinte, quando a pagina veio cheia."""
+    if not notas or len(notas) < min(max(limit, 1), 5000):
+        return None
+    return notas_repo.codificar_cursor(notas[-1], sort)
 
 
 def listar_todas_notas(
