@@ -3,6 +3,7 @@
 Uma linha por mudança relevante, mais recente primeiro. Detalhe: `git show <commit>`. Os documentos de estado atual (`docs/ai/*`) não carregam histórico; ele fica aqui.
 
 ## 2026-10-15
+- Hotfix do deploy de 15/10 (`d0c508a0`): a subida ficou em loop porque `_ensure_runtime_columns` rodava a cada start os `UPDATE cnpj_cache SET ... WHERE ... IS NULL` e, com o banco lento, estourava o `statement_timeout`. As cópias de coluna antiga da `cnpj_cache` agora só rodam quando a coluna nova acaba de ser criada.
 - Auditoria repetida depois das correções: import-linter 3/3 contratos (core sem api/services/repositories; services sem api; repositories sem api/services), Ruff 542 avisos (nenhum novo nas linhas alteradas; B008 é o padrão do FastAPI), Bandit sem achado novo, Betterleaks sem vazamento.
 - `POST /admin/erros/limpar` do admin geral passa a marcar também os grupos citados pelas empresas (mesmo sem linha em `grupos`) e a chave `__sem_grupo__` (erros de empresa removida); antes esses erros continuavam aparecendo. Teste `test_limpar_do_admin_geral_inclui_empresa_de_grupo_sem_cadastro`.
 - Documentação: ARCHITECTURE_CURRENT, CHANGE_IMPACT, PROJECT_CONTEXT (REG-043 a REG-046) e FINDINGS (SEC-B314, `defusedxml`) atualizados para `ae9d4e2d`. Auditoria de 15/10: import-linter 3/3 contratos; Bandit/Semgrep apontam `xml.etree` (SEC-B314), SHA-1 de impressão digital de certificado e SQL textual em scripts de admin (os dois últimos aceitos).

@@ -326,10 +326,18 @@ def _ensure_runtime_columns(connection) -> None:
         for name, column_type in cache_runtime_columns.items():
             if name not in cache_columns:
                 statements.append(f"ALTER TABLE cnpj_cache ADD COLUMN {name} {column_type}")
-        statements.append("UPDATE cnpj_cache SET consulta_simples_api = simples_status WHERE consulta_simples_api IS NULL AND simples_status IS NOT NULL")
-        statements.append("UPDATE cnpj_cache SET status_consulta = status WHERE status_consulta IS NULL AND status IS NOT NULL")
-        statements.append("UPDATE cnpj_cache SET json_resposta = json_completo WHERE json_resposta IS NULL AND json_completo IS NOT NULL")
-        statements.append("UPDATE cnpj_cache SET created_at = updated_at WHERE created_at IS NULL AND updated_at IS NOT NULL")
+        # Copia das colunas antigas so quando a coluna nova acabou de ser criada.
+        # Rodar a cada subida varria a tabela inteira e, com o banco lento,
+        # estourou o statement_timeout e derrubou o deploy de 15/10.
+        copias = {
+            "consulta_simples_api": "simples_status",
+            "status_consulta": "status",
+            "json_resposta": "json_completo",
+            "created_at": "updated_at",
+        }
+        for nova, antiga in copias.items():
+            if nova not in cache_columns and antiga in cache_columns:
+                statements.append(f"UPDATE cnpj_cache SET {nova} = {antiga} WHERE {nova} IS NULL AND {antiga} IS NOT NULL")
 
     if "eventos" in table_names:
         # Producao nao tinha duplicados quando a restricao entrou (2026-09-25).
