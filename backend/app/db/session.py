@@ -306,9 +306,13 @@ def _ensure_runtime_columns(connection) -> None:
         if "updated_at" not in arquivo_columns:
             column_type = "DATETIME" if is_sqlite else "TIMESTAMP WITH TIME ZONE"
             statements.append(f"ALTER TABLE arquivos ADD COLUMN updated_at {column_type}")
+            # So quando a coluna acabou de ser criada: a cada subida varria a
+            # tabela inteira (sem indice em updated_at), o mesmo risco de
+            # statement_timeout do deploy de 15/10. Linhas novas ja nascem com
+            # updated_at (arquivos_repo.create_arquivo e gerar_espelhos_ausentes).
+            statements.append("UPDATE arquivos SET updated_at = created_at WHERE updated_at IS NULL")
         if "filename" not in arquivo_columns:
             statements.append("ALTER TABLE arquivos ADD COLUMN filename VARCHAR(255)")
-        statements.append("UPDATE arquivos SET updated_at = created_at WHERE updated_at IS NULL")
         statements.extend([
             "CREATE INDEX IF NOT EXISTS ix_arquivos_nota_tipo_id ON arquivos (nota_id, tipo, id)",
             "CREATE INDEX IF NOT EXISTS ix_arquivos_empresa_tipo_id ON arquivos (empresa_id, tipo, id DESC)",

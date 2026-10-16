@@ -2,6 +2,13 @@
 
 Uma linha por mudança relevante, mais recente primeiro. Detalhe: `git show <commit>`. Os documentos de estado atual (`docs/ai/*`) não carregam histórico; ele fica aqui.
 
+## 2026-10-16
+- Script `promover_admin --email ... [--aplicar]`: promove a admin uma conta existente, sem mexer em senha, grupo ou 2FA. Teste `test_promover_admin_simula_antes_e_libera_o_painel`.
+- Revisão das mudanças de 15/10: suíte 338 passados (2 pulados), `compileall` ok. Correções abaixo; achado novo ARCH-019 (cursor sem índice).
+- Segurança: `/auth/2fa/iniciar` responde 409 quando o 2FA já está ativo (antes só a senha bastava para cadastrar outro celular e entrar no painel). Teste `test_quem_so_tem_a_senha_nao_troca_o_2fa_ativo`.
+- Deploy: o `UPDATE arquivos ... updated_at` de `_ensure_runtime_columns` só roda quando a coluna é criada (mesmo padrão do hotfix da `cnpj_cache`); `gerar_espelhos_ausentes` grava `updated_at`.
+- `GET /notas` com tipo e empresa: percorre em lotes até completar a página, para o cursor não encerrar a lista antes do fim. Teste `test_cursor_com_tipo_e_empresa_nao_para_antes_do_fim` (chama o serviço direto: pelo `TestClient`, o recálculo de valores líquidos do startup regrava as notas no meio da paginação e o SQLite trunca `updated_at` no segundo).
+
 ## 2026-10-15
 - Hotfix do deploy de 15/10 (`d0c508a0`): a subida ficou em loop porque `_ensure_runtime_columns` rodava a cada start os `UPDATE cnpj_cache SET ... WHERE ... IS NULL` e, com o banco lento, estourava o `statement_timeout`. As cópias de coluna antiga da `cnpj_cache` agora só rodam quando a coluna nova acaba de ser criada.
 - Auditoria repetida depois das correções: import-linter 3/3 contratos (core sem api/services/repositories; services sem api; repositories sem api/services), Ruff 542 avisos (nenhum novo nas linhas alteradas; B008 é o padrão do FastAPI), Bandit sem achado novo, Betterleaks sem vazamento.

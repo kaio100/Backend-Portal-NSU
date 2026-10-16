@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import tempfile
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from backend.app.core.config import settings
@@ -89,6 +89,7 @@ def main() -> int:
                 arquivo.content_type = "application/pdf"
                 arquivo.tamanho_bytes = len(pdf_bytes)
                 arquivo.checksum = hashlib.sha256(pdf_bytes).hexdigest()
+                arquivo.updated_at = datetime.now(timezone.utc)
                 db.commit()
                 gerados += 1
                 if gerados % 10 == 0:

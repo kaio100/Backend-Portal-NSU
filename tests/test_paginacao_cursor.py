@@ -94,3 +94,36 @@ def test_percorrer_repo_le_tudo_sem_offset():
     assert [len(lote) for lote in lotes] == [4, 4, 3]
     chaves = [n.chave for lote in lotes for n in lote]
     assert len(set(chaves)) == 11
+
+
+def test_cursor_com_tipo_e_empresa_nao_para_antes_do_fim():
+    empresa_id = _preparar()
+    # Nota da empresa para ela mesma: passa no filtro SQL de "tomadas" (tomador = empresa),
+    # mas a anotacao a classifica como inconsistente. Antes a pagina vinha incompleta e
+    # o cursor sumia, escondendo o resto das tomadas.
+    with SessionLocal() as db:
+        for i in range(2):
+            notas_repo.create_nota(
+                db,
+                {
+                    "empresa_id": empresa_id,
+                    "chave": f"PROPRIA{i}",
+                    "numero_nfse": f"P{i}",
+                    "importado_em": datetime.now(timezone.utc) + timedelta(minutes=1 + i),
+                    "prestador_cnpj": "11222333000181",
+                    "tomador_cnpj": "11222333000181",
+                },
+            )
+        db.commit()
+    # Direto no servico (como o router faz): o TestClient dispara no startup o recalculo
+    # de valores liquidos, que regrava as notas no meio da paginacao e torna o teste instavel.
+    chaves: list[str] = []
+    cursor = None
+    for _ in range(20):
+        with SessionLocal() as db:
+            notas = notas_service.listar_notas(db, tipo_nota="tomada", empresa_id=empresa_id, limit=3, cursor=cursor)
+            chaves += [n.chave for n in notas]
+            cursor = notas_service.proximo_cursor(notas, 3, "recentes")
+        if not cursor:
+            break
+    assert sorted(chaves) == sorted(f"CURSOR{i:03d}" for i in range(11)), chaves

@@ -1,6 +1,6 @@
 # Índice de arquivos versionados
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-15 sobre o commit `12cf6026`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `5221ce6`. Não editar à mão.
 
 
 350 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
@@ -92,7 +92,7 @@
 | `__init__.py` | 1 |  |
 | `base.py` | 5 |  |
 | `models.py` | 560 |  |
-| `session.py` | 346 |  |
+| `session.py` | 358 |  |
 
 ## `backend/app/db/migrations/`
 
@@ -165,7 +165,7 @@
 | `diagnosticar_nsu_certificado.py` | 103 |  |
 | `enfileirar_reprocessamento_certificados.py` | 75 |  |
 | `exportar_openapi.py` | 28 | Exporta o contrato da API (OpenAPI) para o frontend gerar os tipos TypeScript. |
-| `gerar_espelhos_ausentes.py` | 106 | Gera PDFs espelho ausentes a partir dos XMLs ja armazenados. |
+| `gerar_espelhos_ausentes.py` | 107 | Gera PDFs espelho ausentes a partir dos XMLs ja armazenados. |
 | `importar_base_cnpj_receita.py` | 216 |  |
 | `limpar_orfaos_storage.py` | 103 | Acha (e, com --aplicar, apaga) arquivos do storage que nenhum registro usa. |
 | `listar_consultas_simples_pendentes.py` | 119 |  |
@@ -193,7 +193,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `__init__.py` | 1 |  |
-| `admin_seguranca_service.py` | 103 | Verificacao em duas etapas do administrador, sessao do painel e auditoria. |
+| `admin_seguranca_service.py` | 110 | Verificacao em duas etapas do administrador, sessao do painel e auditoria. |
 | `arquivos_service.py` | 56 |  |
 | `auth_service.py` | 47 |  |
 | `certificado_metadata_service.py` | 124 |  |
@@ -216,7 +216,7 @@
 | `nfse_xml_parser.py` | 760 |  |
 | `notas_archive_service.py` | 168 |  |
 | `notas_download_service.py` | 300 |  |
-| `notas_service.py` | 953 |  |
+| `notas_service.py` | 955 |  |
 | `nsu_control_service.py` | 247 |  |
 | `operacao_service.py` | 205 | Saude da operacao: estado da fila, vigia com aviso e retencao de logs. |
 | `operational_fields_service.py` | 312 |  |
@@ -393,10 +393,10 @@
 | `00_LEIA_PRIMEIRO.md` | 62 |  |
 | `API.md` | 58 |  |
 | `ARCHITECTURE_CURRENT.md` | 135 |  |
-| `CHANGELOG.md` | 45 |  |
+| `CHANGELOG.md` | 54 |  |
 | `CHANGE_IMPACT.md` | 73 |  |
 | `DATABASE.md` | 80 |  |
-| `FINDINGS.md` | 100 |  |
+| `FINDINGS.md` | 104 |  |
 | `OPERATIONS.md` | 139 |  |
 | `PROJECT_CONTEXT.md` | 93 |  |
 | `SECURITY.md` | 60 |  |
@@ -503,14 +503,14 @@
 | `test_notas_recentes.py` | 496 |  |
 | `test_notas_tipo_direcao.py` | 171 |  |
 | `test_operational_fields.py` | 584 |  |
-| `test_paginacao_cursor.py` | 96 | Paginacao por cursor em /notas (X-Next-Cursor): continua de onde a pagina |
+| `test_paginacao_cursor.py` | 129 | Paginacao por cursor em /notas (X-Next-Cursor): continua de onde a pagina |
 | `test_portal_support_endpoints.py` | 1201 |  |
 | `test_prestador_pessoa_fisica.py` | 49 |  |
 | `test_rbac.py` | 71 |  |
 | `test_releitura_mes_anterior.py` | 158 | Releitura desde o 1o dia do mes anterior: na volta de uma parada e a pedido. |
 | `test_retencoes_regras.py` | 266 |  |
 | `test_security_config.py` | 74 |  |
-| `test_seguranca_admin.py` | 195 | Brechas fechadas em 15/10/2026: limite de tentativas no banco, 2FA e sessao |
+| `test_seguranca_admin.py` | 248 | Brechas fechadas em 15/10/2026: limite de tentativas no banco, 2FA e sessao |
 | `test_sincronizar_cnpjs_portal.py` | 22 |  |
 | `test_storage_r2.py` | 198 |  |
 

@@ -1,6 +1,6 @@
 # Achados abertos, riscos e dívida
 
-> Atualizado em 15/10/2026, commit `ae9d4e2d`. Fonte principal: `../historico/AUDITORIA_BACKEND_2026-10-08.md` (evidências completas, logs do Railway). Status: **CONFIRMADO**, **FORTEMENTE_INDICADO**, **HIPOTESE**, **NAO_DETERMINADO**. Severidade = impacto potencial.
+> Atualizado em 16/10/2026 (revisão das mudanças de 15/10 sobre `ae9d4e2d`; cópia sem `.git`, sem hash próprio). Fonte principal: `../historico/AUDITORIA_BACKEND_2026-10-08.md` (evidências completas, logs do Railway). Status: **CONFIRMADO**, **FORTEMENTE_INDICADO**, **HIPOTESE**, **NAO_DETERMINADO**. Severidade = impacto potencial.
 >
 > Regra: item corrigido sai da tabela de abertos e vai para "Resolvidos", com commit e data. Item novo segue o modelo do fim do arquivo.
 
@@ -34,6 +34,7 @@
 | FIND-L07 | média | FORTEMENTE_INDICADO | ZIP e XLSX gerados de forma síncrona na requisição (até 10.000 notas, 16 threads, arquivo temporário) | `notas_download_service`, `portal_support_service` |
 | FIND-L08 | baixa | CONFIRMADO | Métricas em memória: somem no restart | `core/observability.py` |
 | FIND-L09 | alta | CONFIRMADO | Isolamento entre grupos só na aplicação; RLS do Supabase é opcional (scripts `aplicar_seguranca_rls`/`auditar_rls_supabase`); serviços aceitam `grupo=None` = todos | `api/deps.py`, services |
+| ARCH-019 | média | FORTEMENTE_INDICADO | A paginação por cursor compara `coalesce(...)` e nenhum índice cobre essas expressões: cada página ainda lê e ordena todas as notas do filtro (sem descartar as anteriores, como o OFFSET fazia). Medir o p95 de `/notas` em produção | `notas_repo.chaves_ordem`, `list_notas` |
 | SEC-B314 | média | CONFIRMADO (Bandit B314/B405, Semgrep) | XML de terceiros (ADN e upload do DANFSe avulso) lido com `xml.etree`, sem proteção contra expansão de entidades. Recomendação: `defusedxml.ElementTree` como substituto direto | `services/danfse_service.py:24`, `services/legacy_ingestion_service.py`, `scripts/corrigir_status_fiscal.py`, `scripts/reconciliar_notas_certificados.py` |
 | FIND-L10 | alta | NAO_DETERMINADO (rotação) | Segredos e PFX no histórico do Git (achado de 06/10); rotação não reconferida | `../historico/SEGURANCA_CERTIFICADOS_2026-10-06.md`, `SECURITY.md` |
 
@@ -66,6 +67,9 @@
 ## Resolvidos (referência)
 
 - FIND-L04 (limite de tentativas em memória): resolvido na branch de 15/10 com `RateLimiterBanco` (tabela `tentativas_acesso`).
+- SEC-2FA (16/10): com a senha (e o login que ela dá), um admin com 2FA ativo podia gerar outro segredo em `/auth/2fa/iniciar`, cadastrar o próprio celular e abrir o painel; reproduzido com teste. Agora responde 409; teste `test_quem_so_tem_a_senha_nao_troca_o_2fa_ativo`.
+- Deploy (16/10): `UPDATE arquivos SET updated_at = created_at WHERE updated_at IS NULL` rodava a cada subida (varredura sem índice, o mesmo risco do loop de 15/10). Agora só quando a coluna é criada; `gerar_espelhos_ausentes` passa a gravar `updated_at`.
+- Listagem (16/10): com filtro de tipo **e** empresa, uma nota descartada pela anotação (ex.: da empresa para ela mesma) deixava a página incompleta e o `X-Next-Cursor` sumia antes do fim. Agora percorre em lotes até completar a página; teste `test_cursor_com_tipo_e_empresa_nao_para_antes_do_fim`.
 - ARCH-002 (parcial, 15/10): `/notas` e as varreduras internas paginam por cursor; o frontend não repete pedido após timeout e a Conferência só conta notas com clique. Falta o pool separado para o worker.
 
 | Item antigo | Resolução |

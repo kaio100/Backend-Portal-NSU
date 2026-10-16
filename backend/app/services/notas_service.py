@@ -498,15 +498,24 @@ def listar_notas(
         somente_exportaveis=somente_exportaveis,
     )
 
-    if classificar and not filtro_direto:
-        # Tipo/direcao sem empresa so se sabe depois de anotar: percorre em
-        # lotes ate completar a pagina. Antes lia 5.000 notas e as paginas
-        # seguintes vinham vazias.
+    if classificar:
+        # Tipo/direcao so se sabe de certo depois de anotar: percorre em lotes
+        # ate completar a pagina. Antes lia 5.000 notas e as paginas seguintes
+        # vinham vazias. Com a empresa, o SQL ja filtra pelo CNPJ e quase todo
+        # lote serve (lote do tamanho da pagina), mas a anotacao ainda descarta
+        # casos de borda; uma pagina incompleta fazia proximo_cursor encerrar a
+        # lista antes do fim.
         safe_offset = 0 if cursor else max(offset, 0)
         alvo = safe_offset + min(max(limit, 1), 5000)
         coletadas: list[Nota] = []
         for nota in iterar_notas(
-            db, tipo_nota=filtro_tipo, direcao_nota=filtro_direcao, sort=sort, cursor=cursor, **filtros_repo
+            db,
+            tipo_nota=filtro_tipo,
+            direcao_nota=filtro_direcao,
+            sort=sort,
+            lote=alvo if filtro_direto else LOTE_NOTAS,
+            cursor=cursor,
+            **filtros_repo,
         ):
             coletadas.append(nota)
             if len(coletadas) >= alvo:
@@ -515,14 +524,7 @@ def listar_notas(
 
     notas = notas_repo.list_notas(db, limit=limit, offset=offset, sort=sort, cursor=cursor, **filtros_repo)
     mapa_consulta_simples = _consultas_simples_api_lote(db, notas)
-    anotadas = [_anotar_detalhe_frontend(nota, mapa_consulta_simples.get(int(nota.id))) for nota in notas]
-    if classificar:
-        anotadas = [
-            nota for nota in anotadas
-            if (filtro_tipo is None or getattr(nota, "tipo_nota", None) == filtro_tipo)
-            and (filtro_direcao is None or getattr(nota, "direcao_nota", None) == filtro_direcao)
-        ]
-    return anotadas
+    return [_anotar_detalhe_frontend(nota, mapa_consulta_simples.get(int(nota.id))) for nota in notas]
 
 
 def proximo_cursor(notas: list, limit: int, sort: str) -> str | None:

@@ -144,6 +144,32 @@ def test_painel_admin_exige_sessao_com_senha_e_2fa():
     assert ("confirmar_2fa", "ok") in acoes
 
 
+def test_quem_so_tem_a_senha_nao_troca_o_2fa_ativo():
+    _limpar()
+    _id, token = _usuario("vitima@seguranca.test", admin=True)
+    with TestClient(app) as client:
+        segredo = client.post("/auth/2fa/iniciar", json={"senha": SENHA}, headers=_auth(token)).json()["segredo"]
+        confirmar = client.post(
+            "/auth/2fa/confirmar", json={"codigo": totp.codigo_do_passo(segredo, totp.passo_atual())}, headers=_auth(token)
+        )
+        assert confirmar.status_code == 200
+
+        # Com a senha (e o login que ela da), gerar outro segredo daria acesso ao painel sem o celular.
+        troca = client.post("/auth/2fa/iniciar", json={"senha": SENHA}, headers=_auth(token))
+        assert troca.status_code == 409
+        assert client.get("/auth/2fa", headers=_auth(token)).json()["ativo"] is True
+
+    with SessionLocal() as db:
+        usuario = db.query(Usuario).filter(Usuario.email == "vitima@seguranca.test").one()
+        assert usuario.totp_ativo is True
+        # O segredo cadastrado no celular continua o mesmo.
+        from backend.app.services.secrets_service import decrypt_secret
+
+        assert decrypt_secret(usuario.totp_segredo_cifrado) == segredo
+        acoes = {(a.acao, a.resultado) for a in db.query(AuditoriaAdmin).all()}
+    assert ("iniciar_2fa", "erro 409") in acoes
+
+
 def test_sessao_admin_de_outro_usuario_ou_vencida_nao_vale():
     _limpar()
     _id_a, token_a = _usuario("a@seguranca.test", admin=True)
@@ -193,3 +219,30 @@ def test_me_informa_se_e_admin_geral():
             assert client.get("/auth/me", headers=_auth(token)).json()["super_admin"] is True
         finally:
             object.__setattr__(settings, "super_admin_emails", original)
+
+
+def test_promover_admin_simula_antes_e_libera_o_painel():
+    from backend.app.scripts import promover_admin
+
+    _limpar()
+    _id, token = _usuario("novo.admin@seguranca.test", admin=False)
+    assert "nao encontrado" in promover_admin.executar("ninguem@seguranca.test", aplicar=True)
+
+    simulacao = promover_admin.executar("Novo.Admin@seguranca.test", aplicar=False)
+    assert simulacao.startswith("[simulacao]")
+    assert "fora de SUPER_ADMIN_EMAILS" in simulacao
+    with SessionLocal() as db:
+        assert db.get(Usuario, _id).papel == "operador"
+
+    assert "agora e admin" in promover_admin.executar("novo.admin@seguranca.test", aplicar=True)
+    assert "Ja e admin" in promover_admin.executar("novo.admin@seguranca.test", aplicar=True)
+
+    with TestClient(app) as client:
+        segredo = client.post("/auth/2fa/iniciar", json={"senha": SENHA}, headers=_auth(token)).json()["segredo"]
+        passo = totp.passo_atual()
+        client.post("/auth/2fa/confirmar", json={"codigo": totp.codigo_do_passo(segredo, passo)}, headers=_auth(token))
+        sessao = client.post(
+            "/auth/admin/sessao", json={"senha": SENHA, "codigo": totp.codigo_do_passo(segredo, passo + 1)}, headers=_auth(token)
+        )
+        assert sessao.status_code == 200
+        assert client.get("/admin/overview", headers=_auth(token, sessao.json()["admin_token"])).status_code == 200

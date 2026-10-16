@@ -32,9 +32,16 @@ def iniciar_2fa(db: Session, usuario: Usuario, senha: str) -> dict:
     """Gera um segredo novo, ainda inativo, e devolve o link para o aplicativo.
 
     Pede a senha para que uma sessao esquecida aberta nao baste para trocar o 2FA.
+    Com o 2FA ja ativo recusa: so com a senha, quem a descobrisse cadastraria o
+    proprio celular e entraria no painel. A troca passa pelo reset do admin geral.
     """
     if not verify_password(senha, usuario.senha_hash):
         raise SegurancaAdminError("Senha incorreta.", 400)
+    if usuario.totp_ativo:
+        raise SegurancaAdminError(
+            "A verificacao em duas etapas ja esta ativa. Para trocar o celular, peca ao administrador geral para zera-la.",
+            409,
+        )
     segredo = totp.gerar_segredo()
     usuario.totp_segredo_cifrado = encrypt_secret(segredo)
     usuario.totp_ativo = False
