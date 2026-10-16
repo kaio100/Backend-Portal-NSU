@@ -6,7 +6,7 @@ import unicodedata
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_
+from sqlalchemy import func, inspect as sa_inspect, or_, text
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import (
@@ -20,7 +20,7 @@ from backend.app.api.deps import (
 )
 from backend.app.core.security import hash_password
 from backend.app.core.tempo import agora_local, data_local, hoje_local, inicio_do_dia_utc
-from backend.app.db.models import AcessoUsuario, Arquivo, AuditoriaAdmin, ErroVisto, ConferenciaHistorico, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, Usuario
+from backend.app.db.models import AcessoUsuario, Arquivo, AuditoriaAdmin, ConviteCadastro, ErroVisto, ConferenciaHistorico, Empresa, Grupo, LogProcesso, MonitoramentoConfig, Nota, Processo, RedefinicaoSenhaToken, Usuario, VerificacaoEmailToken
 from backend.app.db.session import SessionLocal
 from backend.app.services import admin_seguranca_service, volumetria_service
 from backend.app.services.notas_archive_service import arquivar_notas_anos_anteriores
@@ -213,6 +213,17 @@ def excluir_usuario(usuario_id: int, admin: Usuario = Depends(require_admin), db
     if usuario.id == admin.id:
         raise HTTPException(status_code=400, detail="Voce nao pode excluir sua propria conta.")
     db.query(AcessoUsuario).filter(AcessoUsuario.usuario_id == usuario.id).delete(synchronize_session=False)
+    # Tudo que tem chave estrangeira para usuarios sem ON DELETE: sem isso o
+    # DELETE estourava ForeignKeyViolation (500) para quem tinha token de
+    # verificacao de e-mail ou de troca de senha (usuario 23, 16/10).
+    db.query(VerificacaoEmailToken).filter(VerificacaoEmailToken.usuario_id == usuario.id).delete(synchronize_session=False)
+    db.query(RedefinicaoSenhaToken).filter(RedefinicaoSenhaToken.usuario_id == usuario.id).delete(synchronize_session=False)
+    db.query(ConviteCadastro).filter(ConviteCadastro.criado_por_usuario_id == usuario.id).update(
+        {ConviteCadastro.criado_por_usuario_id: None}, synchronize_session=False
+    )
+    if "feedbacks" in sa_inspect(db.get_bind()).get_table_names():
+        # Sobra de set/2026 fora dos modelos (DATABASE.md); usuario_id e NOT NULL.
+        db.execute(text("DELETE FROM feedbacks WHERE usuario_id = :id"), {"id": usuario.id})
     # O historico da analise continua com o nome e o e-mail do autor.
     db.query(ConferenciaHistorico).filter(ConferenciaHistorico.usuario_id == usuario.id).update(
         {ConferenciaHistorico.usuario_id: None}, synchronize_session=False

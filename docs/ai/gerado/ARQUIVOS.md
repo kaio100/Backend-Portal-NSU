@@ -1,6 +1,6 @@
 # Índice de arquivos versionados
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `6d9b75d`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `c3c25fb`. Não editar à mão.
 
 
 352 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
@@ -51,7 +51,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `__init__.py` | 1 |  |
-| `admin.py` | 439 |  |
+| `admin.py` | 450 |  |
 | `arquivos.py` | 71 |  |
 | `auth.py` | 272 |  |
 | `certificados.py` | 496 |  |
@@ -395,7 +395,7 @@
 | `00_LEIA_PRIMEIRO.md` | 62 |  |
 | `API.md` | 58 |  |
 | `ARCHITECTURE_CURRENT.md` | 135 |  |
-| `CHANGELOG.md` | 56 |  |
+| `CHANGELOG.md` | 57 |  |
 | `CHANGE_IMPACT.md` | 73 |  |
 | `DATABASE.md` | 81 |  |
 | `FINDINGS.md` | 104 |  |
@@ -478,7 +478,7 @@
 | `test_cnpj_receita.py` | 118 |  |
 | `test_cnpj_receita_cache.py` | 77 |  |
 | `test_concorrencia_sqlite.py` | 438 | Regressao dos incidentes de concorrencia local (SQLite). |
-| `test_conferencia_auditavel.py` | 173 | Analise fiscal auditavel: trava de retificacao, autor do login e historico. |
+| `test_conferencia_auditavel.py` | 207 | Analise fiscal auditavel: trava de retificacao, autor do login e historico. |
 | `test_conferencia_nao_grava_calculados.py` | 76 | Salvar a conferencia nao grava valores calculados so para a tela. |
 | `test_consulta_adn_confiavel.py` | 207 | Fase 3: consulta ao ADN sem perder documentos e sem travar a fila. |
 | `test_consultas_api.py` | 905 |  |

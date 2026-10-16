@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from backend.app.core.security import hash_password
-from backend.app.db.models import AcessoUsuario, Arquivo, ConferenciaHistorico, Empresa, Evento, Nota, Usuario
+from backend.app.db.models import AcessoUsuario, Arquivo, ConferenciaHistorico, Empresa, Evento, Nota, RedefinicaoSenhaToken, Usuario, VerificacaoEmailToken
 from backend.app.db.session import SessionLocal, engine, init_db
 from backend.app.main import app
 
@@ -156,6 +156,40 @@ def test_excluir_usuario_mantem_o_historico():
         registro = db.query(ConferenciaHistorico).one()
         assert registro.usuario_id is None
         assert registro.usuario_email == "autor@example.com"
+
+
+def test_excluir_usuario_com_tokens_de_email_e_senha():
+    """Usuario 23 em producao (16/10): o token de verificacao de e-mail travava o DELETE."""
+    from datetime import datetime, timedelta, timezone
+
+    nota_id = _nota()
+    with SessionLocal() as db:
+        nota = db.get(Nota, nota_id)
+        db.add(Usuario(
+            empresa_id=nota.empresa_id, email="admin-real2@example.com", senha_hash=hash_password("senha-segura"),
+            nome="Admin", ativo=True, grupo="planning_hub", papel="admin", is_admin=True,
+        ))
+        db.flush()
+        fantasma = Usuario(
+            empresa_id=nota.empresa_id, email="fantasma@example.com", senha_hash=hash_password("senha-segura"),
+            nome="Fantasma", ativo=False, grupo="planning_hub", papel="operador",
+        )
+        db.add(fantasma)
+        db.flush()
+        expira = datetime.now(timezone.utc) + timedelta(hours=1)
+        db.add(VerificacaoEmailToken(usuario_id=fantasma.id, token_hash="a" * 64, codigo_hash="b" * 64, expires_at=expira))
+        db.add(RedefinicaoSenhaToken(usuario_id=fantasma.id, token_hash="c" * 64, expires_at=expira))
+        db.commit()
+        fantasma_id = int(fantasma.id)
+
+    with TestClient(app) as client:
+        resposta = client.delete(f"/admin/usuarios/{fantasma_id}")
+
+    assert resposta.status_code == 200
+    with SessionLocal() as db:
+        assert db.get(Usuario, fantasma_id) is None
+        assert db.query(VerificacaoEmailToken).filter_by(usuario_id=fantasma_id).count() == 0
+        assert db.query(RedefinicaoSenhaToken).filter_by(usuario_id=fantasma_id).count() == 0
 
 
 def test_migracoes_alembic_ficam_no_head():
