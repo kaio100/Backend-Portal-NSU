@@ -1,9 +1,9 @@
 # Índice de arquivos versionados
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `5221ce6`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `0a3e1f0`. Não editar à mão.
 
 
-350 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
+351 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
 
 
 ## `./`
@@ -173,6 +173,7 @@
 | `migrar_rbac.py` | 76 |  |
 | `migrar_sqlite_para_postgres.py` | 133 |  |
 | `migrar_storage_para_r2.py` | 82 |  |
+| `promover_admin.py` | 61 | Promove uma conta ja existente a administrador (papel admin). |
 | `promover_usuarios_locais.py` | 117 |  |
 | `r2_common.py` | 29 |  |
 | `recalcular_alertas_fiscais.py` | 260 | Recalcula os alertas fiscais (subitem LC116, ISS retido, valor liquido) |
@@ -393,9 +394,9 @@
 | `00_LEIA_PRIMEIRO.md` | 62 |  |
 | `API.md` | 58 |  |
 | `ARCHITECTURE_CURRENT.md` | 135 |  |
-| `CHANGELOG.md` | 54 |  |
+| `CHANGELOG.md` | 55 |  |
 | `CHANGE_IMPACT.md` | 73 |  |
-| `DATABASE.md` | 80 |  |
+| `DATABASE.md` | 81 |  |
 | `FINDINGS.md` | 104 |  |
 | `OPERATIONS.md` | 139 |  |
 | `PROJECT_CONTEXT.md` | 93 |  |

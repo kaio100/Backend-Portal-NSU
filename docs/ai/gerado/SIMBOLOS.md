@@ -1,9 +1,9 @@
 # Índice de símbolos Python
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `5221ce6`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `0a3e1f0`. Não editar à mão.
 
 
-1024 símbolos de nível de módulo.
+1026 símbolos de nível de módulo.
 
 Classes e funções de nível de módulo, com os métodos das classes. Para o comportamento, leia o código; este índice só localiza.
 
@@ -87,6 +87,7 @@ Classes e funções de nível de módulo, com os métodos das classes. Para o co
 - `backend/app/scripts/migrar_rbac.py`: `_engine` :11 · `executar` :18 · `main` :67
 - `backend/app/scripts/migrar_sqlite_para_postgres.py`: **`MigrationError`** :25 · `migrar` :29 · `build_parser` :100 · `main` :110
 - `backend/app/scripts/migrar_storage_para_r2.py`: **`MigrationReport`** :12 · `_iter_batches` :20 · `migrate` :26 · `build_parser` :58 · `main` :68
+- `backend/app/scripts/promover_admin.py`: `executar` :22 · `main` :52
 - `backend/app/scripts/promover_usuarios_locais.py`: `exportar_selecionados` :21 · `executar` :37 · `main` :105
 - `backend/app/scripts/r2_common.py`: `build_r2_storage` :7
 - `backend/app/scripts/recalcular_alertas_fiscais.py`: **`Relatorio`** :36 (imprimir) · `_split_alertas` :67 · `_listar_lotes_de_ids` :73 · `recalcular_nota` :103 · `executar` :172 · `main` :219

@@ -25,6 +25,7 @@
 | `0003_contas_convite` | `usuarios.email_verificado`, `usuarios.token_version`, `redefinicoes_senha_tokens.tentativas`; converte papel `leitura` → `operador` |
 | `0005_erros_vistos` | Tabela `erros_vistos` (grupo, `visto_ate`, `usuario_id`): o "Limpar" do painel admin |
 | `0004_seguranca_admin` | `usuarios.totp_segredo_cifrado`, `totp_ativo`, `totp_ultimo_passo`; tabelas `tentativas_acesso` e `auditoria_painel_admin` (o nome evita a sobra `auditoria_admin`, que em produção tem outras colunas e está vazia — conferido em 15/10) |
+| `0006_indices_carga_banco` | Índices `ix_notas_cursor_emissao`, `ix_notas_cursor_recentes` (só Postgres), `ix_processos_jobs_status_updated_at`, `ix_tentativas_acesso_chave_criado_em`. Criada num deploy manual de 15/10 fora do Git e recriada em 16/10 a partir do `pg_indexes` de produção; só `IF NOT EXISTS` |
 
 Mudança nova de esquema: modelo **e** revisão Alembic idempotente, no mesmo commit. Linha de comando: `alembic -c alembic.ini current|revision -m "..."`.
 

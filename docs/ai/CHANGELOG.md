@@ -3,6 +3,7 @@
 Uma linha por mudança relevante, mais recente primeiro. Detalhe: `git show <commit>`. Os documentos de estado atual (`docs/ai/*`) não carregam histórico; ele fica aqui.
 
 ## 2026-10-16
+- Migração `0006_indices_carga_banco` recriada no repositório. Ela tinha sido aplicada em produção por um deploy manual de 15/10 (`railway up`, fora do Git); sem o arquivo, o deploy da `main` de 16/10 09h45 parou no startup ("Can't locate revision") e derrubou o login até o Railway voltar à versão de 15/10. Conferido no Supabase: todas as colunas dos modelos existem em produção, as sobras (`feedbacks`, `auditoria_admin`, `configuracoes_sistema`, colunas extras de `certificados`/`processos`) são anuláveis; rotas usadas pelo frontend nos logs do Railway existem todas no código. Testado em Postgres 16 local (banco novo e banco já em 0006).
 - Script `promover_admin --email ... [--aplicar]`: promove a admin uma conta existente, sem mexer em senha, grupo ou 2FA. Teste `test_promover_admin_simula_antes_e_libera_o_painel`.
 - Revisão das mudanças de 15/10: suíte 338 passados (2 pulados), `compileall` ok. Correções abaixo; achado novo ARCH-019 (cursor sem índice).
 - Segurança: `/auth/2fa/iniciar` responde 409 quando o 2FA já está ativo (antes só a senha bastava para cadastrar outro celular e entrar no painel). Teste `test_quem_so_tem_a_senha_nao_troca_o_2fa_ativo`.
