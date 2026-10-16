@@ -1,9 +1,9 @@
 # Índice de símbolos Python
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `0a3e1f0`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `6d9b75d`. Não editar à mão.
 
 
-1026 símbolos de nível de módulo.
+1028 símbolos de nível de módulo.
 
 Classes e funções de nível de módulo, com os métodos das classes. Para o comportamento, leia o código; este índice só localiza.
 
@@ -44,6 +44,7 @@ Classes e funções de nível de módulo, com os métodos das classes. Para o co
 - `backend/app/db/migrations/versions/0003_contas_convite.py`: `upgrade` :26 · `downgrade` :39
 - `backend/app/db/migrations/versions/0004_seguranca_admin.py`: `upgrade` :26 · `downgrade` :65
 - `backend/app/db/migrations/versions/0005_erros_vistos.py`: `upgrade` :21 · `downgrade` :32
+- `backend/app/db/migrations/versions/0006_indices_carga_banco.py`: `upgrade` :52 · `downgrade` :62
 - `backend/app/db/models.py`: **`TimestampMixin`** :24 · **`Grupo`** :33 · **`Empresa`** :42 · **`Certificado`** :63 (senha_configurada, possui_senha, possui_storage_key, empresa_nome, empresa_cnpj, alias, client_name, file_name, status) · **`Processo`** :121 · **`Job`** :150 · **`MonitoramentoConfig`** :171 · **`NsuControle`** :183 · **`Nota`** :198 · **`ConferenciaHistorico`** :305 · **`Evento`** :326 · **`Arquivo`** :349 · **`LogProcesso`** :369 · **`LockProcessamento`** :384 · **`CnpjCache`** :401 · **`Secret`** :421 · **`Usuario`** :430 · **`AcessoUsuario`** :456 · **`ConviteCadastro`** :467 · **`VerificacaoEmailToken`** :483 · **`RedefinicaoSenhaToken`** :499 · **`TentativaAcesso`** :514 · **`AuditoriaAdmin`** :528 · **`ErroVisto`** :548
 - `backend/app/db/session.py`: `_connect_args` :14 · `_ensure_sqlite_parent` :23 · `executar_escrita_com_retry` :36 · `renovar_snapshot` :53 · `sqlite_write_lock` :70 · **`PortalSession`** :115 · `get_db` :122 · `init_db` :130 · `migrate_db` :147 · `_aplicar_migracoes_alembic` :169 · `_ensure_runtime_columns` :179
 - `backend/app/main.py`: `_rotina_operacao` :56 · `_worker_groups` :67 · `_build_api_workers` :74 · `_recuperar_jobs_travados` :83 · `_run_api_worker` :88 · `_supervisionar_grupos` :110 · `_run_consultas_scheduler` :143 · `_enqueue_consultas_automaticas` :156 · `_recalcular_valores_liquidos_salvos` :169 · `lifespan` :178 · `_documentation_options` :224 · `security_headers` :239 · `_parse_cors_origins` :251
@@ -102,7 +103,7 @@ Classes e funções de nível de módulo, com os métodos das classes. Para o co
 - `backend/app/scripts/status_reprocessamento_certificados.py`: `executar` :13 · `main` :50
 - `backend/app/scripts/testar_r2.py`: `main` :9
 - `backend/app/scripts/validar_migracao_postgres.py`: **`ValidationError`** :39 · `_compare_samples` :43 · `validar` :62 · `build_parser` :107 · `main` :114
-- `backend/app/services/admin_seguranca_service.py`: **`SegurancaAdminError`** :25 (__init__) · `iniciar_2fa` :31 · `confirmar_2fa` :53 · `abrir_sessao_admin` :64 · `resetar_2fa` :78 · `registrar` :86
+- `backend/app/services/admin_seguranca_service.py`: **`SegurancaAdminError`** :25 (__init__) · `iniciar_2fa` :36 · `confirmar_2fa` :58 · `abrir_sessao_admin` :69 · `resetar_2fa` :90 · `registrar` :98
 - `backend/app/services/arquivos_service.py`: **`ArquivoServiceError`** :13 · `preparar_download_arquivo` :32
 - `backend/app/services/auth_service.py`: **`AuthError`** :10 · `autenticar` :14 · `criar_usuario` :25
 - `backend/app/services/certificado_metadata_service.py`: **`CertificadoMetadataError`** :12 · **`CertificadoMetadata`** :17 · `_digits` :26 · `cnpj_valido` :30 · `extrair_cnpj_texto` :45 · `_extract_cnpj` :69 · `_first_attr` :73 · `_looks_like_authority_name` :81 · `_extract_business_name` :86 · `extrair_metadata_pfx` :96

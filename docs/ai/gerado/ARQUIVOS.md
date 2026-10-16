@@ -1,9 +1,9 @@
 # Índice de arquivos versionados
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `0a3e1f0`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `6d9b75d`. Não editar à mão.
 
 
-351 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
+352 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
 
 
 ## `./`
@@ -112,6 +112,7 @@
 | `0003_contas_convite.py` | 40 | Contas por convite: versao de token, verificacao de e-mail e fim do papel leitura. |
 | `0004_seguranca_admin.py` | 66 | Seguranca: limite de tentativas no banco, 2FA de administrador e auditoria do admin. |
 | `0005_erros_vistos.py` | 33 | Erros ja vistos no painel admin (botao "Limpar" sem apagar o historico). |
+| `0006_indices_carga_banco.py` | 63 | Indices de carga criados em producao no deploy manual de 15/10. |
 
 ## `backend/app/repositories/`
 
@@ -194,7 +195,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `__init__.py` | 1 |  |
-| `admin_seguranca_service.py` | 110 | Verificacao em duas etapas do administrador, sessao do painel e auditoria. |
+| `admin_seguranca_service.py` | 122 | Verificacao em duas etapas do administrador, sessao do painel e auditoria. |
 | `arquivos_service.py` | 56 |  |
 | `auth_service.py` | 47 |  |
 | `certificado_metadata_service.py` | 124 |  |
@@ -394,7 +395,7 @@
 | `00_LEIA_PRIMEIRO.md` | 62 |  |
 | `API.md` | 58 |  |
 | `ARCHITECTURE_CURRENT.md` | 135 |  |
-| `CHANGELOG.md` | 55 |  |
+| `CHANGELOG.md` | 56 |  |
 | `CHANGE_IMPACT.md` | 73 |  |
 | `DATABASE.md` | 81 |  |
 | `FINDINGS.md` | 104 |  |
@@ -511,7 +512,7 @@
 | `test_releitura_mes_anterior.py` | 158 | Releitura desde o 1o dia do mes anterior: na volta de uma parada e a pedido. |
 | `test_retencoes_regras.py` | 266 |  |
 | `test_security_config.py` | 74 |  |
-| `test_seguranca_admin.py` | 248 | Brechas fechadas em 15/10/2026: limite de tentativas no banco, 2FA e sessao |
+| `test_seguranca_admin.py` | 254 | Brechas fechadas em 15/10/2026: limite de tentativas no banco, 2FA e sessao |
 | `test_sincronizar_cnpjs_portal.py` | 22 |  |
 | `test_storage_r2.py` | 198 |  |
 

@@ -1,6 +1,6 @@
 # Índice de rotas HTTP
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `0a3e1f0`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `6d9b75d`. Não editar à mão.
 
 
 110 rotas declaradas nos routers. **Acesso**: a dependência mais forte encontrada (router, decorador, parâmetro ou chamada direta). **Grupo**: o corpo da função chama um filtro por grupo (`require_*_grupo`, `usuario.grupo`, escopo do admin). É uma detecção textual: confira o código antes de concluir que uma rota é segura ou insegura.

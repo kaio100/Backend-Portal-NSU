@@ -125,7 +125,13 @@ def test_painel_admin_exige_sessao_com_senha_e_2fa():
         reuso = client.post(
             "/auth/admin/sessao", json={"senha": SENHA, "codigo": totp.codigo_do_passo(segredo, passo)}, headers=_auth(token)
         )
-        assert reuso.status_code == 401
+        assert reuso.status_code == 400
+        assert "ja foi usado" in reuso.json()["detail"]
+        # Senha errada tambem e 400: 401 faria o frontend deslogar do portal.
+        senha_errada = client.post(
+            "/auth/admin/sessao", json={"senha": "errada", "codigo": totp.codigo_do_passo(segredo, passo + 1)}, headers=_auth(token)
+        )
+        assert senha_errada.status_code == 400
         sessao = client.post(
             "/auth/admin/sessao", json={"senha": SENHA, "codigo": totp.codigo_do_passo(segredo, passo + 1)}, headers=_auth(token)
         )
@@ -140,7 +146,7 @@ def test_painel_admin_exige_sessao_com_senha_e_2fa():
     with SessionLocal() as db:
         acoes = {(a.acao, a.resultado) for a in db.query(AuditoriaAdmin).all()}
     assert ("abrir_sessao_admin", "ok") in acoes
-    assert ("abrir_sessao_admin", "erro 401") in acoes
+    assert ("abrir_sessao_admin", "erro 400") in acoes
     assert ("confirmar_2fa", "ok") in acoes
 
 

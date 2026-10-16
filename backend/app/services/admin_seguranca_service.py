@@ -28,6 +28,11 @@ class SegurancaAdminError(ValueError):
         self.status = status
 
 
+# Sem a palavra "senha": o frontend (shared/api/http.ts, friendlyHttpMessage)
+# troca qualquer erro com "senha" pela mensagem de senha de certificado.
+_CREDENCIAL_INVALIDA = "Dados de acesso incorretos. Confira a sua credencial do portal e o codigo do aplicativo."
+
+
 def iniciar_2fa(db: Session, usuario: Usuario, senha: str) -> dict:
     """Gera um segredo novo, ainda inativo, e devolve o link para o aplicativo.
 
@@ -36,7 +41,7 @@ def iniciar_2fa(db: Session, usuario: Usuario, senha: str) -> dict:
     proprio celular e entraria no painel. A troca passa pelo reset do admin geral.
     """
     if not verify_password(senha, usuario.senha_hash):
-        raise SegurancaAdminError("Senha incorreta.", 400)
+        raise SegurancaAdminError(_CREDENCIAL_INVALIDA, 400)
     if usuario.totp_ativo:
         raise SegurancaAdminError(
             "A verificacao em duas etapas ja esta ativa. Para trocar o celular, peca ao administrador geral para zera-la.",
@@ -64,12 +69,19 @@ def confirmar_2fa(db: Session, usuario: Usuario, codigo: str) -> None:
 def abrir_sessao_admin(db: Session, usuario: Usuario, senha: str, codigo: str) -> tuple[str, datetime]:
     if not usuario.totp_ativo or not usuario.totp_segredo_cifrado:
         raise SegurancaAdminError("Configure a verificacao em duas etapas antes de entrar no painel.", 409)
+    # 400, nunca 401: o frontend trata 401 como sessao do portal expirada e
+    # desloga a pessoa, que voltava ao login a cada codigo errado (16/10).
     if not verify_password(senha, usuario.senha_hash):
-        raise SegurancaAdminError("Senha ou codigo invalido.", 401)
+        raise SegurancaAdminError(_CREDENCIAL_INVALIDA, 400)
     passo = totp.verificar(decrypt_secret(usuario.totp_segredo_cifrado), codigo)
-    if passo is None or (usuario.totp_ultimo_passo is not None and passo <= usuario.totp_ultimo_passo):
+    if passo is None:
+        raise SegurancaAdminError(_CREDENCIAL_INVALIDA, 400)
+    if usuario.totp_ultimo_passo is not None and passo <= usuario.totp_ultimo_passo:
         # O mesmo codigo nao abre duas sessoes (quem viu a tela nao reaproveita).
-        raise SegurancaAdminError("Senha ou codigo invalido.", 401)
+        # A senha ja conferiu, entao dizer o motivo nao ajuda quem nao a tem.
+        raise SegurancaAdminError(
+            "Este codigo ja foi usado. Espere o aplicativo mostrar o proximo e tente de novo.", 400
+        )
     usuario.totp_ultimo_passo = passo
     db.commit()
     return create_admin_token(usuario.id, usuario.token_version)
