@@ -39,8 +39,8 @@ flowchart LR
 | Limpeza de ZIP e PFX temporários | `lifespan` | startup | |
 | Recálculo de valores líquidos salvos | `valor_liquido_backfill_service` | startup (tarefa) | |
 | Worker por grupo (`_run_api_worker`) | `asyncio.to_thread(processar_proximo_job)` | contínuo, com espera de 0,2–2 s quando a fila está vazia | `API_WORKER_CONCURRENCY` workers por grupo |
-| Supervisor (`_supervisionar_grupos`) | | a cada 60 s | Recupera jobs sem heartbeat, roda o vigia da operação (`operacao_service`), limpa logs 1×/dia e sobe workers para grupos novos. **Não reinicia o agendador** |
-| Agendador (`_run_consultas_scheduler`) | | a cada `max(5 s, CONSULTAS_SCHEDULER_SLEEP)` | Enfileira por grupo quando `proximo_ciclo_em` vence. **Sem try/except: morre na primeira exceção** (ARCH-001) |
+| Supervisor (`_supervisionar_grupos`) | | a cada 60 s | Recupera jobs sem heartbeat, roda o vigia da operação (`operacao_service`), limpa logs 1×/dia, sobe workers para grupos novos e recria o agendador se a tarefa dele terminou |
+| Agendador (`_run_consultas_scheduler`) | | a cada `max(5 s, CONSULTAS_SCHEDULER_SLEEP)` | Enfileira por grupo quando `proximo_ciclo_em` vence. Exceção no ciclo vai para o log e o laço continua; cada volta sem erro grava o "último tick" (`operacao_service.registrar_tick_agendador`). Se a tarefa terminar mesmo assim, o supervisor sobe outra (`_recriar_agendador_se_parado`) |
 
 ## Camadas
 
@@ -129,7 +129,7 @@ Ler juntos: `consultas_service` + `nsu_control_service` + `legacy_processing_ser
 1. **Completude da coleta:** nenhuma nota do ADN pode faltar sem aviso.
 2. **Integridade e auditabilidade fiscal.**
 3. **Isolamento entre grupos.**
-4. **Operabilidade:** detectar parada em minutos. Hoje é o ponto mais fraco (ARCH-001, ARCH-008).
+4. **Operabilidade:** detectar parada em minutos. Hoje é o ponto mais fraco (ARCH-008; o agendador ganhou tick e alerta próprios).
 5. **Desempenho das telas com o worker rodando** (ARCH-002, ARCH-004).
 
 Monólito modular é a escolha adequada para o tamanho atual (≈ 84 empresas, 2 equipes). O ponto a decidir é separar o **processo** do worker da API, não dividir em serviços.

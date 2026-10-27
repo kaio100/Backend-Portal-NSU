@@ -38,6 +38,8 @@ from types import SimpleNamespace
 from typing import Any
 from xml.etree import ElementTree
 
+from defusedxml import DefusedXmlException
+from defusedxml import ElementTree as SafeElementTree
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -114,8 +116,8 @@ def _resumo(xml: bytes | None, nome: str) -> dict[str, Any] | None:
     if not xml:
         return None
     try:
-        ElementTree.fromstring(xml)
-    except ElementTree.ParseError:
+        SafeElementTree.fromstring(xml)
+    except (ElementTree.ParseError, DefusedXmlException):
         return None
     return legacy_ingestion_service.parse_xml_resumo_bytes(xml, nome)
 

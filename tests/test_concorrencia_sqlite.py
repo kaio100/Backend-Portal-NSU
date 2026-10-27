@@ -436,3 +436,55 @@ def test_heartbeat_independente_impede_recuperacao_enquanto_ingestao_esta_bloque
             db.commit()
     assert not original(*ids, "worker-teste")
     assert not any(t.name == f"heartbeat-job-{ids[0]}" for t in threading.enumerate())
+
+
+def test_ingestao_incremental_nao_grava_heartbeat_de_job_e_processo(tmp_path):
+    """ARCH-003: o heartbeat e so do manter_lease.
+
+    A ingestao incremental atualizava processo e job na ordem inversa da do
+    heartbeat (job -> processo -> lock) e as duas threads se travavam no
+    Postgres (DeadlockDetected, 4x de 06 a 08/10/2026).
+    """
+    from datetime import datetime, timedelta, timezone
+    from backend.app.services import legacy_processing_service
+
+    velho = datetime.now(timezone.utc) - timedelta(hours=2)
+    with SessionLocal() as db:
+        empresa = Empresa(nome="Sem heartbeat", cnpj="22333444000163", ambiente="producao", ativo=True)
+        db.add(empresa)
+        db.flush()
+        processo = Processo(empresa_id=empresa.id, tipo="consulta_nfse", status="rodando", updated_at=velho)
+        db.add(processo)
+        db.flush()
+        job = Job(empresa_id=empresa.id, processo_id=processo.id, tipo="consulta_nfse",
+                  status="rodando", locked_by="worker-teste", updated_at=velho, certificado_id=123)
+        db.add(job)
+        db.commit()
+        ids = job.id, processo.id
+
+    class UmaVolta:
+        """Deixa o laco rodar o corpo uma unica vez."""
+
+        def __init__(self):
+            self.voltas = 0
+
+        def is_set(self):
+            self.voltas += 1
+            return self.voltas > 1
+
+        def wait(self, _timeout=None):
+            return False
+
+    legacy_processing_service._loop_ingestao_incremental(
+        processo_id=ids[1],
+        job_id=ids[0],
+        pasta_saida=str(tmp_path / "sem_saida"),
+        run_started_at=velho,
+        stop_event=UmaVolta(),
+        intervalo=0.01,
+    )
+
+    limite = datetime.now(timezone.utc) - timedelta(hours=1)
+    with SessionLocal() as db:
+        assert db.get(Job, ids[0]).updated_at.replace(tzinfo=timezone.utc) < limite
+        assert db.get(Processo, ids[1]).updated_at.replace(tzinfo=timezone.utc) < limite

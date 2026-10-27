@@ -68,6 +68,7 @@
 | `ALERT_WEBHOOK_URL` | — | não | |
 | `METRICS_TOKEN` | — | sim (vazio em 06/10) | Vazio → `/metrics` e `/health/operacao` dão 404 |
 | `ALERTA_FILA_PARADA_MINUTOS` / `ALERTA_FALHAS_POR_HORA` / `ALERTA_INTERVALO_HORAS` / `ALERTA_EMPRESA_SEM_CONSULTA_HORAS` | 60 / 10 / 6 / 6 | não | |
+| `ALERTA_AGENDADOR_PARADO_MINUTOS` | 30 | não | Minutos sem volta concluída do agendador embutido até o vigia avisar `agendador_parado` (0 desliga). Só vale quando o agendador roda no processo da API |
 | `LOGS_RETENCAO_DIAS` | 0 (nunca apaga) | não | |
 | `INVERTEXTO_*` | desligado | sim | |
 | `CNPJ_RECEITA_DB_PATH`, `CNPJ_RECEITA_CACHE_DAYS` | `data/cnpj_receita.sqlite3` / 30 | não | |
@@ -80,12 +81,14 @@
 
 | Procure | Significa |
 |---|---|
-| `Agendador de consultas automaticas iniciado` | Startup do agendador embutido |
+| `Agendador de consultas automaticas iniciado` | Startup do agendador embutido (também aparece quando o supervisor o recria) |
+| `Agendador de consultas falhou e continuara ativo` | Exceção num ciclo; o laço segue e tenta de novo em segundos |
+| `Supervisor: agendador de consultas tinha parado` | A tarefa do agendador terminou e o supervisor subiu outra |
 | `Agendador de consultas: {'certificados_enfileirados': N` | Um ciclo (a cada ~15 min). **Mais de 30 min sem essa linha, com monitor ligado = agendador parado** |
 | `Job reservado` / `API worker 1 (grupo): {...}` | Início e fim de job |
 | `Job N do processo N falhou:` | Falha de job (texto do erro em seguida) |
 | `QueuePool limit of size` | Pool de conexões esgotado (ARCH-002) |
-| `DeadlockDetected` | ARCH-003 |
+| `DeadlockDetected` | Não deveria mais aparecer desde a correção de 27/10 (heartbeat só no `manter_lease`); se aparecer, anote as duas consultas do log |
 | `Supervisor: N job(s) sem heartbeat voltaram para a fila` | Recuperação de job travado |
 | `Operacao falhou` + `event` | Alerta do vigia; a descrição **não** vai para o log (ARCH-008) |
 | `Certificado N ignorado na consulta: vencido` / `senha nao pode ser lida` | Certificado fora da fila |
@@ -95,7 +98,7 @@
 
 ### Consultas automáticas paradas (sem "Agendador de consultas:" no log)
 1. Veja se o monitor está ligado (Motor ADN / `GET /consultas/status` → `automatico_ativo`, `monitor.escopo`).
-2. Se está ligado e não há ciclo: o agendador embutido morreu (ARCH-001). **Reinicie o serviço** no Railway; confira a linha de startup e o primeiro ciclo em até 15 min.
+2. Se está ligado e não há ciclo: veja `GET /health/operacao` (`agendador_ultimo_tick_em`, `agendador_minutos_sem_tick`, `agendador_ultimo_erro`) e procure "Agendador de consultas falhou" no log. Exceções no ciclo não derrubam mais o agendador, e o supervisor recria a tarefa se ela terminar; se mesmo assim o tick não anda (ex.: chamada presa ao banco), **reinicie o serviço** no Railway e confira a linha de startup e o primeiro ciclo em até 15 min.
 3. Procure a causa perto do último ciclo (`QueuePool`, erro de banco).
 4. A releitura "após parada" (REG-040) recupera o período sozinha nas próximas consultas.
 

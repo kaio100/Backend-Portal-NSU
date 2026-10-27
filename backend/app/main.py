@@ -107,19 +107,35 @@ async def _run_api_worker(slot: int, worker_id: str, grupo: str) -> None:
             print(f"API worker {slot} ({grupo}): {result}")
 
 
+def _recriar_agendador_se_parado(agendador: list[asyncio.Task]) -> bool:
+    """Sobe outro agendador quando a tarefa atual terminou (nao deveria terminar)."""
+    if not agendador or not agendador[-1].done():
+        return False
+    anterior = agendador[-1]
+    motivo = "cancelado" if anterior.cancelled() else repr(anterior.exception())
+    print(f"Supervisor: agendador de consultas tinha parado ({motivo}); iniciando outro")
+    operacao_service.registrar_erro_agendador(f"Agendador parou e foi reiniciado pelo supervisor: {motivo}")
+    agendador[-1] = asyncio.create_task(_run_consultas_scheduler())
+    return True
+
+
 async def _supervisionar_grupos(
     worker_tasks: list[asyncio.Task],
     grupos_cobertos: set[str],
     workers_per_group: int,
+    agendador: list[asyncio.Task] | None = None,
 ) -> None:
     """Sobe workers para grupos criados depois da inicializacao da API.
 
     Os grupos sao lidos uma unica vez no startup. Sem esta supervisao, uma
     empresa cadastrada em um grupo novo nunca tem quem consuma sua fila: os
-    jobs ficam pendentes ate alguem reiniciar a API.
+    jobs ficam pendentes ate alguem reiniciar a API. Tambem recria o
+    agendador embutido se ele parar.
     """
     while True:
         await asyncio.sleep(SUPERVISOR_GRUPOS_INTERVALO)
+        if agendador:
+            _recriar_agendador_se_parado(agendador)
         try:
             recuperados = await asyncio.to_thread(_recuperar_jobs_travados)
             if recuperados:
@@ -144,13 +160,27 @@ async def _run_consultas_scheduler() -> None:
     print("Agendador de consultas automaticas iniciado")
 
     while True:
-        if consultas_service.is_enabled():
-            result = await asyncio.to_thread(_enqueue_consultas_automaticas)
-            if result["certificados_enfileirados"]:
+        # Uma excecao (ex.: pool de conexoes esgotado) nao pode encerrar o laco:
+        # em 08/10/2026 o agendador morreu assim e as consultas pararam por horas.
+        try:
+            result = await asyncio.to_thread(_ciclo_agendador)
+            operacao_service.registrar_tick_agendador()
+            if result and result["certificados_enfileirados"]:
                 print(f"Agendador de consultas: {result}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"Agendador de consultas falhou e continuara ativo: {exc!r}")
+            operacao_service.registrar_erro_agendador(repr(exc))
         # O agendador trabalha em minutos; consultar o banco varias vezes por
         # segundo quando o sistema esta ocioso so consome CPU local.
         await asyncio.sleep(max(5.0, float(settings.consultas_scheduler_sleep)))
+
+
+def _ciclo_agendador() -> dict | None:
+    if not consultas_service.is_enabled():
+        return None
+    return _enqueue_consultas_automaticas()
 
 
 def _enqueue_consultas_automaticas() -> dict:
@@ -184,7 +214,8 @@ async def lifespan(app: FastAPI):
     if zips_removidos:
         print(f"Limpeza de downloads temporarios: {zips_removidos} ZIP(s) removido(s)")
     worker_tasks: list[asyncio.Task] = []
-    scheduler_task: asyncio.Task | None = None
+    # Lista de um item: o supervisor troca a tarefa quando o agendador para.
+    agendador: list[asyncio.Task] = []
     liquid_recalculation_task = asyncio.create_task(_recalcular_valores_liquidos_salvos())
     if settings.api_worker_enabled:
         workers_per_group = max(1, int(settings.api_worker_concurrency))
@@ -196,12 +227,14 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_run_api_worker(slot, worker_id, grupo))
             for slot, (grupo, worker_id) in enumerate(api_workers, start=1)
         ]
+        if settings.embedded_scheduler_enabled:
+            agendador.append(asyncio.create_task(_run_consultas_scheduler()))
         supervisor_task = asyncio.create_task(
-            _supervisionar_grupos(worker_tasks, {grupo for grupo, _id in api_workers}, workers_per_group)
+            _supervisionar_grupos(
+                worker_tasks, {grupo for grupo, _id in api_workers}, workers_per_group, agendador
+            )
         )
         worker_tasks.append(supervisor_task)
-        if settings.embedded_scheduler_enabled:
-            scheduler_task = asyncio.create_task(_run_consultas_scheduler())
 
     try:
         yield
@@ -210,12 +243,13 @@ async def lifespan(app: FastAPI):
             liquid_recalculation_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await liquid_recalculation_task
-        if scheduler_task is not None:
-            scheduler_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await scheduler_task
+        # O supervisor e cancelado antes para nao recriar o agendador no desligamento.
         for worker_task in worker_tasks:
             worker_task.cancel()
+        for scheduler_task in agendador:
+            scheduler_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await scheduler_task
         for worker_task in worker_tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await worker_task

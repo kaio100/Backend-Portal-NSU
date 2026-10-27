@@ -58,7 +58,7 @@ Mudança nova de esquema: modelo **e** revisão Alembic idempotente, no mesmo co
 | `verificacoes_email_tokens` | FK usuário (NOT NULL), convite | Código de confirmação (HMAC), tentativas | `contas_service` |
 | `redefinicoes_senha_tokens` | FK usuário (NOT NULL) | Código de redefinição de senha (HMAC), tentativas | `contas_service` |
 
-Nenhuma FK do modelo declara `ondelete`. Excluir uma linha referenciada falha no Postgres a menos que quem exclui trate os filhos (ex.: `admin.excluir_usuario` trata acessos e histórico, não os tokens: ARCH-006). Em produção as três tabelas de conta existiam antes do modelo; as regras de FK reais não foram conferidas.
+Nenhuma FK do modelo declara `ondelete`. Excluir uma linha referenciada falha no Postgres a menos que quem exclui trate os filhos (ex.: `admin.excluir_usuario` trata acessos, histórico, tokens de e-mail e senha, convites e `feedbacks`). Em produção as três tabelas de conta existiam antes do modelo; as regras de FK reais não foram conferidas.
 
 ### Campos de `notas` por domínio
 

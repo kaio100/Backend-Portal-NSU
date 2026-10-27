@@ -14,4 +14,4 @@ Operador ou admin gera um link de convite para o **próprio grupo**. A pessoa cr
 - (−) Depende do Resend em produção (sem ele, 503 no cadastro).
 - (−) `usuarios.empresa_id` é obrigatório: grupo sem empresa ativa não aceita cadastro.
 - (−) O código é um HMAC com `JWT_SECRET`: trocar o segredo invalida códigos pendentes.
-- (−) Tokens de verificação e redefinição referenciam o usuário sem cascata: excluir usuário falha no Postgres (ARCH-006).
+- (−) Tokens de verificação e redefinição referenciam o usuário sem cascata: quem exclui o usuário precisa apagá-los antes (feito em `admin.excluir_usuario` desde 16/10).

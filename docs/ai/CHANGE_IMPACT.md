@@ -6,12 +6,12 @@
 
 | Arquivo | Por que é crítico | Cuidado |
 |---|---|---|
-| `backend/app/main.py` | Sobe API, workers por grupo, supervisor e agendador no mesmo processo | Toda tarefa em background precisa de `try/except` e de quem a recrie (ARCH-001) |
+| `backend/app/main.py` | Sobe API, workers por grupo, supervisor e agendador no mesmo processo | Toda tarefa em background precisa de `try/except` e de quem a recrie: o agendador tem os dois (laço protegido + supervisor) |
 | `backend/app/core/config.py` | Padrões de tudo; valida segredos em produção | `worker_dry_run=True` e `api_worker_enabled=True` são padrões perigosos se a variável sumir |
 | `backend/app/db/models.py` | Contrato persistido (23 tabelas) | Coluna nova = revisão Alembic idempotente |
 | `backend/app/db/session.py` | Engine, pool e `migrate_db` | `_ensure_runtime_columns` congelado |
 | `backend/app/api/deps.py` | JWT, papéis, filtro por grupo, sessão admin (`require_admin_sessao`, `auditar_admin`) | Falha aqui = vazamento entre equipes ou painel admin sem 2FA |
-| `backend/app/worker/jobs.py` + `repositories/jobs_repo.py` + `locks_repo.py` + `services/job_lease_service.py` | Claim, lock, heartbeat, recuperação | Ordem de UPDATE (ARCH-003); devolução sem espera (ARCH-010) |
+| `backend/app/worker/jobs.py` + `repositories/jobs_repo.py` + `locks_repo.py` + `services/job_lease_service.py` | Claim, lock, heartbeat, recuperação | Só `manter_lease` grava heartbeat e renova o lock: outra thread que atualize job/processo cria ordem de UPDATE concorrente (deadlock de 06–08/10); devolução sem espera (ARCH-010) |
 | `backend/app/services/consultas_service.py` | Elegibilidade, monitor, criação de processos | Filtros do monitor (REG-039) |
 | `backend/app/services/nsu_control_service.py` | De onde a consulta parte | Pular NSU = nota que nunca chega (ARCH-005) |
 | `backend/app/services/legacy_processing_service.py` | Ponte com o motor, ingestão incremental, NSU final | Threads e sessões em paralelo |

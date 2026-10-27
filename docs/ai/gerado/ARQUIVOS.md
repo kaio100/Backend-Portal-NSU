@@ -1,6 +1,6 @@
 # Índice de arquivos versionados
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `c3c25fb`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-27 sobre o commit `6b038bd`. Não editar à mão.
 
 
 352 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
@@ -18,13 +18,13 @@
 | `Dockerfile` |  |  |
 | `README.md` | 240 |  |
 | `RETENCOES_REGRAS.xlsx` |  |  |
-| `adn_nfse_downloader.py` | 972 | ADN NFS-e Downloader |
+| `adn_nfse_downloader.py` | 973 | ADN NFS-e Downloader |
 | `alembic.ini` | 7 |  |
 | `docker-compose.yml` | 32 |  |
 | `empresas.example.json` | 21 |  |
 | `iniciar_local.py` | 63 | Executa consultas reais com persistencia exclusivamente local. |
 | `requirements-dev.txt` | 4 |  |
-| `requirements.txt` | 14 |  |
+| `requirements.txt` | 15 |  |
 
 ## `.github/workflows/`
 
@@ -37,7 +37,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `__init__.py` | 1 |  |
-| `main.py` | 317 |  |
+| `main.py` | 351 |  |
 
 ## `backend/app/api/`
 
@@ -76,7 +76,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `__init__.py` | 1 |  |
-| `config.py` | 190 |  |
+| `config.py` | 193 |  |
 | `observability.py` | 76 |  |
 | `php_runtime.py` | 63 | Localiza o PHP e habilita as extensoes exigidas pelo DANFSe oficial. |
 | `rate_limit.py` | 82 |  |
@@ -160,7 +160,7 @@
 | `backup_supabase_nfse.ps1` |  |  |
 | `corrigir_integridade_certificados.py` | 78 |  |
 | `corrigir_simples_pendentes_online.py` | 166 |  |
-| `corrigir_status_fiscal.py` | 430 | Corrige o status fiscal gravado pela classificacao antiga (por palavras). |
+| `corrigir_status_fiscal.py` | 432 | Corrige o status fiscal gravado pela classificacao antiga (por palavras). |
 | `db_migration_common.py` | 168 |  |
 | `diagnosticar_banco.py` | 41 |  |
 | `diagnosticar_nsu_certificado.py` | 103 |  |
@@ -178,7 +178,7 @@
 | `promover_usuarios_locais.py` | 117 |  |
 | `r2_common.py` | 29 |  |
 | `recalcular_alertas_fiscais.py` | 260 | Recalcula os alertas fiscais (subitem LC116, ISS retido, valor liquido) |
-| `reconciliar_notas_certificados.py` | 216 |  |
+| `reconciliar_notas_certificados.py` | 219 |  |
 | `reconciliar_storage.py` | 46 | Compara referencias de XML/PDF no banco com os objetos existentes no storage. |
 | `regenerar_carimbos_pdfs.py` | 135 | Regenera PDFs espelho de notas canceladas ou substituidas. |
 | `regenerar_espelhos_competencia.py` | 161 | Regenera exclusivamente PDFs espelho de uma competência e certificado. |
@@ -205,22 +205,22 @@
 | `cnpj_receita_service.py` | 214 |  |
 | `consultas_service.py` | 500 |  |
 | `contas_service.py` | 325 | Contas por convite, confirmacao de e-mail e redefinicao de senha por codigo. |
-| `danfse_service.py` | 109 |  |
+| `danfse_service.py` | 113 |  |
 | `email_service.py` | 78 | E-mail transacional pelo Resend (codigo de cadastro e de redefinicao de senha). |
 | `empresas_service.py` | 47 |  |
 | `eventos_sync_service.py` | 277 | Consulta os eventos de uma NFS-e no ADN e aplica na nota ja importada. |
 | `job_lease_service.py` | 61 | Heartbeat independente da ingestao, durante toda a execucao real do job. |
-| `legacy_ingestion_service.py` | 1655 |  |
-| `legacy_processing_service.py` | 936 |  |
+| `legacy_ingestion_service.py` | 1657 |  |
+| `legacy_processing_service.py` | 923 |  |
 | `locks_service.py` | 46 |  |
 | `logs_service.py` | 103 |  |
 | `nfse_status_service.py` | 173 | Classificacao fiscal de um XML do ADN: nota ou evento, e qual o seu status. |
-| `nfse_xml_parser.py` | 760 |  |
+| `nfse_xml_parser.py` | 764 |  |
 | `notas_archive_service.py` | 168 |  |
 | `notas_download_service.py` | 300 |  |
 | `notas_service.py` | 955 |  |
 | `nsu_control_service.py` | 247 |  |
-| `operacao_service.py` | 205 | Saude da operacao: estado da fila, vigia com aviso e retencao de logs. |
+| `operacao_service.py` | 243 | Saude da operacao: estado da fila, vigia com aviso e retencao de logs. |
 | `operational_fields_service.py` | 312 |  |
 | `portal_support_service.py` | 1453 |  |
 | `processos_service.py` | 134 |  |
@@ -395,11 +395,11 @@
 | `00_LEIA_PRIMEIRO.md` | 62 |  |
 | `API.md` | 58 |  |
 | `ARCHITECTURE_CURRENT.md` | 135 |  |
-| `CHANGELOG.md` | 57 |  |
+| `CHANGELOG.md` | 65 |  |
 | `CHANGE_IMPACT.md` | 73 |  |
 | `DATABASE.md` | 81 |  |
-| `FINDINGS.md` | 104 |  |
-| `OPERATIONS.md` | 139 |  |
+| `FINDINGS.md` | 98 |  |
+| `OPERATIONS.md` | 142 |  |
 | `PROJECT_CONTEXT.md` | 93 |  |
 | `SECURITY.md` | 60 |  |
 
@@ -477,7 +477,7 @@
 | `test_classificacao_status_nfse.py` | 330 | Classificacao de status da NFS-e com XML reais do ADN (mascarados). |
 | `test_cnpj_receita.py` | 118 |  |
 | `test_cnpj_receita_cache.py` | 77 |  |
-| `test_concorrencia_sqlite.py` | 438 | Regressao dos incidentes de concorrencia local (SQLite). |
+| `test_concorrencia_sqlite.py` | 490 | Regressao dos incidentes de concorrencia local (SQLite). |
 | `test_conferencia_auditavel.py` | 207 | Analise fiscal auditavel: trava de retificacao, autor do login e historico. |
 | `test_conferencia_nao_grava_calculados.py` | 76 | Salvar a conferencia nao grava valores calculados so para a tela. |
 | `test_consulta_adn_confiavel.py` | 207 | Fase 3: consulta ao ADN sem perder documentos e sem travar a fila. |

@@ -118,6 +118,9 @@ class Settings(BaseSettings):
     # sem nenhuma consulta finalizada (0 = desligado). O ciclo normal passa
     # por todas as empresas em ~1h30.
     alerta_empresa_sem_consulta_horas: int = 6
+    # Avisa quando o agendador embutido passa este numero de minutos sem
+    # completar uma volta do laco (0 = desligado). A volta normal leva segundos.
+    alerta_agendador_parado_minutos: int = 30
     # Dias de logs_processos mantidos; 0 = nunca apaga.
     logs_retencao_dias: int = 0
     log_level: str = "INFO"
