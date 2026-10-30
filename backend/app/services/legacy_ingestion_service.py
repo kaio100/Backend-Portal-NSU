@@ -39,7 +39,6 @@ from backend.app.services.retencoes_regras_service import (
 from backend.app.services.storage_service import (
     StorageService,
     build_pdf_espelho_key,
-    build_pdf_oficial_key,
     build_xml_key,
 )
 
@@ -119,8 +118,6 @@ def _canonical_tipo(tipo: str) -> str:
     normalized = (tipo or "").lower()
     if normalized == "xml":
         return "XML"
-    if normalized in {"pdf_oficial", "pdf_original", "oficial"}:
-        return "PDF_ORIGINAL"
     if normalized in {"pdf_espelho", "espelho"}:
         return "PDF_ESPELHO"
     return tipo
@@ -814,15 +811,6 @@ def _aplicar_campos_fiscais_xml(nota_data: dict[str, Any], resumo: dict[str, Any
         nota_data["iss_retido"] = bool(resumo.get("iss_retido"))
 
 
-def _find_pdf_for_chave(pdf_files: list[Path], chave: str) -> Path | None:
-    if not chave:
-        return None
-    for pdf_path in pdf_files:
-        if chave in pdf_path.stem or chave[-8:] in pdf_path.stem:
-            return pdf_path
-    return None
-
-
 def _recent_file(path: Path, updated_after: datetime | None) -> bool:
     if updated_after is None:
         return True
@@ -870,19 +858,6 @@ def _linhas_fora_do_indice(base_dir: Path, rows: list[dict[str, str]]) -> list[d
             }
         )
     return extras
-
-
-def _arquivo_tipo_pdf(row: dict[str, str]) -> str:
-    pdf_tipo = (row.get("pdf_tipo") or "").strip().lower()
-    if pdf_tipo == "oficial":
-        return "pdf_oficial"
-    return "pdf_espelho"
-
-
-def _build_pdf_key(cnpj: str, ano: str, mes: str, filename: str, tipo: str) -> str:
-    if tipo == "pdf_oficial":
-        return build_pdf_oficial_key(cnpj, ano, mes, filename)
-    return build_pdf_espelho_key(cnpj, ano, mes, filename)
 
 
 def _put_file_if_needed(storage: StorageService, storage_key: str, source_path: Path, content_type: str,
@@ -1019,7 +994,6 @@ def ingerir_saida_legado(
     max_rows: int | None = None,
     updated_after: datetime | None = None,
     only_chaves: set[str] | None = None,
-    commit_every: int | None = None,  # mantido por compatibilidade; cada linha e confirmada sozinha
     start_row: int = 0,
     gerar_pdf_espelho: bool = True,
     should_stop: Callable[[], bool] | None = None,
@@ -1128,11 +1102,6 @@ def ingerir_saida_legado(
             if xml_path is not None:
                 xml_storage_key = build_xml_key(empresa_cnpj, ano, mes, xml_path.name)
 
-            pdf_path = _resolve_path(row.get("pdf_path", ""), Path.cwd())
-            pdf_tipo = _arquivo_tipo_pdf(row)
-            if pdf_path is not None:
-                pdf_storage_key = _build_pdf_key(empresa_cnpj, ano, mes, pdf_path.name, pdf_tipo)
-
             if xml_path is None:
                 counters["arquivos_ausentes"] += 1
                 continue
@@ -1211,7 +1180,6 @@ def ingerir_saida_legado(
             pdf_filename = ""
             if pdf_storage_key is None and gerar_pdf_espelho:
                 try:
-                    pdf_tipo = "pdf_espelho"
                     dados_pdf = extrair_dados_nfse(xml_path, prefeitura_info=None)
                     pdf_filename = friendly_pdf_filename(dados_pdf)
                     pdf_storage_key = build_pdf_espelho_key(empresa_cnpj, ano, mes, pdf_filename)
@@ -1233,7 +1201,6 @@ def ingerir_saida_legado(
                     # Falha ao montar o PDF nao pode impedir que a nota e o
                     # XML, que sao os documentos fiscais de origem, entrem
                     # no banco e aparecam no portal.
-                    pdf_tipo = ""
                     pdf_storage_key = None
                     pdf_espelho_path = None
                     counters["avisos_pdf"] += 1
@@ -1290,8 +1257,7 @@ def ingerir_saida_legado(
                 "status_documento": status_documento,
                 "status_rotulo": status_rotulo,
                 "xml_storage_key": xml_storage_key,
-                "pdf_oficial_storage_key": pdf_storage_key if pdf_tipo == "pdf_oficial" else None,
-                "pdf_espelho_storage_key": pdf_storage_key if pdf_tipo == "pdf_espelho" else None,
+                "pdf_espelho_storage_key": pdf_storage_key,
             }
             _aplicar_campos_fiscais_xml(nota_data, xml_resumo)
             nota, created = notas_repo.upsert_nota_by_chave(db, processo.empresa_id, chave, nota_data)
@@ -1326,25 +1292,7 @@ def ingerir_saida_legado(
             elif row.get("xml_path"):
                 counters["arquivos_ausentes"] += 1
 
-            if pdf_path is not None and pdf_storage_key is not None:
-                pdf_bytes = pdf_path.read_bytes()
-                meta, imported = _put_file_if_needed(storage, pdf_storage_key, pdf_path, "application/pdf")
-                counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
-                if _registrar_arquivo(
-                    db,
-                    storage,
-                    processo.empresa_id,
-                    processo.id,
-                    nota.id,
-                    pdf_tipo,
-                    pdf_storage_key,
-                    "application/pdf",
-                    int(meta["size"]),
-                    _sha256(pdf_bytes),
-                    pdf_path.name,
-                ):
-                    counters["arquivos_registrados"] += 1
-            elif pdf_espelho_reutilizado and pdf_storage_key is not None:
+            if pdf_espelho_reutilizado and pdf_storage_key is not None:
                 registrado = arquivos_lote.get(pdf_storage_key)
                 if registrado and registrado["checksum"] and registrado["tamanho_bytes"] is not None:
                     pdf_size = registrado["tamanho_bytes"]
@@ -1359,7 +1307,7 @@ def ingerir_saida_legado(
                     processo.empresa_id,
                     processo.id,
                     nota.id,
-                    pdf_tipo,
+                    "pdf_espelho",
                     pdf_storage_key,
                     "application/pdf",
                     pdf_size,
@@ -1402,8 +1350,6 @@ def ingerir_saida_legado(
                     pdf_espelho_path.name,
                 ):
                     counters["arquivos_registrados"] += 1
-            elif row.get("pdf_path"):
-                counters["arquivos_ausentes"] += 1
             linhas_processadas += 1
             # Cada linha e confirmada sozinha: com commits em blocos, o
             # rollback de uma linha com erro desfazia as anteriores do bloco,
@@ -1437,10 +1383,8 @@ def _ingerir_por_varredura(
     gerar_pdf_espelho: bool = True,
 ) -> dict[str, Any]:
     xml_files = [path for path in sorted(base_dir.rglob("*.xml")) if _recent_file(path, updated_after)]
-    pdf_files = [path for path in sorted(base_dir.rglob("*.pdf")) if _recent_file(path, updated_after)]
     counters["fallback_varredura"] = True
     counters["xmls_encontrados"] = len(xml_files)
-    counters["pdfs_encontrados"] = len(pdf_files)
     empresa_cnpj = str(processo.empresa.cnpj if processo.empresa else processo.empresa_id)
 
     resumos_por_xml: dict[Path, dict[str, str]] = {}
@@ -1520,10 +1464,9 @@ def _ingerir_por_varredura(
 
             ano, mes = _ano_mes(resumo)
             xml_storage_key = build_xml_key(empresa_cnpj, ano, mes, xml_path.name)
-            pdf_path = _find_pdf_for_chave(pdf_files, chave)
-            pdf_storage_key = build_pdf_oficial_key(empresa_cnpj, ano, mes, pdf_path.name) if pdf_path else None
+            pdf_storage_key = None
             pdf_espelho_path = None
-            if pdf_storage_key is None and gerar_pdf_espelho:
+            if gerar_pdf_espelho:
                 dados_pdf = extrair_dados_nfse(xml_path, prefeitura_info=None)
                 pdf_filename = friendly_pdf_filename(dados_pdf)
                 pdf_storage_key = build_pdf_espelho_key(empresa_cnpj, ano, mes, pdf_filename)
@@ -1568,8 +1511,7 @@ def _ingerir_por_varredura(
                 "status_documento": status_documento,
                 "status_rotulo": status_rotulo,
                 "xml_storage_key": xml_storage_key,
-                "pdf_oficial_storage_key": pdf_storage_key if pdf_path is not None else None,
-                "pdf_espelho_storage_key": pdf_storage_key if pdf_path is None else None,
+                "pdf_espelho_storage_key": pdf_storage_key,
             }
             _aplicar_campos_fiscais_xml(nota_data, resumo)
             nota, created = notas_repo.upsert_nota_by_chave(db, processo.empresa_id, chave, nota_data)
@@ -1597,25 +1539,7 @@ def _ingerir_por_varredura(
             ):
                 counters["arquivos_registrados"] += 1
 
-            if pdf_path is not None and pdf_storage_key is not None:
-                pdf_bytes = pdf_path.read_bytes()
-                meta, imported = _put_file_if_needed(storage, pdf_storage_key, pdf_path, "application/pdf")
-                counters["arquivos_importados" if imported else "arquivos_existentes"] += 1
-                if _registrar_arquivo(
-                    db,
-                    storage,
-                    processo.empresa_id,
-                    processo.id,
-                    nota.id,
-                    "pdf_oficial",
-                    pdf_storage_key,
-                    "application/pdf",
-                    int(meta["size"]),
-                    _sha256(pdf_bytes),
-                    pdf_path.name,
-                ):
-                    counters["arquivos_registrados"] += 1
-            elif pdf_espelho_path is not None and pdf_storage_key is not None:
+            if pdf_espelho_path is not None and pdf_storage_key is not None:
                 pdf_bytes = pdf_espelho_path.read_bytes()
                 if storage.exists(pdf_storage_key):
                     if str(status_documento or "").strip().lower() in {"cancelada", "substituida"}:

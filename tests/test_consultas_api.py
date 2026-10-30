@@ -431,13 +431,15 @@ def test_ingestao_sem_index_cria_nota_arquivos_e_endpoints(tmp_path):
                 get_storage_service(),
                 processo,
                 tmp_path,
+                gerar_pdf_espelho=False,
             )
             db.commit()
 
         assert result["index_encontrado"] is False
         assert result["fallback_varredura"] is True
         assert result["notas_criadas"] == 1
-        assert result["arquivos_registrados"] == 2
+        # PDF solto na pasta de saida nao e mais importado: o PDF e sempre o espelho.
+        assert result["arquivos_registrados"] == 1
 
         notas = client.get("/notas", params={"chave": chave})
         assert notas.status_code == 200
@@ -451,7 +453,7 @@ def test_ingestao_sem_index_cria_nota_arquivos_e_endpoints(tmp_path):
 
         arquivos = client.get(f"/notas/{nota_id}/arquivos")
         assert arquivos.status_code == 200
-        assert {item["tipo"] for item in arquivos.json()} == {"XML", "PDF_ORIGINAL"}
+        assert {item["tipo"] for item in arquivos.json()} == {"XML"}
         assert all(item["filename"] for item in arquivos.json())
         assert all(item["size_bytes"] for item in arquivos.json())
 

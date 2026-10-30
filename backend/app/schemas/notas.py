@@ -320,7 +320,10 @@ class NotasDownloadLoteRequest(BaseModel):
     nota_ids: list[int] | None = None
     incluir_xml: bool = True
     incluir_pdf: bool = True
-    preferir_pdf_original: bool = True
+    # Coloca a planilha de conferencia dentro do ZIP. Ela segue os filtros, nao
+    # os nota_ids: no download em partes vai so na primeira e cobre o lote todo.
+    incluir_relatorio: bool = False
+    relatorio_layout: str | None = None
 
     @model_validator(mode="after")
     def limpar_nota_ids(self):
@@ -333,32 +336,4 @@ class NotasDownloadLoteRequest(BaseModel):
                     seen.add(nota_id)
                     cleaned.append(nota_id)
             self.nota_ids = cleaned or None
-        return self
-
-
-class NotaArquivoResumo(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    nota_id: int | None = None
-    tipo: str
-    filename: str | None = None
-    content_type: str | None = None
-    tamanho_bytes: int | None = None
-    size_bytes: int | None = None
-    checksum: str | None = None
-    storage_key: str | None = None
-    created_at: datetime | None = None
-
-    @model_validator(mode="after")
-    def normalizar_saida(self):
-        normalized = (self.tipo or "").lower()
-        if normalized == "xml":
-            self.tipo = "XML"
-        elif normalized in {"pdf_oficial", "pdf_original", "oficial"}:
-            self.tipo = "PDF_ORIGINAL"
-        elif normalized in {"pdf_espelho", "espelho"}:
-            self.tipo = "PDF_ESPELHO"
-        self.filename = self.filename or PurePosixPath((self.storage_key or "").replace("\\", "/")).name
-        self.size_bytes = self.size_bytes if self.size_bytes is not None else self.tamanho_bytes
         return self

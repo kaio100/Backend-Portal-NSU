@@ -81,7 +81,7 @@ def _nota(db, empresa, processo, numero: str, prestador: str, status: str = "aut
 
 
 def _zip_empresa_prefix(empresa_nome: str) -> str:
-    return f"notas_nfse/{empresa_nome}"
+    return empresa_nome
 
 
 def _arquivo(db, storage, empresa, processo, nota, tipo: str, filename: str, data: bytes | None = b"data") -> Arquivo:
@@ -116,14 +116,13 @@ def _zip_text(response, name: str) -> str:
         return zf.read(name).decode("utf-8")
 
 
-def test_download_lote_com_nota_ids_inclui_xml_e_pdf_original_sem_espelho():
+def test_download_lote_com_nota_ids_inclui_xml_e_pdf_espelho():
     _reset_db()
     storage = get_storage_service()
     with SessionLocal() as db:
         empresa, processo = _empresa_processo(db, nome="CANOPUS CONSTRUCOES BELEM LTDA")
         nota = _nota(db, empresa, processo, "1370", "9D STUDIO COMERCIO E SERVICOS LTDA")
         _arquivo(db, storage, empresa, processo, nota, "XML", "origem.xml", b"<xml/>")
-        _arquivo(db, storage, empresa, processo, nota, "PDF_ORIGINAL", "original.pdf", b"%PDF original")
         _arquivo(db, storage, empresa, processo, nota, "PDF_ESPELHO", "espelho.pdf", b"%PDF espelho")
         nota_id = nota.id
         db.commit()
@@ -131,21 +130,21 @@ def test_download_lote_com_nota_ids_inclui_xml_e_pdf_original_sem_espelho():
     with TestClient(app) as client:
         response = client.post(
             "/notas/download-lote",
-            json={"nota_ids": [nota_id], "incluir_xml": True, "incluir_pdf": True, "preferir_pdf_original": True},
+            json={"nota_ids": [nota_id], "incluir_xml": True, "incluir_pdf": True},
         )
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
-    assert ".zip" in response.headers["content-disposition"]
+    assert "CANOPUS%20CONSTRUCOES%20BELEM%20LTDA.zip" in response.headers["content-disposition"]
     names = _zip_names(response)
-    assert "notas_nfse/CANOPUS CONSTRUCOES BELEM LTDA/xml/NFS-e 1370.xml" in names
-    assert "notas_nfse/CANOPUS CONSTRUCOES BELEM LTDA/pdf/NFS-e 1370.pdf" in names
+    assert "CANOPUS CONSTRUCOES BELEM LTDA/xml/NFS-e 1370.xml" in names
+    assert "CANOPUS CONSTRUCOES BELEM LTDA/pdf/NFS-e 1370.pdf" in names
     assert not any("/NFS-e_1370/" in name for name in names)
     assert not any("50227393000149" in name for name in names)
     assert not any(name.endswith("espelho.pdf") for name in names)
 
 
-def test_arquivos_da_nota_exibe_apenas_xml_e_pdf_preferido():
+def test_arquivos_da_nota_exibe_apenas_xml_e_pdf_espelho():
     _reset_db()
     storage = get_storage_service()
     with SessionLocal() as db:
@@ -154,7 +153,6 @@ def test_arquivos_da_nota_exibe_apenas_xml_e_pdf_preferido():
         _arquivo(db, storage, empresa, processo, nota, "XML", "nota.xml", b"<xml/>")
         _arquivo(db, storage, empresa, processo, nota, "XML", "nota_duplicada.xml", b"<xml/>")
         _arquivo(db, storage, empresa, processo, nota, "PDF_ESPELHO", "espelho.pdf", b"%PDF espelho")
-        _arquivo(db, storage, empresa, processo, nota, "PDF_ORIGINAL", "original.pdf", b"%PDF original")
         nota_id = nota.id
         db.commit()
 
@@ -163,11 +161,11 @@ def test_arquivos_da_nota_exibe_apenas_xml_e_pdf_preferido():
 
     assert response.status_code == 200
     payload = response.json()
-    assert [item["tipo"] for item in payload] == ["XML", "PDF_ORIGINAL"]
-    assert [item["filename"] for item in payload] == ["nota.xml", "original.pdf"]
+    assert [item["tipo"] for item in payload] == ["XML", "PDF_ESPELHO"]
+    assert [item["filename"] for item in payload] == ["nota.xml", "espelho.pdf"]
 
 
-def test_download_lote_por_filtros_inclui_pdf_espelho_quando_nao_ha_original():
+def test_download_lote_por_filtros_inclui_pdf_espelho():
     _reset_db()
     storage = get_storage_service()
     with SessionLocal() as db:
@@ -242,7 +240,7 @@ def test_download_lote_nunca_inclui_cancelada_ou_substituida():
     for response in respostas:
         assert response.status_code == 200
         names = _zip_names(response)
-        assert sorted(name.split("/", 2)[2] for name in names) == sorted(esperado)
+        assert sorted(name.split("/", 1)[1] for name in names) == sorted(esperado)
         assert not any("CANCELADO" in name or "SUBSTITUIDO" in name for name in names)
 
 
@@ -339,7 +337,7 @@ def test_download_lote_get_aceita_nota_ids_para_lotes_em_partes():
     assert not any("NFS-e 2" in name for name in names)
 
 
-def test_download_lote_com_pdf_original_e_espelho_quando_nao_prefere_original():
+def test_download_lote_ignora_pdf_original_legado_e_entrega_so_o_espelho():
     _reset_db()
     storage = get_storage_service()
     with SessionLocal() as db:
@@ -353,13 +351,14 @@ def test_download_lote_com_pdf_original_e_espelho_quando_nao_prefere_original():
     with TestClient(app) as client:
         response = client.post(
             "/notas/download-lote",
-            json={"nota_ids": [nota_id], "incluir_xml": False, "incluir_pdf": True, "preferir_pdf_original": False},
+            json={"nota_ids": [nota_id], "incluir_xml": False, "incluir_pdf": True},
         )
 
     assert response.status_code == 200
-    names = _zip_names(response)
-    assert any(name.endswith("/pdf/NFS-e 10.pdf") for name in names)
-    assert any(name.endswith("/pdf/NFS-e 10 (2).pdf") for name in names)
+    pdfs = [name for name in _zip_names(response) if name.endswith(".pdf")]
+    assert len(pdfs) == 1 and pdfs[0].endswith("/pdf/NFS-e 10.pdf")
+    with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+        assert zf.read(pdfs[0]) == b"%PDF espelho"
 
 
 def test_download_lote_estrutura_empresa_xml_pdf_sem_pastas_por_nota_ou_prestador():
@@ -408,7 +407,7 @@ def test_download_lote_sanitiza_nomes_e_impede_path_traversal():
 
     assert response.status_code == 200
     names = _zip_names(response)
-    assert names == ["notas_nfse/CANOPUS CONSTRUCOES BELEM LTDA/xml/NFS-e 33 x.xml"]
+    assert names == ["CANOPUS CONSTRUCOES BELEM LTDA/xml/NFS-e 33 x.xml"]
     for name in names:
         assert ".." not in name
         assert "\\" not in name
@@ -432,8 +431,8 @@ def test_download_lote_arquivos_duplicados_recebem_sufixo_sem_sobrescrever():
 
     assert response.status_code == 200
     names = _zip_names(response)
-    assert "notas_nfse/EMPRESA DUPLICADA/xml/NFS-e 5.xml" in names
-    assert "notas_nfse/EMPRESA DUPLICADA/xml/NFS-e 5 (2).xml" in names
+    assert "EMPRESA DUPLICADA/xml/NFS-e 5.xml" in names
+    assert "EMPRESA DUPLICADA/xml/NFS-e 5 (2).xml" in names
 
 
 def test_download_lote_continua_com_arquivo_ausente_e_relatorio():
@@ -451,8 +450,8 @@ def test_download_lote_continua_com_arquivo_ausente_e_relatorio():
 
     assert response.status_code == 200
     names = _zip_names(response)
-    assert "notas_nfse/RELATORIO_ERROS.txt" in names
-    assert "indisponivel no storage" in _zip_text(response, "notas_nfse/RELATORIO_ERROS.txt")
+    assert "Empresa Teste/RELATORIO_ERROS.txt" in names
+    assert "indisponivel no storage" in _zip_text(response, "Empresa Teste/RELATORIO_ERROS.txt")
 
 
 def test_download_lote_sem_notas_retorna_erro_amigavel():
@@ -482,3 +481,74 @@ def test_download_lote_respeita_limite_maximo(monkeypatch):
 
     assert response.status_code == 400
     assert "Limite de 1 notas por ZIP excedido" in response.json()["detail"]
+
+
+def test_download_lote_com_relatorio_coloca_a_planilha_dentro_do_zip():
+    _reset_db()
+    storage = get_storage_service()
+    with SessionLocal() as db:
+        empresa, processo = _empresa_processo(db, cnpj="33444555000166")
+        nota = _nota(db, empresa, processo, "7", "PRESTADOR PLANILHA")
+        _arquivo(db, storage, empresa, processo, nota, "PDF_ESPELHO", "n7.pdf", b"%PDF")
+        empresa_id = empresa.id
+        db.commit()
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/notas/download-lote",
+            params={"empresa_id": empresa_id, "incluir_xml": False, "incluir_pdf": True, "incluir_relatorio": True},
+        )
+
+    assert response.status_code == 200
+    names = _zip_names(response)
+    assert any(name.endswith("/pdf/NFS-e 7.pdf") for name in names)
+    planilhas = [name for name in names if name.startswith("Empresa Teste/relatorio_conferencia_") and name.endswith(".xlsx")]
+    assert len(planilhas) == 1
+    with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+        assert zf.read(planilhas[0])[:2] == b"PK"
+
+
+def test_download_lote_com_relatorio_sai_mesmo_sem_pdf_disponivel():
+    _reset_db()
+    with SessionLocal() as db:
+        empresa, processo = _empresa_processo(db, cnpj="44555666000177")
+        _nota(db, empresa, processo, "8", "PRESTADOR SEM PDF")
+        empresa_id = empresa.id
+        db.commit()
+
+    with TestClient(app) as client:
+        sem_planilha = client.post("/notas/download-lote", json={"filtros": {"empresa_id": empresa_id}, "incluir_xml": False})
+        com_planilha = client.post(
+            "/notas/download-lote",
+            json={"filtros": {"empresa_id": empresa_id}, "incluir_xml": False, "incluir_relatorio": True},
+        )
+
+    assert sem_planilha.status_code == 400
+    assert com_planilha.status_code == 200
+    assert [name for name in _zip_names(com_planilha) if name.endswith(".xlsx")]
+
+
+def test_download_lote_de_varias_empresas_usa_raiz_generica_e_subpasta_por_empresa():
+    _reset_db()
+    storage = get_storage_service()
+    with SessionLocal() as db:
+        empresa_a, processo_a = _empresa_processo(db, nome="EMPRESA A", cnpj="11111111000111")
+        empresa_b, processo_b = _empresa_processo(db, nome="EMPRESA B", cnpj="22222222000122")
+        nota_a = _nota(db, empresa_a, processo_a, "1", "PRESTADOR A")
+        nota_b = _nota(db, empresa_b, processo_b, "2", "PRESTADOR B")
+        _arquivo(db, storage, empresa_a, processo_a, nota_a, "XML", "a.xml", b"<xml/>")
+        _arquivo(db, storage, empresa_b, processo_b, nota_b, "XML", "b.xml", b"<xml/>")
+        ids = [nota_a.id, nota_b.id]
+        db.commit()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/notas/download-lote",
+            json={"nota_ids": ids, "incluir_xml": True, "incluir_pdf": False},
+        )
+
+    assert response.status_code == 200
+    assert "notas_nfse_" in response.headers["content-disposition"]
+    names = _zip_names(response)
+    assert "notas_nfse/EMPRESA A/xml/NFS-e 1.xml" in names
+    assert "notas_nfse/EMPRESA B/xml/NFS-e 2.xml" in names

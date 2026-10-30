@@ -469,7 +469,8 @@ def download_lote_notas_get(
     valor_max: Decimal | None = Query(default=None),
     incluir_xml: bool = Query(default=True),
     incluir_pdf: bool = Query(default=True),
-    preferir_pdf_original: bool = Query(default=True),
+    incluir_relatorio: bool = Query(default=False),
+    relatorio_layout: str | None = Query(default=None),
     sort: str = Query(default="recentes", pattern="^(recentes|emissao)$"),
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
@@ -511,7 +512,8 @@ def download_lote_notas_get(
         nota_ids=nota_ids,
         incluir_xml=incluir_xml,
         incluir_pdf=incluir_pdf,
-        preferir_pdf_original=preferir_pdf_original,
+        incluir_relatorio=incluir_relatorio,
+        relatorio_layout=relatorio_layout,
     )
     try:
         result = notas_download_service.gerar_zip_notas(db, storage, payload, grupo=usuario.grupo)

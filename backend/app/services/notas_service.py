@@ -123,11 +123,6 @@ def classificar_direcao_nota(nota: Nota, empresa_cnpj: str | None) -> str:
     return "indefinida"
 
 
-def classificar_tipo_nota(nota: Nota, empresa_cnpj: str | None) -> str:
-    direcao = classificar_direcao_nota(nota, empresa_cnpj)
-    return direcao_para_tipo(direcao) or "indefinida"
-
-
 def _empresa_cnpj_nota(nota: Nota) -> str:
     empresa = getattr(nota, "empresa", None)
     if empresa is not None:
@@ -161,15 +156,13 @@ def _canonical_tipo_arquivo(tipo: str | None) -> str:
     normalized = (tipo or "").lower()
     if normalized == "xml":
         return "XML"
-    if normalized in {"pdf_original", "pdf_oficial", "oficial"}:
-        return "PDF_ORIGINAL"
     if normalized in {"pdf_espelho", "espelho"}:
         return "PDF_ESPELHO"
     return tipo or ""
 
 
 def _selecionar_arquivos_visiveis(arquivos: list[Arquivo]) -> list[Arquivo]:
-    por_tipo: dict[str, list[Arquivo]] = {"XML": [], "PDF_ORIGINAL": [], "PDF_ESPELHO": []}
+    por_tipo: dict[str, list[Arquivo]] = {"XML": [], "PDF_ESPELHO": []}
     for arquivo in arquivos:
         tipo = _canonical_tipo_arquivo(arquivo.tipo)
         if tipo in por_tipo:
@@ -178,9 +171,7 @@ def _selecionar_arquivos_visiveis(arquivos: list[Arquivo]) -> list[Arquivo]:
     selecionados: list[Arquivo] = []
     if por_tipo["XML"]:
         selecionados.append(por_tipo["XML"][0])
-    if por_tipo["PDF_ORIGINAL"]:
-        selecionados.append(por_tipo["PDF_ORIGINAL"][0])
-    elif por_tipo["PDF_ESPELHO"]:
+    if por_tipo["PDF_ESPELHO"]:
         selecionados.append(por_tipo["PDF_ESPELHO"][0])
     return selecionados
 

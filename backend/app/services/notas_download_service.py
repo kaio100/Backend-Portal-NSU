@@ -19,7 +19,7 @@ from backend.app.core.observability import alert_failure, metrics
 from backend.app.db.models import Arquivo, Nota
 from backend.app.repositories import arquivos_repo, notas_repo
 from backend.app.schemas.notas import NotasDownloadFiltros, NotasDownloadLoteRequest
-from backend.app.services import notas_service
+from backend.app.services import notas_service, portal_support_service, relatorio_layouts_service
 from backend.app.services.storage_naming_service import build_nota_base_filename, build_zip_empresa_folder
 from backend.app.services.storage_service import StorageService
 
@@ -50,8 +50,6 @@ def _canonical_tipo(value: str | None) -> str:
     normalized = (value or "").lower()
     if normalized == "xml":
         return "XML"
-    if normalized in {"pdf_oficial", "pdf_original", "oficial"}:
-        return "PDF_ORIGINAL"
     if normalized in {"pdf_espelho", "espelho"}:
         return "PDF_ESPELHO"
     return value or ""
@@ -85,23 +83,41 @@ def _friendly_pdf_filename(nota: Nota) -> str:
     return f"{build_nota_base_filename(nota)}.pdf"
 
 
-def _zip_folder_for_arquivo(nota: Nota, tipo: str) -> str:
+def _empresa_folder(nota: Nota) -> str:
     empresa = getattr(nota, "empresa", None)
-    empresa_folder = build_zip_empresa_folder(
+    return build_zip_empresa_folder(
         getattr(empresa, "nome", None),
         int(nota.empresa_id) if nota.empresa_id is not None else None,
     )
+
+
+def _raiz_do_zip(notas: Iterable[Nota]) -> tuple[str, bool]:
+    """Pasta raiz do ZIP e se ha varias empresas.
+
+    Com uma empresa so, a raiz e o proprio nome dela (o ZIP tambem). Com varias,
+    a raiz e generica e cada empresa ganha uma subpasta.
+    """
+    por_empresa: dict[int | None, Nota] = {}
+    for nota in notas:
+        por_empresa.setdefault(nota.empresa_id, nota)
+    if len(por_empresa) == 1:
+        return _empresa_folder(next(iter(por_empresa.values()))), False
+    return "notas_nfse", True
+
+
+def _zip_folder_for_arquivo(nota: Nota, tipo: str, raiz: str, varias_empresas: bool) -> str:
     kind_folder = "xml" if tipo == "XML" else "pdf"
-    return f"notas_nfse/{empresa_folder}/{kind_folder}"
+    if varias_empresas:
+        return f"{raiz}/{_empresa_folder(nota)}/{kind_folder}"
+    return f"{raiz}/{kind_folder}"
 
 
 def _select_arquivos(
     arquivos: Iterable[Arquivo],
     incluir_xml: bool,
     incluir_pdf: bool,
-    preferir_pdf_original: bool,
 ) -> list[Arquivo]:
-    by_tipo: dict[str, list[Arquivo]] = {"XML": [], "PDF_ORIGINAL": [], "PDF_ESPELHO": []}
+    by_tipo: dict[str, list[Arquivo]] = {"XML": [], "PDF_ESPELHO": []}
     for arquivo in arquivos:
         tipo = _canonical_tipo(arquivo.tipo)
         if tipo in by_tipo:
@@ -110,15 +126,8 @@ def _select_arquivos(
     selected: list[Arquivo] = []
     if incluir_xml:
         selected.extend(by_tipo["XML"][:1])
-
     if incluir_pdf:
-        originals = by_tipo["PDF_ORIGINAL"]
-        espelhos = by_tipo["PDF_ESPELHO"]
-        if preferir_pdf_original:
-            selected.extend(originals[:1] if originals else espelhos[:1])
-        else:
-            selected.extend(originals[:1])
-            selected.extend(espelhos[:1])
+        selected.extend(by_tipo["PDF_ESPELHO"][:1])
     return selected
 
 
@@ -185,6 +194,7 @@ def gerar_zip_notas(
     if not notas:
         raise NotasDownloadLoteError("Nenhuma nota encontrada para os filtros informados.")
 
+    raiz, varias_empresas = _raiz_do_zip(notas)
     used_paths: set[str] = set()
     arquivos_adicionados = 0
     erros: list[str] = []
@@ -202,13 +212,23 @@ def gerar_zip_notas(
             arquivos_por_nota.get(int(nota.id), []),
             incluir_xml=payload.incluir_xml,
             incluir_pdf=payload.incluir_pdf,
-            preferir_pdf_original=payload.preferir_pdf_original,
         )
         arquivos_selecionados.extend((nota, arquivo) for arquivo in selecionados)
 
     registros_disponiveis = len(arquivos_selecionados)
-    if registros_disponiveis == 0:
+    if registros_disponiveis == 0 and not payload.incluir_relatorio:
         raise NotasDownloadLoteError("Nenhum arquivo disponivel para as notas filtradas.")
+
+    # Planilha antes dos arquivos: se ela falhar (limite de linhas), o erro sai
+    # sem ter baixado nada do storage.
+    relatorio: tuple[Path, str] | None = None
+    if payload.incluir_relatorio:
+        try:
+            relatorio = relatorio_layouts_service.exportar_relatorio_xlsx(
+                db, payload.filtros, grupo=grupo, layout=payload.relatorio_layout
+            )
+        except portal_support_service.PortalSupportError as exc:
+            raise NotasDownloadLoteError(str(exc)) from exc
 
     worker_count = max(1, min(32, int(settings.download_storage_workers or 16)))
     descriptor, temp_name = tempfile.mkstemp(prefix=_TEMP_ZIP_PREFIX, suffix=".zip")
@@ -231,7 +251,7 @@ def gerar_zip_notas(
                 for (nota, _), (arquivo, content, error) in zip(batch, resultados):
                     tipo = _canonical_tipo(arquivo.tipo)
                     filename = _friendly_xml_filename(nota) if tipo == "XML" else _friendly_pdf_filename(nota)
-                    folder = _zip_folder_for_arquivo(nota, tipo)
+                    folder = _zip_folder_for_arquivo(nota, tipo, raiz, varias_empresas)
                     zip_path = _dedupe_path(f"{folder}/{filename}", used_paths)
                     if error is None and content is not None:
                         # PDF normalmente ja e comprimido; tentar comprimi-lo de
@@ -266,8 +286,16 @@ def gerar_zip_notas(
                     *erros,
                 ]
                 zip_file.writestr(
-                    _dedupe_path("notas_nfse/RELATORIO_ERROS.txt", used_paths),
+                    _dedupe_path(f"{raiz}/RELATORIO_ERROS.txt", used_paths),
                     "\n".join(report),
+                    compress_type=zipfile.ZIP_DEFLATED,
+                    compresslevel=1,
+                )
+
+            if relatorio is not None:
+                zip_file.write(
+                    relatorio[0],
+                    _dedupe_path(f"{raiz}/{relatorio[1]}", used_paths),
                     compress_type=zipfile.ZIP_DEFLATED,
                     compresslevel=1,
                 )
@@ -275,12 +303,17 @@ def gerar_zip_notas(
         alert_failure("download_batch", exc, notas_count=len(notas))
         temp_path.unlink(missing_ok=True)
         raise
+    finally:
+        if relatorio is not None:
+            relatorio[0].unlink(missing_ok=True)
 
-    if arquivos_adicionados == 0 and not erros:
+    if arquivos_adicionados == 0 and not erros and relatorio is None:
         temp_path.unlink(missing_ok=True)
         raise NotasDownloadLoteError("Nenhum arquivo disponivel para as notas filtradas.")
 
-    filename = f"notas_nfse_{agora_local().strftime('%Y%m%d_%H%M%S')}.zip"
+    filename = (
+        f"notas_nfse_{agora_local().strftime('%Y%m%d_%H%M%S')}.zip" if varias_empresas else f"{raiz}.zip"
+    )
     logger.info(
         "Download lote finalizado: notas=%s arquivos=%s ausentes=%s tamanho_zip=%s",
         len(notas),
