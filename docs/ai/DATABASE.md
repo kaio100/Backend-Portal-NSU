@@ -79,3 +79,9 @@ Colunas legadas: `processos.baixar_pdf_oficial` (sempre `False`, NOT NULL em pro
 - `empresas.grupo` e `usuarios.grupo` são texto sem FK: grupo digitado errado cria um "grupo" sem cadastro (o acesso continua, porque `get_current_usuario` só bloqueia grupo existente e inativo).
 - `logs_processos` sem retenção cresce ~15 linhas por job (ARCH-008).
 - Verificar no banco (pendente): regras de FK das tabelas de conta, tamanho das tabelas, jobs duplicados por certificado.
+
+## Índices do plano de carga — implementação local de 15/10/2026
+
+Revisão `0006_indices_carga_banco` (depois de `0005_erros_vistos`, publicada no backend `4e4302c0`): `processos_jobs(status, updated_at)` e `tentativas_acesso(chave, criado_em)`. No PostgreSQL também `ix_notas_cursor_recentes` e `ix_notas_cursor_emissao`, com as mesmas expressões COALESCE e desempate por id usados pelo cursor. Sentinelas DATE/TIMESTAMPTZ com fuso UTC explícito; tipos confirmados no catálogo da produção. SQLite usa julianday no cursor e não recebe esses dois índices funcionais. Teste valida reaplicação da migração em SQLite e compilação dos índices no dialeto PostgreSQL; ganho e plano de execução em produção ainda não medidos.
+
+> Seção do plano de carga verificada em 15/10/2026 sobre `2d05450f` + alterações locais; o restante mantém o carimbo original.

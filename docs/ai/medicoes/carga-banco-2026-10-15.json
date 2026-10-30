@@ -1,0 +1,136 @@
+{
+  "medicao": "2026-10-15T22:19:32.990174Z",
+  "projeto": "xiqiuumoaqhxajqtppmf",
+  "stats_reset": "2026-07-15T18:04:36.216992Z",
+  "aviso": "Contadores cumulativos; nao representam CPU atual nem comprovam ganho apos alteracoes locais.",
+  "top_tempo": [
+    {
+      "medido_em": "2026-10-15 22:19:32.990174+00",
+      "queryid": "-8096588431310275932",
+      "calls": 15233,
+      "total_ms": "65159250.55",
+      "media_ms": "4277.51",
+      "inicio_sql": "SELECT notas.id AS notas_id, notas.empresa_id AS notas_empresa_id, notas.processo_id AS notas_processo_id, notas.chave A"
+    },
+    {
+      "medido_em": "2026-10-15 22:19:32.990174+00",
+      "queryid": "3648298000736489732",
+      "calls": 386933,
+      "total_ms": "56020795.60",
+      "media_ms": "144.78",
+      "inicio_sql": "UPDATE notas SET updated_at=$1::TIMESTAMP WITH TIME ZONE WHERE notas.id = $2::INTEGER"
+    },
+    {
+      "medido_em": "2026-10-15 22:19:32.990174+00",
+      "queryid": "7871962008294030784",
+      "calls": 1565752,
+      "total_ms": "37911925.05",
+      "media_ms": "24.21",
+      "inicio_sql": "UPDATE arquivos SET checksum=$1::VARCHAR, updated_at=$2::TIMESTAMP WITH TIME ZONE WHERE arquivos.id = $3::INTEGER"
+    },
+    {
+      "medido_em": "2026-10-15 22:19:32.990174+00",
+      "queryid": "-3967547326207071754",
+      "calls": 731593,
+      "total_ms": "29483420.38",
+      "media_ms": "40.30",
+      "inicio_sql": "UPDATE notas SET importado_em=$1::TIMESTAMP WITH TIME ZONE, updated_at=$2::TIMESTAMP WITH TIME ZONE WHERE notas.id = $3:"
+    },
+    {
+      "medido_em": "2026-10-15 22:19:32.990174+00",
+      "queryid": "8530369187285282394",
+      "calls": 1931715,
+      "total_ms": "29469190.66",
+      "media_ms": "15.26",
+      "inicio_sql": "UPDATE arquivos SET updated_at=$1::TIMESTAMP WITH TIME ZONE WHERE arquivos.id = $2::INTEGER"
+    },
+    {
+      "medido_em": "2026-10-15 22:19:32.990174+00",
+      "queryid": "1480032187561912443",
+      "calls": 4217,
+      "total_ms": "22876815.69",
+      "media_ms": "5424.90",
+      "inicio_sql": "SELECT notas.id AS notas_id, notas.empresa_id AS notas_empresa_id, notas.processo_id AS notas_processo_id, notas.chave A"
+    },
+    {
+      "medido_em": "2026-10-15 22:19:32.990174+00",
+      "queryid": "-4582516513838335713",
+      "calls": 886319,
+      "total_ms": "15031528.69",
+      "media_ms": "16.96",
+      "inicio_sql": "UPDATE arquivos SET updated_at=$1::TIMESTAMP WITH TIME ZONE WHERE arquivos.id = $2::INTEGER"
+    },
+    {
+      "medido_em": "2026-10-15 22:19:32.990174+00",
+      "queryid": "5663707747174076276",
+      "calls": 14186,
+      "total_ms": "10957379.39",
+      "media_ms": "772.41",
+      "inicio_sql": "SELECT notas.id AS notas_id, notas.empresa_id AS notas_empresa_id, notas.processo_id AS notas_processo_id, notas.chave A"
+    },
+    {
+      "medido_em": "2026-10-15 22:19:32.990174+00",
+      "queryid": "3144694844437809153",
+      "calls": 85801,
+      "total_ms": "9566816.14",
+      "media_ms": "111.50",
+      "inicio_sql": "SELECT max(notas.ultimo_nsu) AS max_1 \nFROM notas \nWHERE notas.empresa_id = $1::INTEGER AND notas.ultimo_nsu IS NOT NULL"
+    },
+    {
+      "medido_em": "2026-10-15 22:19:32.990174+00",
+      "queryid": "-8132233698088780709",
+      "calls": 11634,
+      "total_ms": "9484333.87",
+      "media_ms": "815.23",
+      "inicio_sql": "SELECT notas.id AS notas_id, notas.empresa_id AS notas_empresa_id, notas.processo_id AS notas_processo_id, notas.chave A"
+    }
+  ],
+  "top_chamadas_inicial": [
+    {
+      "consulta": "BEGIN",
+      "calls": 8596373
+    },
+    {
+      "consulta": "ROLLBACK",
+      "calls": 7096168
+    },
+    {
+      "consulta": "SELECT arquivos por storage_key",
+      "calls": 6890822
+    },
+    {
+      "consulta": "SELECT notas por chave (forma 1)",
+      "calls": 3299542
+    },
+    {
+      "consulta": "SELECT arquivos por id",
+      "calls": 2901366
+    },
+    {
+      "consulta": "SELECT empresas por id",
+      "calls": 2865051
+    },
+    {
+      "consulta": "SELECT notas por chave (forma 2)",
+      "calls": 2542028
+    },
+    {
+      "consulta": "UPDATE arquivos updated_at",
+      "calls": 1931715
+    },
+    {
+      "consulta": "SELECT monitoramento_config por id",
+      "calls": 1762727
+    },
+    {
+      "consulta": "SELECT notas por id",
+      "calls": 1747544
+    }
+  ],
+  "retencao_90_dias": {
+    "medido_em": "2026-10-15T21:41:06.215512Z",
+    "total_logs": 970205,
+    "candidatos": 8,
+    "removidos": 0
+  }
+}

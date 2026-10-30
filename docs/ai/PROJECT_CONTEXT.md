@@ -91,3 +91,10 @@ As empresas atendidas pelas equipes da Planning recebem e emitem NFS-e (padrão 
 | REG-045 | "Limpar" erros no admin não apaga nada: grava `erros_vistos.visto_ate` por grupo (todos os grupos para o admin geral); `/admin/erros` mostra só o que veio depois | `admin.limpar_erros/_somente_nao_vistos`, `models.ErroVisto` | O admin geral marca todos os grupos (tabela `grupos` + `empresas.grupo`) e `__sem_grupo__` (empresa removida); o join usa `coalesce(empresas.grupo, '__sem_grupo__')` |
 | REG-046 | Volumetria do admin respeita o grupo (`_escopo`); "por grupo" só para o admin geral | `volumetria_service.calcular` | Agregações em SQL; período pelo parâmetro `dias` |
 
+
+## Ajustes do plano de carga — publicados no backend `4e4302c0` (15/10/2026)
+
+- **REG-047:** ciclos automáticos com monitor ativo distribuem os jobs elegíveis pelo intervalo via `available_at`; todos continuam entrando na fila. Pedidos manuais/forçados e releituras avulsas são imediatos. A verificação de certificado já pendente/rodando permanece.
+- **REG-003 (implementação):** a admissão grava só se a contagem dentro da janela permitir; não apaga linhas da chave em cada tentativa. Postgres serializa pela chave com advisory lock e usa pool/tempos limitados. Em falha, o contador em memória inclui tentativas feitas com banco saudável; a reserva continua sendo por processo. Limites e respostas HTTP não mudam.
+
+> Seção do plano de carga verificada em 15/10/2026 sobre `2d05450f` + alterações locais; o restante mantém o carimbo original.

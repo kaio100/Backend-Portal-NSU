@@ -186,9 +186,9 @@ def verificar_e_avisar(db: Session) -> list[str]:
     return avisados
 
 
-def limpar_logs_antigos(db: Session, lote: int = 5000) -> int:
+def limpar_logs_antigos(db: Session, lote: int = 5000, *, dias: int | None = None) -> int:
     """Apaga logs_processos mais antigos que LOGS_RETENCAO_DIAS (0 = nunca)."""
-    dias = int(settings.logs_retencao_dias or 0)
+    dias = int(settings.logs_retencao_dias or 0) if dias is None else int(dias)
     if dias <= 0:
         return 0
     corte = _agora() - timedelta(days=dias)

@@ -5,7 +5,7 @@ import json
 import re
 from datetime import date, datetime, timezone
 
-from sqlalchemy import func, or_, tuple_
+from sqlalchemy import func, literal_column, or_, tuple_
 from sqlalchemy.orm import Session
 
 from backend.app.db.models import Certificado, Empresa, Nota
@@ -64,7 +64,12 @@ def chaves_ordem(sort: str, sqlite: bool = False) -> list:
         if campo == "id":
             chaves.append(coluna)
             continue
-        chave = func.coalesce(coluna, _INICIO_DATA if campo == "data_emissao" else _INICIO)
+        # No Postgres, usa o mesmo literal fixo do indice funcional. Um bind
+        # na sentinela impediria seu uso em um plano preparado generico.
+        sentinela = (_INICIO_DATA if campo == "data_emissao" else _INICIO) if sqlite else literal_column(
+            "DATE '1900-01-01'" if campo == "data_emissao" else "TIMESTAMPTZ '1900-01-01 00:00:00+00'"
+        )
+        chave = func.coalesce(coluna, sentinela)
         # O SQLite guarda data e hora como texto, as vezes sem microssegundos
         # (CURRENT_TIMESTAMP): comparar como numero evita repetir nota no cursor.
         chaves.append(func.julianday(chave) if sqlite and _eh_data_hora(campo) else chave)
@@ -281,20 +286,6 @@ def list_notas_by_ids(db: Session, nota_ids: list[int], somente_exportaveis: boo
         query = _somente_exportaveis(query)
     notas = list(query.all())
     return sorted(notas, key=lambda nota: order.get(int(nota.id), len(order)))
-
-
-def count_notas_grupo(db: Session, grupo: str | None = None, arquivadas: str = "ativas") -> int:
-    """Conta o acervo sem materializar milhares de registros em memoria."""
-    query = db.query(Nota.id)
-    if arquivadas == "ativas":
-        query = query.filter(Nota.arquivada.is_(False))
-    elif arquivadas == "somente":
-        query = query.filter(Nota.arquivada.is_(True))
-    elif arquivadas != "todas":
-        raise ValueError("Filtro de arquivadas invalido.")
-    if grupo is not None:
-        query = query.join(Empresa, Empresa.id == Nota.empresa_id).filter(Empresa.grupo == grupo)
-    return int(query.count())
 
 
 def create_nota(db: Session, data: dict) -> Nota:

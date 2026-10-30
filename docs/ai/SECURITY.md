@@ -58,3 +58,7 @@
 - Rota nova: decida o papel (`require_admin`/`require_operator`) e o filtro de grupo antes de escrever o corpo; teste o 404 entre grupos com um usuário de outro grupo (não o admin automático do `conftest`).
 - O `.env` local aponta para produção. Scripts de `backend/app/scripts/` que escrevem têm modo de simulação: rode sem `--aplicar`/`--executar` primeiro.
 - Trocar `JWT_SECRET` derruba todos os logins e invalida códigos de e-mail pendentes. Trocar `SECRETS_KEY` sem recifrar torna as senhas ilegíveis e os certificados somem da fila.
+
+## Limitador — implementação local de 15/10/2026
+
+Verificado sobre `2d05450f` + alterações locais, publicado no backend `4e4302c0`. Contagem apenas na janela, admissão por INSERT condicionado e serialização por hash com advisory lock no Postgres. A reserva em memória acompanha também pedidos com banco saudável, evitando uma cota local nova durante a indisponibilidade. O fallback continua por processo e não substitui a proteção distribuída. Limites de tentativas e regras de autenticação não foram ampliados. Pool exclusivo limita espera por conexão; os limites de statement/lock são locais à transação.

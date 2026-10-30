@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    literal_column,
     Numeric,
     String,
     Text,
@@ -149,6 +150,7 @@ class Processo(TimestampMixin, Base):
 
 class Job(TimestampMixin, Base):
     __tablename__ = "processos_jobs"
+    __table_args__ = (Index("ix_processos_jobs_status_updated_at", "status", "updated_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), nullable=False, index=True)
@@ -300,6 +302,23 @@ class Nota(TimestampMixin, Base):
     processo: Mapped[Processo | None] = relationship(back_populates="notas")
     eventos: Mapped[list["Evento"]] = relationship(back_populates="nota")
     arquivos: Mapped[list["Arquivo"]] = relationship(back_populates="nota")
+
+
+# O cursor usa COALESCE: um indice simples nas colunas nao corresponde a essa
+# ordenacao. Literais com fuso explicito evitam casts dependentes do timezone.
+for _sort, _colunas in (
+    ("recentes", (Nota.importado_em, Nota.updated_at, Nota.id)),
+    ("emissao", (Nota.data_emissao, Nota.importado_em, Nota.updated_at, Nota.id)),
+):
+    _expressoes = [
+        coluna if coluna.key == "id" else func.coalesce(
+            coluna,
+            literal_column("DATE '1900-01-01'" if coluna.key == "data_emissao" else
+                           "TIMESTAMPTZ '1900-01-01 00:00:00+00'"),
+        )
+        for coluna in _colunas
+    ]
+    Index(f"ix_notas_cursor_{_sort}", *_expressoes).ddl_if(dialect="postgresql")
 
 
 class ConferenciaHistorico(Base):
@@ -519,6 +538,7 @@ class TentativaAcesso(Base):
     """
 
     __tablename__ = "tentativas_acesso"
+    __table_args__ = (Index("ix_tentativas_acesso_chave_criado_em", "chave", "criado_em"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     chave: Mapped[str] = mapped_column(String(64), nullable=False, index=True)

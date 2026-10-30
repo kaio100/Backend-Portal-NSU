@@ -161,15 +161,6 @@ def montar_status(db: Session, limit: int = 10, grupo: str = "planning_hub") -> 
     }
 
 
-def has_active_consulta_for_certificado(db: Session, certificado_id: int) -> bool:
-    query = (
-        db.query(Processo.id)
-        .filter(Processo.tipo == "consulta_nfse")
-        .filter(Processo.certificado_id == certificado_id)
-    )
-    return _status_filter(query, PENDENTE_STATUSES + RODANDO_STATUSES).first() is not None
-
-
 def _active_consulta_certificado_ids(db: Session, certificado_ids: list[int]) -> set[int]:
     if not certificado_ids:
         return set()
@@ -237,7 +228,10 @@ def list_certificados_elegiveis(
     return elegiveis
 
 
-def _create_consulta_job(db: Session, certificado: Certificado, options: ConsultaIniciarRequest) -> Processo:
+def _create_consulta_job(
+    db: Session, certificado: Certificado, options: ConsultaIniciarRequest,
+    available_at: datetime | None = None,
+) -> Processo:
     limite = _effective_limite(options.limite)
     pausa = _effective_pausa(options.pausa)
     processo = processos_repo.create_processo(
@@ -262,7 +256,7 @@ def _create_consulta_job(db: Session, certificado: Certificado, options: Consult
             "tipo": "consulta_nfse",
             "status": "pendente",
             "attempts": 0,
-            "available_at": _now(),
+            "available_at": available_at if available_at is not None else _now(),
             "payload_json": {
                 "empresa_id": certificado.empresa_id,
                 "certificado_id": certificado.id,
@@ -305,11 +299,19 @@ def enqueue_consultas_pendentes(
     # `options.limite` e o teto de consultas NSU de cada job, nao a quantidade
     # de certificados do ciclo. Usa-lo aqui fazia um limite pequeno (ex.: 1)
     # enfileirar um unico certificado e deixar os demais sem consulta.
+    pendentes = []
     for certificado in certificados:
         if not options.forcar and int(certificado.id) in certificados_ativos:
             certificados_ignorados += 1
             continue
-        processos_criados.append(_create_consulta_job(db, certificado, options))
+        pendentes.append(certificado)
+    # So ciclos automaticos sao distribuidos. Pedidos manuais/forcados e
+    # releituras avulsas continuam disponiveis imediatamente.
+    distribuir = respeitar_ciclo and atualizar_ciclo and config.automatico_ativo and not options.forcar
+    espacamento = (int(config.intervalo_minutos) * 60 / len(pendentes)) if distribuir and pendentes else 0
+    for indice, certificado in enumerate(pendentes):
+        disponibilidade = agora + timedelta(seconds=indice * espacamento)
+        processos_criados.append(_create_consulta_job(db, certificado, options, available_at=disponibilidade))
 
     if atualizar_ciclo:
         config.ultimo_ciclo_em = agora

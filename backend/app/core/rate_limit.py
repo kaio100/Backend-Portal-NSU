@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 import threading
 import time
 from collections import defaultdict, deque
@@ -52,31 +53,66 @@ class RateLimiterBanco:
         import random
         from datetime import datetime, timedelta, timezone
 
-        from sqlalchemy import func
+        from sqlalchemy import func, insert, literal, select, text
         from sqlalchemy.exc import SQLAlchemyError
 
         from backend.app.db.models import TentativaAcesso
-        from backend.app.db.session import SessionLocal
 
+        # A reserva acompanha tambem tentativas com banco saudavel: uma falha
+        # nao deve dar uma janela inteira nova a quem ja consumiu o limite.
+        reserva_permitiu = self._reserva.allow(key)
         chave = hashlib.sha256(key.encode("utf-8")).hexdigest()
         agora = datetime.now(timezone.utc)
         inicio = agora - timedelta(seconds=self.window_seconds)
         try:
-            with SessionLocal() as db:
-                db.query(TentativaAcesso).filter(
-                    TentativaAcesso.chave == chave, TentativaAcesso.criado_em < inicio
-                ).delete(synchronize_session=False)
+            with _sessao_limitador() as db:
+                if db.get_bind().dialect.name == "postgresql":
+                    db.execute(text("SELECT set_config('statement_timeout', '1000', true), "
+                                    "set_config('lock_timeout', '500', true)"))
+                    # Serializa a admissao por chave entre replicas. Dois pedidos
+                    # simultaneos nao podem consumir a ultima vaga juntos.
+                    lock_id = int.from_bytes(bytes.fromhex(chave[:16]), "big", signed=True)
+                    db.execute(text("SELECT pg_advisory_xact_lock(:chave)"), {"chave": lock_id})
+                total = select(func.count(TentativaAcesso.id)).where(
+                    TentativaAcesso.chave == chave, TentativaAcesso.criado_em >= inicio
+                ).scalar_subquery()
+                admissao = insert(TentativaAcesso).from_select(
+                    ["chave", "criado_em"],
+                    select(literal(chave), literal(agora)).where(total < self.max_attempts),
+                ).returning(TentativaAcesso.id)
+                permitido = db.execute(admissao).scalar_one_or_none() is not None
                 if random.random() < 0.01:
-                    # Faxina ocasional das chaves que nunca mais voltaram.
-                    db.query(TentativaAcesso).filter(
+                    # Sem DELETE por chave em cada login. A faxina eventual e
+                    # limitada para nao varrer/apagar o historico inteiro no login.
+                    antigos = select(TentativaAcesso.id).where(
                         TentativaAcesso.criado_em < agora - timedelta(days=1)
-                    ).delete(synchronize_session=False)
-                total = db.query(func.count(TentativaAcesso.id)).filter(TentativaAcesso.chave == chave).scalar() or 0
-                permitido = total < self.max_attempts
-                if permitido:
-                    db.add(TentativaAcesso(chave=chave, criado_em=agora))
+                    ).limit(1000)
+                    db.query(TentativaAcesso).filter(TentativaAcesso.id.in_(antigos)).delete(synchronize_session=False)
                 db.commit()
                 return permitido
         except SQLAlchemyError:
             logging.getLogger(__name__).warning("Limite de tentativas sem banco; usando o contador em memoria.")
-            return self._reserva.allow(key)
+            return reserva_permitiu
+
+
+def _sessao_limitador():
+    from sqlalchemy.orm import Session
+    from backend.app.core.config import settings
+    from backend.app.db.session import SessionLocal
+
+    if settings.database_url.startswith("sqlite"):
+        return SessionLocal()
+    return Session(_engine_limitador())
+
+
+@lru_cache(maxsize=1)
+def _engine_limitador():
+    from sqlalchemy import create_engine
+    from backend.app.core.config import settings
+
+    # Pool pequeno separado: o login nao fica 30 s aguardando o pool do worker.
+    # Timeout de conexao e dos comandos limitado, sem alterar o pool da API.
+    return create_engine(
+        settings.database_url, pool_size=1, max_overflow=2, pool_timeout=1,
+        pool_recycle=300, connect_args={"connect_timeout": 2},
+    )

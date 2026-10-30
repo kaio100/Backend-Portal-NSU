@@ -133,3 +133,7 @@ Ler juntos: `consultas_service` + `nsu_control_service` + `legacy_processing_ser
 5. **Desempenho das telas com o worker rodando** (ARCH-002, ARCH-004).
 
 Monólito modular é a escolha adequada para o tamanho atual (≈ 84 empresas, 2 equipes). O ponto a decidir é separar o **processo** do worker da API, não dividir em serviços.
+
+## Plano de carga — alterações locais de 15/10/2026
+
+Verificado sobre `2d05450f` + alterações locais, publicadas no backend `4e4302c0`: a API e o worker continuam no mesmo pool, mas o limitador de tentativas usa um pool Postgres próprio de até 3 conexões, com espera/execução limitadas. O cursor usa sentinelas SQL fixas para coincidir com os índices funcionais, inclusive em planos preparados genéricos. Os ciclos automáticos espaçam a disponibilidade dos certificados dentro do intervalo; pedidos manuais/forçados mantêm execução imediata. Detalhes e evidências: `PLANO_CARGA_BANCO.md` e `medicoes/carga-banco-2026-10-15.json`.

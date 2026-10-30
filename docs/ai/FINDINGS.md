@@ -117,3 +117,9 @@ Recomendação / opções:
 Como validar:
 Rollback:
 ```
+
+## Validação local do plano de carga (15/10/2026)
+
+ARCH-004: N+1 da listagem de certificados corrigido localmente com joinedload; teste mede 1 SELECT com mais de uma empresa e confirma isolamento de grupo. As outras consultas N+1 e regiões diferentes continuam abertas. ARCH-020: índices, distribuição automática e limitador preparados, ainda sem comprovação de ganho em produção. Contadores desde julho registrados em `medicoes/carga-banco-2026-10-15.json`; não confundir média histórica com CPU atual. Redução de campos da lista permanece pendente porque o DTO inclui quase todas as colunas da nota.
+
+> Seção do plano de carga verificada em 15/10/2026 sobre `2d05450f` + alterações locais; o restante mantém o carimbo original.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from backend.app.db.models import Certificado, Empresa
 
@@ -23,7 +23,9 @@ def list_certificados(
     ativo: bool | None = None,
     grupo: str | None = None,
 ) -> list[Certificado]:
-    query = db.query(Certificado).order_by(Certificado.id.asc())
+    # Os campos empresa_nome/empresa_cnpj do DTO acessam a relacao. Carrega-la
+    # aqui evita um SELECT adicional para cada empresa durante a serializacao.
+    query = db.query(Certificado).options(joinedload(Certificado.empresa)).order_by(Certificado.id.asc())
     if grupo is not None:
         query = query.join(Empresa, Empresa.id == Certificado.empresa_id).filter(Empresa.grupo == grupo)
     if empresa_id is not None:

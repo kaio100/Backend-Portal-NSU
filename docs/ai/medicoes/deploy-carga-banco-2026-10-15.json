@@ -1,0 +1,50 @@
+{
+  "backend_commit": "4e4302c0",
+  "railway_deployment": "753ac481-3d02-49c1-91b6-cfc4f929d844",
+  "migracao": "0006_indices_carga_banco",
+  "saude": {
+    "/health": 200,
+    "/db/health": 200,
+    "/storage/health": 200
+  },
+  "login_conta_ficticia": {
+    "status": 401,
+    "esperado": 401,
+    "ms": 2906
+  },
+  "jobs_finalizados_sem_erro": [
+    44873,
+    44874
+  ],
+  "aviso": "Houve deadlock incremental conhecido no job 44873; ingestao final concluiu sem erro. ARCH-003 permanece aberto.",
+  "explain_representativo": {
+    "consulta": "SELECT id FROM public.notas WHERE arquivada IS false ORDER BY coalesce(importado_em, TIMESTAMPTZ '1900-01-01 00:00:00+00') DESC, coalesce(updated_at, TIMESTAMPTZ '1900-01-01 00:00:00+00') DESC, id DESC LIMIT 100;",
+    "antes_ms": 123.982,
+    "depois_ms": 1.168,
+    "antes_plano": "Seq Scan 48023 linhas + Sort",
+    "depois_plano": "Index Scan Backward ix_notas_cursor_recentes, 100 linhas",
+    "limite": "Uma amostra por fase; nao equivale a CPU global nem ao tempo completo do endpoint."
+  },
+  "frontend": {
+    "commit": "e98299a",
+    "deployment": "dpl_2DfCPKs4TE4hMWya3H46Bs6bLN9n",
+    "url": "https://frontend-portal-nsu.vercel.app",
+    "html_status": 200,
+    "script_status": 200,
+    "bundle": "/assets/index-CGahTF0G.js",
+    "backend_correto": true,
+    "polling_minimo_30s": true,
+    "login_timeout_60s": true,
+    "cors_status": 200,
+    "cors_origem": "https://frontend-portal-nsu.vercel.app",
+    "testes": 53,
+    "typescript": "aprovado",
+    "build": "aprovado"
+  },
+  "agendador": {
+    "ciclo_confirmado_utc": "2026-10-15T23:30:18.760854Z",
+    "jobs_distribuidos": 4,
+    "primeiro_available_at": "2026-10-15T23:30:18.760854Z",
+    "ultimo_available_at": "2026-10-15T23:41:33.760854Z"
+  }
+}
