@@ -167,10 +167,3 @@ def require_arquivo_grupo(db: Session, arquivo_id: int, usuario: Usuario) -> Arq
     if arquivo is None:
         raise HTTPException(status_code=404, detail="Recurso nao encontrado.")
     return arquivo
-
-
-def require_certificado_grupo(db: Session, certificado_id: int, usuario: Usuario) -> Certificado:
-    certificado = db.query(Certificado).join(Empresa, Empresa.id == Certificado.empresa_id).filter(Certificado.id == certificado_id, Empresa.grupo == usuario.grupo).first()
-    if certificado is None:
-        raise HTTPException(status_code=404, detail="Recurso nao encontrado.")
-    return certificado

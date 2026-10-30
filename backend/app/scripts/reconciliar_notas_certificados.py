@@ -166,7 +166,6 @@ def reconciliar_certificado(certificado_id: int, batch_size: int | None = None) 
             processo,
             base_dir,
             only_chaves=ausentes,
-            commit_every=25,
         )
         db.commit()
         return {

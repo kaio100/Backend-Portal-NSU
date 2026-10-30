@@ -849,26 +849,6 @@ def resumo_operacional_empresas(
 
 
 
-def _format_value(value) -> str:
-
-    if value is None:
-
-        return ""
-
-    if isinstance(value, datetime):
-
-        return value.isoformat()
-
-    if isinstance(value, date):
-
-        return value.isoformat()
-
-    return str(value)
-
-
-
-
-
 def _buscar_notas_relatorio(db: Session, filtros: NotasDownloadFiltros, grupo: str | None = None) -> list[Nota]:
     # Mesma selecao do ZIP. Antes parava em 5.000 linhas sem avisar.
     max_notas = max(1, int(settings.relatorio_max_notas or 20000))
@@ -1066,10 +1046,6 @@ def _relatorio_digits(value) -> str:
 def _relatorio_decimal(value) -> Decimal:
     parsed = _parse_decimal_optional(value)
     return parsed if parsed is not None else Decimal("0.00")
-
-
-def _relatorio_money(value) -> float:
-    return float(_relatorio_decimal(value).quantize(Decimal("0.01")))
 
 
 def _relatorio_percent(value) -> float:

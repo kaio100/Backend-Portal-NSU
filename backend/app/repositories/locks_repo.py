@@ -9,12 +9,6 @@ from sqlalchemy.orm import Session
 from backend.app.db.models import LockProcessamento
 
 
-def _como_utc(valor: datetime | None) -> datetime:
-    if valor is None:
-        return datetime.min.replace(tzinfo=timezone.utc)
-    return valor if valor.tzinfo is not None else valor.replace(tzinfo=timezone.utc)
-
-
 def get_lock(db: Session, empresa_id: int, certificado_id: int) -> LockProcessamento | None:
     return (
         db.query(LockProcessamento)

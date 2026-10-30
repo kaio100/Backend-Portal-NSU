@@ -16,10 +16,6 @@ def create_job(db: Session, data: dict) -> Job:
     return job
 
 
-def get_job(db: Session, job_id: int) -> Job | None:
-    return db.get(Job, job_id)
-
-
 def list_jobs(
     db: Session,
     processo_id: int | None = None,
@@ -45,17 +41,6 @@ def update_job(db: Session, job: Job, data: dict) -> Job:
     db.flush()
     db.refresh(job)
     return job
-
-
-def get_next_pending_job(db: Session) -> Job | None:
-    now = datetime.now(timezone.utc)
-    return (
-        db.query(Job)
-        .filter(Job.status == "pendente")
-        .filter(or_(Job.available_at.is_(None), Job.available_at <= now))
-        .order_by(Job.available_at.asc().nullsfirst(), Job.id.asc())
-        .first()
-    )
 
 
 def claim_next_pending_job(db: Session, locked_by: str, grupo: str | None = None) -> Job | None:

@@ -42,9 +42,3 @@ class ArquivoRead(BaseModel):
         self.filename = self.filename or PurePosixPath((self.storage_key or "").replace("\\", "/")).name
         self.size_bytes = self.size_bytes if self.size_bytes is not None else self.tamanho_bytes
         return self
-
-
-class ArquivoDownloadInfo(BaseModel):
-    filename: str
-    content_type: str
-    size: int

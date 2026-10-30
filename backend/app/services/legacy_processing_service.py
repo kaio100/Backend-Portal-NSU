@@ -758,12 +758,6 @@ def executar_consulta_nfse_legado(
                 processo,
                 pasta_saida,
                 updated_after=run_started_at,
-                # Sem commits parciais, centenas de linhas ficavam flushadas
-                # em uma unica transacao desta sessao, que assim segurava o
-                # lock de escrita do SQLite ate o fim. A gravacao final do
-                # NSU (em sessao propria, na mesma thread) esperava por esse
-                # lock e o job morria com "database is locked".
-                commit_every=20,
                 gerar_pdf_espelho=bool(processo.gerar_pdf_espelho),
             )
             # Garante que nada desta ingestao fique pendente antes do fecho.

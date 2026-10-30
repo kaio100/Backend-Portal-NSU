@@ -90,24 +90,6 @@ def simples_xml_from_codes(op_simp_nac: str | None = None, reg_ap_trib_sn: str |
     return None
 
 
-def consulta_simples_api_from_payload(payload: dict | None) -> str:
-    """Deprecated: Simples Nacional is now sourced only from XML."""
-    if payload is None:
-        return "Não disponível"
-    try:
-        simei = payload.get("simei") or {}
-        simples = payload.get("simples") or {}
-        if simei.get("optante") is True:
-            return "MEI"
-        if simples.get("optante") is True:
-            return "Optante S.N"
-        if simples.get("optante") is False:
-            return "Não optante"
-        return "Não disponível"
-    except Exception:
-        return "Erro na consulta"
-
-
 def calcular_status_simples_nacional_xml(simples_xml: str | None) -> str:
     normalized = normalizar_simples_xml(simples_xml)
     if normalized in {"MEI", "Optante S.N", "Simples Nacional", "Não optante"}:

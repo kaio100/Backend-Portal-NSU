@@ -310,28 +310,6 @@ def build_pdf_espelho_key(cnpj_empresa: str, ano: str, mes: str, filename: str) 
     return _date_key("pdf-espelho", cnpj_empresa, ano, mes, filename)
 
 
-def build_export_key(cnpj_empresa: str, ano: str, mes: str, filename: str) -> str:
-    return _date_key("exports", cnpj_empresa, ano, mes, filename)
-
-
-def build_raw_key(cnpj_empresa: str, ano: str, mes: str, filename: str) -> str:
-    return _date_key("raw", cnpj_empresa, ano, mes, filename)
-
-
-def build_json_key(cnpj_empresa: str, ano: str, mes: str, filename: str) -> str:
-    return _date_key("json", cnpj_empresa, ano, mes, filename)
-
-
-def build_log_key(cnpj_empresa: str, processo_id: str) -> str:
-    return "/".join(
-        [
-            "logs",
-            _clean_segment(cnpj_empresa, "cnpj_empresa"),
-            f"{_clean_segment(processo_id, 'processo_id')}.log",
-        ]
-    )
-
-
 def build_certificado_key(cnpj_empresa: str, certificado_id: str, filename: str) -> str:
     return "/".join(
         [

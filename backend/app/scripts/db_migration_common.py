@@ -68,10 +68,6 @@ def sorted_model_tables() -> list[Table]:
     return list(Base.metadata.sorted_tables)
 
 
-def table_names_for_models() -> list[str]:
-    return [table.name for table in sorted_model_tables()]
-
-
 def existing_table_names(engine: Engine) -> list[str]:
     return inspect(engine).get_table_names()
 

@@ -257,7 +257,7 @@ def test_falha_em_uma_nota_nao_desfaz_as_anteriores(tmp_path, monkeypatch):
         db.add(processo)
         db.commit()
         result = legacy_ingestion_service.ingerir_saida_legado(
-            db, get_storage_service(), processo, tmp_path, gerar_pdf_espelho=False, commit_every=20
+            db, get_storage_service(), processo, tmp_path, gerar_pdf_espelho=False
         )
         db.rollback()  # nada pendente pode depender do chamador
 

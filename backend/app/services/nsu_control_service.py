@@ -233,15 +233,3 @@ def atualizar_ultimo_nsu(
         db.flush()
         db.refresh(row)
     return row
-
-
-def sincronizar_com_notas(
-    db: Session,
-    empresa_id: int,
-    certificado_id: int | None,
-    cnpj: str,
-    origem: str = "notas",
-) -> int:
-    nsu = maior_nsu_importado(db, empresa_id)
-    atualizar_ultimo_nsu(db, empresa_id, certificado_id, cnpj, nsu, origem=origem)
-    return nsu
