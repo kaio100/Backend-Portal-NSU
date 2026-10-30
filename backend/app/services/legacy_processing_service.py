@@ -18,7 +18,7 @@ from backend.app.core.tempo import agora_local
 from backend.app.db.models import Empresa, Job, Nota, Processo
 from backend.app.db.session import SessionLocal, executar_escrita_com_retry, renovar_snapshot
 from backend.app.repositories import certificados_repo, empresas_repo
-from backend.app.services import cnpj_enrichment_service, legacy_ingestion_service, locks_service, logs_service, nsu_control_service, secrets_service
+from backend.app.services import cnpj_enrichment_service, legacy_ingestion_service, logs_service, nsu_control_service, secrets_service
 from backend.app.services.storage_service import StorageService, get_storage_service
 
 
@@ -226,14 +226,13 @@ def _loop_ingestao_incremental(
     run_started_at: datetime,
     stop_event: threading.Event,
     intervalo: float,
-    lock: tuple[int, int, str] | None = None,
 ) -> None:
     """Ingere a saida do motor enquanto ele consulta o ADN.
 
-    A cada volta tambem renova o heartbeat do processo/job e o lock do
-    certificado (empresa_id, certificado_id, worker_id): uma consulta longa
-    perdia o lock de 1 hora no meio e outro worker podia pegar o mesmo
-    certificado.
+    O heartbeat do job/processo e o lock do certificado ficam so com
+    job_lease_service.manter_lease, que envolve toda a execucao. Renovar
+    tambem aqui atualizava processo e job na ordem inversa da do heartbeat
+    e gerou deadlocks no Postgres (ARCH-003).
     """
     proxima_linha_index = 0
     erros_registrados: set[str] = set()
@@ -268,16 +267,6 @@ def _loop_ingestao_incremental(
                             "Ingestao incremental da saida legada",
                             {"contadores": ingestao},
                         )
-                # O motor legado pode trabalhar por horas dentro de uma
-                # unica chamada. Mantenha os timestamps vivos para que o
-                # dashboard diferencie uma consulta ativa de uma travada.
-                heartbeat = datetime.now(timezone.utc)
-                processo.updated_at = heartbeat
-                job.updated_at = heartbeat
-                session.add(processo)
-                session.add(job)
-                if lock is not None:
-                    locks_service.renovar_lock(session, empresa_id=lock[0], certificado_id=lock[1], locked_by=lock[2])
                 session.commit()
         except Exception as exc:
             # A ingestao final pos-processamento ainda roda no fluxo principal,
@@ -295,12 +284,11 @@ def _iniciar_ingestao_incremental(
     pasta_saida: str,
     run_started_at: datetime,
     intervalo: float = 5.0,
-    lock: tuple[int, int, str] | None = None,
 ) -> tuple[threading.Event, threading.Thread]:
     stop_event = threading.Event()
     thread = threading.Thread(
         target=_loop_ingestao_incremental,
-        args=(processo_id, job_id, pasta_saida, run_started_at, stop_event, intervalo, lock),
+        args=(processo_id, job_id, pasta_saida, run_started_at, stop_event, intervalo),
         name=f"ingestao-incremental-{processo_id}",
         daemon=True,
     )
@@ -664,7 +652,6 @@ def executar_consulta_nfse_legado(
                 pasta_saida=pasta_saida_incremental,
                 run_started_at=run_started_at,
                 intervalo=min(max(1.0, pausa), 3.0),
-                lock=(int(empresa.id), int(certificado.id), worker_id),
             )
             logs_service.registrar_log(
                 db,

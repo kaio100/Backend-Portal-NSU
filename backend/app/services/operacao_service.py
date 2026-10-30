@@ -30,9 +30,37 @@ logger = logging.getLogger(__name__)
 _ultimo_aviso: dict[str, datetime] = {}
 _trava_aviso = threading.Lock()
 
+# Batimento do agendador embutido (main._run_consultas_scheduler), so deste
+# processo. Em 08/10/2026 o agendador morreu numa excecao e ninguem percebeu
+# por horas: o vigia compara este horario com o relogio.
+_agendador: dict[str, object] = {"ultimo_tick": None, "ultimo_erro": None, "ultimo_erro_em": None}
+
 
 def _agora() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def registrar_tick_agendador(agora: datetime | None = None) -> None:
+    _agendador["ultimo_tick"] = agora or _agora()
+
+
+def registrar_erro_agendador(erro: str, agora: datetime | None = None) -> None:
+    _agendador["ultimo_erro"] = erro[:500]
+    _agendador["ultimo_erro_em"] = agora or _agora()
+
+
+def _estado_agendador(agora: datetime) -> dict:
+    tick = _agendador["ultimo_tick"]
+    erro_em = _agendador["ultimo_erro_em"]
+    return {
+        "agendador_embutido": bool(settings.api_worker_enabled and settings.embedded_scheduler_enabled),
+        "agendador_ultimo_tick_em": tick.isoformat() if isinstance(tick, datetime) else None,
+        "agendador_minutos_sem_tick": (
+            int((agora - tick).total_seconds() // 60) if isinstance(tick, datetime) else None
+        ),
+        "agendador_ultimo_erro": _agendador["ultimo_erro"],
+        "agendador_ultimo_erro_em": erro_em.isoformat() if isinstance(erro_em, datetime) else None,
+    }
 
 
 def _aware(valor: datetime | None) -> datetime | None:
@@ -115,6 +143,7 @@ def estado_operacao(db: Session) -> dict:
         "falhas_ultima_hora": int(falhas_ultima_hora),
         "empresas_sem_consulta": len(sem_consulta),
         "empresas_sem_consulta_exemplos": [empresa["nome"] for empresa in sem_consulta[:10]],
+        **_estado_agendador(agora),
     }
 
 
@@ -143,6 +172,15 @@ def problemas(estado: dict) -> dict[str, str]:
             f"{sem_consulta} empresa(s) com certificado valido sem nenhuma consulta ao ADN nas ultimas {horas} horas: "
             f"{exemplos}{f' e mais {resto}' if resto > 0 else ''}. "
             "Confira no Motor ADN se o monitor automatico esta consultando todas as empresas."
+        )
+    limite_agendador = int(settings.alerta_agendador_parado_minutos or 0)
+    sem_tick = estado.get("agendador_minutos_sem_tick")
+    if estado.get("agendador_embutido") and limite_agendador > 0 and sem_tick is not None and sem_tick >= limite_agendador:
+        erro = estado.get("agendador_ultimo_erro")
+        encontrados["agendador_parado"] = (
+            f"O agendador de consultas automaticas esta ha {sem_tick} minutos sem rodar "
+            f"(limite de aviso: {limite_agendador}). Nenhuma consulta nova entra na fila. "
+            f"{f'Ultimo erro: {erro}. ' if erro else ''}Reinicie o servico se o aviso continuar."
         )
     return encontrados
 

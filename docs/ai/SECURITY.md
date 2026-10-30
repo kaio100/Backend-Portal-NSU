@@ -34,6 +34,7 @@
 - Download genérico bloqueia arquivo do tipo certificado (06/10); schemas não devolvem senha.
 - Logs de processo sanitizados na leitura (`logs_service.sanitizar_*`); parâmetros da consulta ADN omitidos do log.
 - dompdf com `isRemoteEnabled = false`; o XML é validado (raiz NFS-e, tamanho) antes do PHP.
+- XML de terceiros lido com `defusedxml` (sem entidades nem DTD externos) no Python.
 - RLS ativa em `certificados`, `secrets` e `usuarios`, com SELECT negado a `anon`/`authenticated` (06/10).
 
 ## Pendências
@@ -46,7 +47,6 @@
 | Média | Papel do banco com `rolbypassrls` | 06/10 | Papel de runtime com permissão mínima; migração com papel separado |
 | Média | `DATABASE_URL` sem `sslmode` explícito | 06/10 | `sslmode=verify-full` após teste |
 | Média | Container roda como root; PFX temporário sem permissão restrita | 06/10 | `USER` não-root no Dockerfile; `chmod 600` / diretório privado |
-| Média | Excluir usuário com tokens falha (erro 500) | ARCH-006 | Tratar filhos antes do delete |
 | Baixa | Subprocesso PHP herda segredos | ARCH-015 | Ambiente mínimo (`PATH`, `COMPOSER_HOME`) |
 | Baixa | Autocadastro revela que o CNPJ existe em outro grupo | ARCH-007 | Mensagem neutra |
 | Baixa | `/storage/list` lista o bucket inteiro e filtra por substring de CNPJ (chave de NFS-e contém o CNPJ do emitente) | código | Listar por prefixo do grupo |

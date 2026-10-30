@@ -1,9 +1,9 @@
 # Índice de arquivos versionados
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-30 sobre o commit `0921b3f3`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-30 sobre o commit `92ef5454`. Não editar à mão.
 
 
-355 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
+365 arquivos (fora `backend/danfse/vendor/`, que é instalado pelo Composer).
 
 
 ## `./`
@@ -18,12 +18,13 @@
 | `Dockerfile` |  |  |
 | `README.md` | 240 |  |
 | `RETENCOES_REGRAS.xlsx` |  |  |
-| `adn_nfse_downloader.py` | 972 | ADN NFS-e Downloader |
+| `adn_nfse_downloader.py` | 973 | ADN NFS-e Downloader |
 | `alembic.ini` | 7 |  |
 | `docker-compose.yml` | 32 |  |
+| `empresas.example.json` | 0 |  |
 | `iniciar_local.py` | 63 | Executa consultas reais com persistencia exclusivamente local. |
 | `requirements-dev.txt` | 4 |  |
-| `requirements.txt` | 14 |  |
+| `requirements.txt` | 15 |  |
 
 ## `.github/workflows/`
 
@@ -36,7 +37,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `__init__.py` | 1 |  |
-| `main.py` | 317 |  |
+| `main.py` | 351 |  |
 
 ## `backend/app/api/`
 
@@ -75,7 +76,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `__init__.py` | 1 |  |
-| `config.py` | 190 |  |
+| `config.py` | 193 |  |
 | `observability.py` | 76 |  |
 | `php_runtime.py` | 63 | Localiza o PHP e habilita as extensoes exigidas pelo DANFSe oficial. |
 | `rate_limit.py` | 118 |  |
@@ -159,7 +160,7 @@
 | `backup_supabase_nfse.ps1` |  |  |
 | `corrigir_integridade_certificados.py` | 78 |  |
 | `corrigir_simples_pendentes_online.py` | 166 |  |
-| `corrigir_status_fiscal.py` | 430 | Corrige o status fiscal gravado pela classificacao antiga (por palavras). |
+| `corrigir_status_fiscal.py` | 432 | Corrige o status fiscal gravado pela classificacao antiga (por palavras). |
 | `db_migration_common.py` | 164 |  |
 | `diagnosticar_banco.py` | 41 |  |
 | `diagnosticar_nsu_certificado.py` | 103 |  |
@@ -167,6 +168,7 @@
 | `exportar_openapi.py` | 28 | Exporta o contrato da API (OpenAPI) para o frontend gerar os tipos TypeScript. |
 | `gerar_espelhos_ausentes.py` | 107 | Gera PDFs espelho ausentes a partir dos XMLs ja armazenados. |
 | `importar_base_cnpj_receita.py` | 216 |  |
+| `limpar_logs_antigos.py` | 31 | Simula a retencao de logs; --aplicar executa em lotes. Preserva processos e notas. |
 | `limpar_orfaos_storage.py` | 103 | Acha (e, com --aplicar, apaga) arquivos do storage que nenhum registro usa. |
 | `listar_consultas_simples_pendentes.py` | 119 |  |
 | `migrar_banco.py` | 15 |  |
@@ -177,10 +179,11 @@
 | `promover_usuarios_locais.py` | 117 |  |
 | `r2_common.py` | 29 |  |
 | `recalcular_alertas_fiscais.py` | 260 | Recalcula os alertas fiscais (subitem LC116, ISS retido, valor liquido) |
-| `reconciliar_notas_certificados.py` | 215 |  |
+| `reconciliar_notas_certificados.py` | 218 |  |
 | `reconciliar_storage.py` | 46 | Compara referencias de XML/PDF no banco com os objetos existentes no storage. |
 | `regenerar_carimbos_pdfs.py` | 135 | Regenera PDFs espelho de notas canceladas ou substituidas. |
 | `regenerar_espelhos_competencia.py` | 161 | Regenera exclusivamente PDFs espelho de uma competência e certificado. |
+| `regenerar_espelhos_desde.py` | 166 | Regenera o PDF espelho das notas emitidas a partir de uma data (padrao 01/09/2026). |
 | `resetar_2fa_admin.py` | 42 | Zera a verificacao em duas etapas de um administrador que perdeu o celular. |
 | `rotacionar_segredos.py` | 53 | Recifra as senhas de certificado com a chave nova de SECRETS_KEY. |
 | `sincronizar_cnpjs_portal.py` | 189 |  |
@@ -204,25 +207,26 @@
 | `cnpj_receita_service.py` | 214 |  |
 | `consultas_service.py` | 502 |  |
 | `contas_service.py` | 325 | Contas por convite, confirmacao de e-mail e redefinicao de senha por codigo. |
-| `danfse_service.py` | 109 |  |
+| `danfse_service.py` | 113 |  |
 | `email_service.py` | 78 | E-mail transacional pelo Resend (codigo de cadastro e de redefinicao de senha). |
 | `empresas_service.py` | 47 |  |
 | `eventos_sync_service.py` | 277 | Consulta os eventos de uma NFS-e no ADN e aplica na nota ja importada. |
 | `job_lease_service.py` | 61 | Heartbeat independente da ingestao, durante toda a execucao real do job. |
-| `legacy_ingestion_service.py` | 1579 |  |
-| `legacy_processing_service.py` | 930 |  |
+| `legacy_ingestion_service.py` | 1581 |  |
+| `legacy_processing_service.py` | 917 |  |
 | `locks_service.py` | 46 |  |
 | `logs_service.py` | 103 |  |
 | `nfse_status_service.py` | 173 | Classificacao fiscal de um XML do ADN: nota ou evento, e qual o seu status. |
-| `nfse_xml_parser.py` | 760 |  |
+| `nfse_xml_parser.py` | 764 |  |
 | `notas_archive_service.py` | 168 |  |
 | `notas_download_service.py` | 333 |  |
 | `notas_service.py` | 946 |  |
 | `nsu_control_service.py` | 235 |  |
-| `operacao_service.py` | 205 | Saude da operacao: estado da fila, vigia com aviso e retencao de logs. |
+| `operacao_service.py` | 243 | Saude da operacao: estado da fila, vigia com aviso e retencao de logs. |
 | `operational_fields_service.py` | 294 |  |
 | `portal_support_service.py` | 1429 |  |
 | `processos_service.py` | 134 |  |
+| `relatorio_layouts_service.py` | 290 | Layouts da planilha de notas. |
 | `retencoes_calculo_service.py` | 297 |  |
 | `retencoes_regras_service.py` | 182 |  |
 | `secrets_service.py` | 66 |  |
@@ -385,6 +389,7 @@
 | Arquivo | Linhas | Descrição (docstring) |
 |---|---:|---|
 | `RETENCOES_REGRAS.xlsx` |  |  |
+| `consultas_auto.json` | 0 |  |
 
 ## `docs/ai/`
 
@@ -393,16 +398,15 @@
 | `00_LEIA_PRIMEIRO.md` | 63 |  |
 | `API.md` | 58 |  |
 | `ARCHITECTURE_CURRENT.md` | 139 |  |
-| `CHANGELOG.md` | 71 |  |
-| `CHANGELOG.md` | 71 |  |
-| `CHANGELOG.md` | 71 |  |
+| `CHANGELOG.md` | 79 |  |
+| `CHANGELOG.md` | 79 |  |
+| `CHANGELOG.md` | 79 |  |
 | `CHANGE_IMPACT.md` | 73 |  |
 | `DATABASE.md` | 87 |  |
-| `FINDINGS.md` | 125 |  |
-| `OPERATIONS.md` | 151 |  |
-| `OPERATIONS.md` | 151 |  |
-| `OPERATIONS.md` | 151 |  |
+| `FINDINGS.md` | 119 |  |
+| `OPERATIONS.md` | 154 |  |
 | `PLANO_CARGA_BANCO.md` | 114 |  |
+| `PLANO_LAYOUT_PLANILHA.md` | 75 |  |
 | `PROJECT_CONTEXT.md` | 100 |  |
 | `SECURITY.md` | 64 |  |
 
@@ -431,6 +435,13 @@
 | `MCP.md` | 55 |  |
 | `README.md` | 54 |  |
 | `VALIDACAO.md` | 27 |  |
+
+## `docs/ai/medicoes/`
+
+| Arquivo | Linhas | Descrição (docstring) |
+|---|---:|---|
+| `carga-banco-2026-10-15.json` | 136 |  |
+| `deploy-carga-banco-2026-10-15.json` | 50 |  |
 
 ## `docs/historico/`
 
@@ -475,12 +486,14 @@
 | `conftest.py` | 67 |  |
 | `test_admin_volumetria_erros.py` | 123 | Painel admin: "Limpar" erros sem apagar historico e numeros da Volumetria. |
 | `test_adn_data_cutoff.py` | 46 |  |
+| `test_agendador_resiliente.py` | 112 | ARCH-001: o agendador embutido nao pode morrer na primeira excecao. |
 | `test_auth_account.py` | 101 |  |
+| `test_carga_banco.py` | 136 | Regressoes de carga: DTO sem N+1 e indices correspondentes ao cursor. |
 | `test_certificados_contagem.py` | 26 |  |
 | `test_classificacao_status_nfse.py` | 330 | Classificacao de status da NFS-e com XML reais do ADN (mascarados). |
 | `test_cnpj_receita.py` | 118 |  |
 | `test_cnpj_receita_cache.py` | 77 |  |
-| `test_concorrencia_sqlite.py` | 438 | Regressao dos incidentes de concorrencia local (SQLite). |
+| `test_concorrencia_sqlite.py` | 490 | Regressao dos incidentes de concorrencia local (SQLite). |
 | `test_conferencia_auditavel.py` | 207 | Analise fiscal auditavel: trava de retificacao, autor do login e historico. |
 | `test_conferencia_nao_grava_calculados.py` | 76 | Salvar a conferencia nao grava valores calculados so para a tela. |
 | `test_consulta_adn_confiavel.py` | 207 | Fase 3: consulta ao ADN sem perder documentos e sem travar a fila. |
@@ -512,12 +525,14 @@
 | `test_portal_support_endpoints.py` | 1201 |  |
 | `test_prestador_pessoa_fisica.py` | 49 |  |
 | `test_rbac.py` | 71 |  |
+| `test_relatorio_layout_planning_hub.py` | 188 |  |
 | `test_releitura_mes_anterior.py` | 158 | Releitura desde o 1o dia do mes anterior: na volta de uma parada e a pedido. |
 | `test_retencoes_regras.py` | 266 |  |
 | `test_security_config.py` | 74 |  |
 | `test_seguranca_admin.py` | 254 | Brechas fechadas em 15/10/2026: limite de tentativas no banco, 2FA e sessao |
 | `test_sincronizar_cnpjs_portal.py` | 22 |  |
 | `test_storage_r2.py` | 198 |  |
+| `test_xml_seguro.py` | 42 | SEC-B314: XML de terceiros (upload do DANFSe e saida do ADN) sem entidades. |
 
 ## `tests/fixtures/nfse_reais/`
 

@@ -1,6 +1,6 @@
 # Achados abertos, riscos e dívida
 
-> Atualizado em 16/10/2026 (revisão das mudanças de 15/10 sobre `ae9d4e2d`; cópia sem `.git`, sem hash próprio). Fonte principal: `../historico/AUDITORIA_BACKEND_2026-10-08.md` (evidências completas, logs do Railway). Status: **CONFIRMADO**, **FORTEMENTE_INDICADO**, **HIPOTESE**, **NAO_DETERMINADO**. Severidade = impacto potencial.
+> Atualizado em 27/10/2026 (ARCH-001 corrigido no código; cópia local da `main` `6b038bd`). Antes: 16/10/2026 (revisão das mudanças de 15/10 sobre `ae9d4e2d`; cópia sem `.git`, sem hash próprio). Fonte principal: `../historico/AUDITORIA_BACKEND_2026-10-08.md` (evidências completas, logs do Railway). Status: **CONFIRMADO**, **FORTEMENTE_INDICADO**, **HIPOTESE**, **NAO_DETERMINADO**. Severidade = impacto potencial.
 >
 > Regra: item corrigido sai da tabela de abertos e vai para "Resolvidos", com commit e data. Item novo segue o modelo do fim do arquivo.
 
@@ -8,12 +8,9 @@
 
 | ID | Sev. | Status | Resumo | Onde |
 |---|---|---|---|---|
-| ARCH-001 | crítica | FORTEMENTE_INDICADO | Agendador embutido morre na primeira exceção e ninguém o recria; em 08/10 parou às ~11h10 UTC | `main.py:143-153` |
 | ARCH-002 | alta | CONFIRMADO | `GET /notas` lento sob carga + requisições abandonadas pelo frontend esgotam o pool (5+10); derrubou um job em 08/10 | `notas_service.listar_notas`, `session.py`, pool compartilhado |
-| ARCH-003 | média | CONFIRMADO | Deadlock heartbeat × ingestão incremental (ordem inversa de UPDATE), 4× de 06 a 08/10 | `job_lease_service.py:341-348`, `legacy_processing_service.py:274-281` |
 | ARCH-004 | média | FORTEMENTE_INDICADO | Banco em ca-central-1 e app em us-west2 + consultas N+1 (`/certificados` 6,5 s, `/nsu/status`, `/admin/grupos`) | `certificados_repo.list_certificados`, `routers/nsu.py`, `admin.py` |
 | ARCH-005 | média | CONFIRMADO (lógica) | Proteção do NSU em falha de ingestão anulável: `erros_detalhes` limitado a 20 e compartilhado com avisos de PDF; `obter_ultimo_nsu` usa o maior NSU das notas | `legacy_processing_service._limitar_nsu_por_falhas`, `nsu_control_service.obter_ultimo_nsu` |
-| ARCH-006 | média | FORTEMENTE_INDICADO | Excluir usuário com token de verificação, redefinição ou convite falha no Postgres (FK sem `ondelete`); o teste passa no SQLite | `admin.excluir_usuario`, `models.py` |
 | ARCH-007 | média | CONFIRMADO | Operador envia e autocadastra certificado (cria empresa, grava senha, dispara consulta), mas só admin edita ou exclui. Decisão pendente | `routers/certificados.py` |
 | ARCH-008 | média | CONFIRMADO | Alertas sem canal: log só diz "Operacao falhou" sem a descrição; sem `ALERT_WEBHOOK_URL`; `ALERTA_EMAILS` e `METRICS_TOKEN` vazios em 06/10; morte de tarefa sem log; `/health` não reflete worker nem agendador; `logs_processos` sem retenção | `observability.alert_failure`, `operacao_service`, `health.py` |
 | ARCH-009 | média | CONFIRMADO | Volume `/app/data` de 2,2 para 5,8 GB em 7 dias; XMLs e índices do motor nunca são apagados | `legacy_processing_service._limpar_respostas_antigas` |
@@ -37,22 +34,15 @@
 | FIND-L08 | baixa | CONFIRMADO | Métricas em memória: somem no restart | `core/observability.py` |
 | FIND-L09 | alta | CONFIRMADO | Isolamento entre grupos só na aplicação; RLS do Supabase é opcional (scripts `aplicar_seguranca_rls`/`auditar_rls_supabase`); serviços aceitam `grupo=None` = todos | `api/deps.py`, services |
 | ARCH-019 | média | FORTEMENTE_INDICADO | A paginação por cursor compara `coalesce(...)` e nenhum índice cobre essas expressões: cada página ainda lê e ordena todas as notas do filtro (sem descartar as anteriores, como o OFFSET fazia). Em produção existem `ix_notas_cursor_emissao`/`ix_notas_cursor_recentes` (migração 0006), mas a consulta passa o `1900-01-01` como parâmetro e o planejador provavelmente não casa a expressão com o índice. Medir o p95 de `/notas` e o `EXPLAIN` em produção | `notas_repo.chaves_ordem`, `list_notas` |
-| SEC-B314 | média | CONFIRMADO (Bandit B314/B405, Semgrep) | XML de terceiros (ADN e upload do DANFSe avulso) lido com `xml.etree`, sem proteção contra expansão de entidades. Recomendação: `defusedxml.ElementTree` como substituto direto | `services/danfse_service.py:24`, `services/legacy_ingestion_service.py`, `scripts/corrigir_status_fiscal.py`, `scripts/reconciliar_notas_certificados.py` |
 | FIND-L10 | alta | NAO_DETERMINADO (rotação) | Segredos e PFX no histórico do Git (achado de 06/10); rotação não reconferida | `../historico/SEGURANCA_CERTIFICADOS_2026-10-06.md`, `SECURITY.md` |
 
 ## Detalhes e recomendações
 
-**ARCH-001.** Evidência: último "Agendador de consultas:" às 10:55:30 UTC de 08/10; `QueuePool` às 11:09; dois `POST /consultas/iniciar` manuais (15:07 e 15:17) sem ciclo depois; fila vazia às 15:55; alerta `empresas_sem_consulta` às 21:19. Alternativa não descartada: monitor desligado por alguém (conferir `monitoramento_config`). Ação imediata: reiniciar o serviço. Correção: `try/except` + log no laço, supervisor que recria tarefa morta, "último tick" em `/health/operacao`, alerta após 30 min sem tick.
-
 **ARCH-002.** O frontend corta em 15 s e repete, mas o servidor segue com a requisição e a conexão. Opções: `statement_timeout`, classificação e paginação em SQL em `listar_notas`, pool ou processo separado para o worker, frontend com cancelamento e sem repetição imediata. Validação: p95 de `/notas` abaixo de 2 s com o worker ativo; zero `QueuePool` em 7 dias.
-
-**ARCH-003.** O heartbeat da thread de ingestão ficou redundante depois do `manter_lease`. Retirar de `_loop_ingestao_incremental`, ou usar a mesma ordem (job → processo → lock) nos dois.
 
 **ARCH-004.** `joinedload(Certificado.empresa)` nas listagens; contar consultas por request; ADR sobre colocar banco e app na mesma região.
 
 **ARCH-005.** Guardar o menor NSU com erro de ingestão num campo próprio, sem limite de 20; quando houver falha registrada, partir do NSU central, não do maior NSU das notas. Hoje a releitura noturna cobre o buraco.
-
-**ARCH-006.** Tratar (ou cascatear) `verificacoes_email_tokens`, `redefinicoes_senha_tokens` e `convites_cadastro.criado_por_usuario_id` antes do `delete`; conferir as FKs reais em produção; teste com Postgres.
 
 **ARCH-007.** Decidir em ADR se operador cadastra certificado. Se não, `require_admin` nas 4 rotas de envio; se sim, documentar e permitir também a troca de senha.
 
@@ -81,6 +71,10 @@ Recomendação: apagar a lista "sem referência" num commit só, com a suíte co
 
 ## Resolvidos (referência)
 
+- SEC-B314 (27/10, código): XML de terceiros lido com `defusedxml` (upload do DANFSe, ingestão do ADN, parser do PDF, motor e os scripts `corrigir_status_fiscal`/`reconciliar_notas_certificados`); declaração de entidades vira "XML inválido" pelo mesmo caminho de um XML malformado. Os tipos (`Element`) continuam da biblioteca padrão. Dependência nova `defusedxml==0.7.1`. Testes `tests/test_xml_seguro.py` (3 falham com o código anterior); Bandit B313/B314 nesses arquivos: 7 → 0. O PHP do DANFSe lê o XML por conta própria (libxml) e não foi alterado.
+- ARCH-003 (27/10, código): a ingestão incremental não grava mais `updated_at` de processo/job nem renova o lock; isso fica só com `manter_lease` (mesma empresa, certificado e worker, a cada 30 s), que envolve toda a execução. Some a ordem inversa de UPDATE que travava no Postgres. Teste `test_ingestao_incremental_nao_grava_heartbeat_de_job_e_processo` (falha com o código anterior). Validar em produção: zero `DeadlockDetected` no log.
+- ARCH-006 (16/10, `6b038bd`): `DELETE /admin/usuarios/{id}` apaga os tokens de e-mail e senha, solta os convites e apaga `feedbacks` antes do usuário. Teste `test_excluir_usuario_com_tokens_de_email_e_senha`; conferido em Postgres 16 local.
+- ARCH-001 (27/10, código; produção não verificada): o laço do agendador embutido captura exceções, registra o "último tick" e o último erro; o supervisor recria a tarefa se ela terminar; `/health/operacao` mostra o tick e o vigia avisa `agendador_parado` após `ALERTA_AGENDADOR_PARADO_MINUTOS` (30). Testes `tests/test_agendador_resiliente.py` (os dois do laço/supervisor falham com o `main.py` anterior). Continua valendo conferir o primeiro ciclo depois do deploy.
 - FIND-L04 (limite de tentativas em memória): resolvido na branch de 15/10 com `RateLimiterBanco` (tabela `tentativas_acesso`).
 - SEC-2FA (16/10): com a senha (e o login que ela dá), um admin com 2FA ativo podia gerar outro segredo em `/auth/2fa/iniciar`, cadastrar o próprio celular e abrir o painel; reproduzido com teste. Agora responde 409; teste `test_quem_so_tem_a_senha_nao_troca_o_2fa_ativo`.
 - Deploy (16/10): `UPDATE arquivos SET updated_at = created_at WHERE updated_at IS NULL` rodava a cada subida (varredura sem índice, o mesmo risco do loop de 15/10). Agora só quando a coluna é criada; `gerar_espelhos_ausentes` passa a gravar `updated_at`.

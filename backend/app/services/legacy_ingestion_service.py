@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, Callable
 from xml.etree import ElementTree
 
+from defusedxml import DefusedXmlException
+from defusedxml import ElementTree as SafeElementTree
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
@@ -524,8 +526,8 @@ def _parse_xml_resumo_root(root: ElementTree.Element, xml_path: Path) -> dict[st
 
 def _parse_xml_resumo(xml_path: Path) -> dict[str, str]:
     try:
-        root = ElementTree.parse(xml_path).getroot()
-    except ElementTree.ParseError:
+        root = SafeElementTree.parse(xml_path).getroot()
+    except (ElementTree.ParseError, DefusedXmlException):
         root = None
 
     if root is None:
@@ -536,8 +538,8 @@ def _parse_xml_resumo(xml_path: Path) -> dict[str, str]:
 def parse_xml_resumo_bytes(data: bytes, filename: str = "nota.xml") -> dict[str, str]:
     xml_path = Path(filename)
     try:
-        root = ElementTree.fromstring(data)
-    except ElementTree.ParseError:
+        root = SafeElementTree.fromstring(data)
+    except (ElementTree.ParseError, DefusedXmlException):
         return {"chave": _extract_chave_from_xml(xml_path)}
     return _parse_xml_resumo_root(root, xml_path)
 

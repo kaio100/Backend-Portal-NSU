@@ -39,6 +39,7 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 from xml.etree import ElementTree as ET
 
 import requests_pkcs12
+from defusedxml import ElementTree as SafeET
 from dotenv import load_dotenv
 
 try:
@@ -392,7 +393,7 @@ def parse_xml_resumo(xml_texto: str) -> Dict[str, str]:
     }
 
     try:
-        root = ET.fromstring(xml_texto)
+        root = SafeET.fromstring(xml_texto)
     except Exception:
         return resumo
 

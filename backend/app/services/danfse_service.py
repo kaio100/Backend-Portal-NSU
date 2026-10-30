@@ -7,6 +7,9 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from defusedxml import DefusedXmlException
+from defusedxml import ElementTree as SafeET
+
 from backend.app.core.config import settings
 from backend.app.core.observability import alert_failure, metrics
 
@@ -21,8 +24,9 @@ def _local_name(tag: str) -> str:
 
 def _numero_nfse(xml_content: bytes) -> str:
     try:
-        root = ET.fromstring(xml_content)
-    except ET.ParseError as exc:
+        # XML enviado pelo usuario: sem entidades nem DTD externos.
+        root = SafeET.fromstring(xml_content)
+    except (ET.ParseError, DefusedXmlException) as exc:
         raise DanfseError("XML invalido ou malformado.") from exc
 
     if _local_name(root.tag) not in {"nfse", "nfs-e"}:

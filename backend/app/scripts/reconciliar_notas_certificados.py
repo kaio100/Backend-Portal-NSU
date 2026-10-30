@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
+from defusedxml import DefusedXmlException
+from defusedxml import ElementTree as SafeElementTree
+
 from backend.app.db.models import Certificado, Empresa, Job, Nota, Processo
 from backend.app.db.session import SessionLocal
 from backend.app.services import legacy_processing_service
@@ -32,8 +35,8 @@ def _xml_e_evento(path_value: str) -> bool:
     if not path.exists():
         return False
     try:
-        root = ElementTree.parse(path).getroot()
-    except ElementTree.ParseError:
+        root = SafeElementTree.parse(path).getroot()
+    except (ElementTree.ParseError, DefusedXmlException):
         return False
     return root.tag.rsplit("}", 1)[-1].lower() == "evento"
 

@@ -5,6 +5,8 @@ import xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from defusedxml import ElementTree as SafeET
+
 
 OP_SIMP_NAC = {
     "1": "Não Optante",
@@ -230,7 +232,7 @@ def _has_real_data(el: ET.Element | None) -> bool:
 
 
 def extrair_dados_nfse(xml_path: str | Path, prefeitura_info: dict | None = None) -> dict:
-    tree = ET.parse(xml_path)
+    tree = SafeET.parse(xml_path)
     root = tree.getroot()
 
     inf_nfse = _find_first(root, "infNFSe")
