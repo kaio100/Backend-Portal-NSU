@@ -1,6 +1,6 @@
 # Índice de rotas HTTP
 
-> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-16 sobre o commit `c3c25fb`. Não editar à mão.
+> Gerado por `docs/ai/gerado/gerar_indices.py` em 2026-10-30 sobre o commit `0921b3f3`. Não editar à mão.
 
 
 110 rotas declaradas nos routers. **Acesso**: a dependência mais forte encontrada (router, decorador, parâmetro ou chamada direta). **Grupo**: o corpo da função chama um filtro por grupo (`require_*_grupo`, `usuario.grupo`, escopo do admin). É uma detecção textual: confira o código antes de concluir que uma rota é segura ou insegura.
@@ -88,20 +88,20 @@
 | `/nfse/{nota_id}` | PUT | `nfse_compat.py::update_nfse_compat` | 169 | operador | sim |
 | `/nfse/{nota_id}/documentos` | GET | `nfse_compat.py::get_nfse_documentos_compat` | 216 | login | sim |
 | `/notas` | GET | `notas.py::list_notas` | 63 | login | sim |
-| `/notas/chave/{chave}` | GET | `notas.py::get_nota_por_chave` | 554 | login | sim |
+| `/notas/chave/{chave}` | GET | `notas.py::get_nota_por_chave` | 556 | login | sim |
 | `/notas/download-lote` | GET | `notas.py::download_lote_notas_get` | 434 | login | sim |
 | `/notas/download-lote` | POST | `notas.py::download_lote_notas` | 419 | login | sim |
 | `/notas/emitidas` | GET | `notas.py::list_notas_emitidas` | 307 | login | sim |
 | `/notas/recebidas` | GET | `notas.py::list_notas_recebidas` | 363 | login | sim |
-| `/notas/resumo` | GET | `notas.py::get_notas_resumo` | 524 | login | sim |
+| `/notas/resumo` | GET | `notas.py::get_notas_resumo` | 526 | login | sim |
 | `/notas/todas` | GET | `notas.py::list_todas_notas` | 158 | login | sim |
-| `/notas/{nota_id}` | GET | `notas.py::get_nota` | 573 | login | sim |
-| `/notas/{nota_id}/arquivos` | GET | `notas.py::list_arquivos_nota` | 677 | login | sim |
-| `/notas/{nota_id}/conferencia` | PATCH | `notas.py::patch_conferencia_nota` | 646 | operador | sim |
-| `/notas/{nota_id}/eventos` | GET | `notas.py::list_eventos_nota` | 582 | login | sim |
-| `/notas/{nota_id}/historico` | GET | `notas.py::get_historico_conferencia` | 669 | login | sim |
-| `/notas/{nota_id}/sincronizar-eventos` | POST | `notas.py::sincronizar_eventos_nota` | 625 | operador | sim |
-| `/notas/{nota_id}/tributos-comparativo` | GET | `notas.py::get_tributos_comparativo` | 616 | login | sim |
+| `/notas/{nota_id}` | GET | `notas.py::get_nota` | 575 | login | sim |
+| `/notas/{nota_id}/arquivos` | GET | `notas.py::list_arquivos_nota` | 679 | login | sim |
+| `/notas/{nota_id}/conferencia` | PATCH | `notas.py::patch_conferencia_nota` | 648 | operador | sim |
+| `/notas/{nota_id}/eventos` | GET | `notas.py::list_eventos_nota` | 584 | login | sim |
+| `/notas/{nota_id}/historico` | GET | `notas.py::get_historico_conferencia` | 671 | login | sim |
+| `/notas/{nota_id}/sincronizar-eventos` | POST | `notas.py::sincronizar_eventos_nota` | 627 | operador | sim |
+| `/notas/{nota_id}/tributos-comparativo` | GET | `notas.py::get_tributos_comparativo` | 618 | login | sim |
 | `/nsu/status` | GET | `nsu.py::get_nsu_status` | 79 | login | sim |
 | `/processos` | GET | `processos.py::list_processos` | 44 | login | sim |
 | `/processos` | POST | `processos.py::create_processo` | 36 | operador | sim |
@@ -112,7 +112,7 @@
 | `/processos/{processo_id}/logs` | GET | `logs.py::list_logs_processo` | 63 | login | sim |
 | `/processos/{processo_id}/notas` | GET | `processos.py::list_notas_processo` | 93 | login | sim |
 | `/processos/{processo_id}/summary` | GET | `processos.py::get_summary_processo` | 129 | login | sim |
-| `/relatorios/conferencia` | POST | `relatorios.py::exportar_conferencia` | 30 | login | sim |
+| `/relatorios/conferencia` | POST | `relatorios.py::exportar_conferencia` | 34 | login | sim |
 | `/storage/health` | GET | `storage.py::storage_health` | 17 | público | — |
 | `/storage/list` | GET | `storage.py::storage_list` | 51 | admin | sim |
 | `/storage/test-read` | GET | `storage.py::storage_test_read` | 35 | admin | sim |

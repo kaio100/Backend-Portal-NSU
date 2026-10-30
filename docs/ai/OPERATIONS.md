@@ -15,7 +15,7 @@
 | Banco | Supabase `xiqiuumoaqhxajqtppmf` (`ca-central-1`, Postgres 17), só como Postgres |
 | Arquivos | Cloudflare R2 (`STORAGE_BACKEND=r2`) |
 | Frontend | `https://frontend-portal-nsu.vercel.app` (CORS fixo no código) |
-| Deploy ativo em 15/10 | `c66adfba` = commit `5221ce60`, desde 19:41 UTC, **com `API_WORKER_ENABLED=false` e `EMBEDDED_SCHEDULER_ENABLED=false`** (worker e agendador pausados para aliviar o banco; religar quando o Supabase estiver folgado) |
+| Deploy confirmado em 15/10 | `753ac481-3d02-49c1-91b6-cfc4f929d844`, commit local de release `4e4302c0`, desde 23:16 UTC, upload direto pela CLI. Migração 0006, worker e agendador ativos; jobs 44873/44874 finalizados sem erro |
 | Recursos (7 dias até 08/10) | CPU média 0,06 vCPU (limite 24); memória 0,5–3,2 GB (média 2,2); disco 2,2 → 5,8 GB |
 
 ## Deploy
@@ -51,7 +51,7 @@
 | `CORS_ORIGINS` | localhost | sim | |
 | `STORAGE_BACKEND`, `R2_*` | `local` | sim | |
 | `WORKER_DRY_RUN` | **`True`** | sim | Precisa valer `false` em produção |
-| `API_WORKER_ENABLED` / `EMBEDDED_SCHEDULER_ENABLED` | `True` / `True` | não | Por isso tudo roda num processo só |
+| `API_WORKER_ENABLED` / `EMBEDDED_SCHEDULER_ENABLED` | `True` / `True` | sim, `true` em 15/10 às 21:29 UTC | API, worker e agendador no mesmo processo |
 | `API_WORKER_CONCURRENCY`, `API_WORKER_SLEEP` | 1 / 0,2 | sim | Workers por grupo |
 | `CONSULTAS_SCHEDULER_SLEEP`, `CONSULTAS_DEFAULT_LIMITE`, `CONSULTAS_DEFAULT_PAUSA` | 1 / 1000 / 0 | sim | O agendador dorme no mínimo 5 s |
 | `WORKER_REAL_MAX_LIMITE`, `WORKER_REAL_MAX_PAUSA`, `WORKER_CONSULTA_LOTE_TAMANHO`, `WORKER_TEMP_DIR`, `WORKER_DRY_RUN_SLEEP` | 1000 / 0 / 1000 / `data/tmp_worker` / 0,2 | sim | |
@@ -131,7 +131,7 @@ Todos usam o `DATABASE_URL` do ambiente: com o `.env` local, isso é **produçã
 | Banco e migração | `migrar_banco` (é o `CMD`), `migrar_sqlite_para_postgres`, `validar_migracao_postgres`, `diagnosticar_banco`, `db_migration_common` (biblioteca), `migrar_rbac`, `promover_usuarios_locais` |
 | Status e dados fiscais | `corrigir_status_fiscal` (corrige status gravado pela classificação antiga), `recalcular_alertas_fiscais` (subitem, ISS retido, valor líquido; aceita `--desde`), `backfill_documentos_partes` (CNPJ/CPF ausentes a partir do XML), `auditar_incidencia_iss`, `corrigir_simples_pendentes_online`, `listar_consultas_simples_pendentes` |
 | NSU, consultas e eventos | `diagnosticar_nsu_certificado`, `reconciliar_notas_certificados` (reimporta do índice local), `enfileirar_reprocessamento_certificados`, `status_reprocessamento_certificados`, `sincronizar_eventos_lote` (varre notas autorizadas e consulta eventos no ADN) |
-| Storage e PDFs | `reconciliar_storage` (banco × objetos), `limpar_orfaos_storage` (acha e, com `--aplicar`, apaga objetos sem registro), `gerar_espelhos_ausentes`, `regenerar_carimbos_pdfs`, `regenerar_espelhos_competencia`, `migrar_storage_para_r2`, `testar_r2`, `r2_common` (biblioteca) |
+| Storage e PDFs | `reconciliar_storage` (banco × objetos), `limpar_orfaos_storage` (acha e, com `--aplicar`, apaga objetos sem registro), `gerar_espelhos_ausentes`, `regenerar_carimbos_pdfs`, `regenerar_espelhos_competencia`, `regenerar_espelhos_desde` (refaz o espelho de todas as notas emitidas desde `--desde`, padrão 2026-09-01; simulação sem `--aplicar`, cria o espelho que faltar), `migrar_storage_para_r2`, `testar_r2`, `r2_common` (biblioteca) |
 | Certificados e segredos | `auditar_integridade_certificados`, `corrigir_integridade_certificados`, `rotacionar_segredos`, `resetar_2fa_admin` (zera o 2FA de um admin; sem `--aplicar` só mostra), `promover_admin` (torna admin uma conta que já existe; avisa se o e-mail não está em `SUPER_ADMIN_EMAILS`; sem `--aplicar` só mostra) |
 | Contrato da API | `exportar_openapi` (grava o OpenAPI para o frontend gerar os tipos com `npm run gerar:tipos`; não conecta no banco) |
 | Segurança do Supabase | `aplicar_seguranca_rls`, `auditar_rls_supabase` (usam `SUPABASE_DATABASE_URL`) |
@@ -139,3 +139,13 @@ Todos usam o `DATABASE_URL` do ambiente: com o `.env` local, isso é **produçã
 | Arquivamento | `arquivar_notas_antigas` (mesma regra de `/admin/arquivamento`; destrutivo) |
 
 Descrição de cada um: `gerado/ARQUIVOS.md` (docstring) ou o `--help` do script.
+
+## Plano de carga publicado no backend (15/10/2026)
+
+Publicado no deploy `753ac481` (commit `4e4302c0`): o limitador de tentativas tem pool próprio Postgres (1 conexão + 2 de overflow, além do pool da API), espera de checkout 1 s, conexão 2 s, statement_timeout local de 1 s e lock_timeout local de 500 ms. São limites por operação, não um prazo total para autenticação. Não há variável nova. Ciclos automáticos distribuem `available_at`; consultas manuais/forçadas são imediatas.
+
+Retenção escolhida: 90 dias. `python -m backend.app.scripts.limpar_logs_antigos --dias 90` apenas conta; `--aplicar` remove em lotes (padrão 1000). A simulação por SQL de 15/10 encontrou 8 candidatos, sem remoção. `LOGS_RETENCAO_DIAS` não foi alterada no Railway. Para ativar a manutenção diária futuramente, usar 90 nessa variável. Não executar simultaneamente duas limpezas.
+
+> Seção do plano de carga verificada em 15/10/2026 sobre `2d05450f` + alterações locais; o restante mantém o carimbo original.
+
+Frontend confirmado em produção em 15/10: Vercel `frontend-portal-nsu`, projeto `prj_oF3OJnpIyOybhrukVR5tYiF53Feu`, equipe `kaiofhellypedias04-hues-projects`, domínio `https://frontend-portal-nsu.vercel.app`. Commit local `e98299a`, deploy `dpl_2DfCPKs4TE4hMWya3H46Bs6bLN9n`, promoção após build READY. Bundle e preflight CORS conferidos no domínio público. Deploys foram por CLI; commits não foram enviados ao GitHub por erro de acesso, então uma futura publicação pela main precisa incorporá-los.
